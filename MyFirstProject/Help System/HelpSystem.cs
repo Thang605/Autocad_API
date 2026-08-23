@@ -1457,6 +1457,42 @@ namespace Civil3DCsharp.HelpSystem
                     "Tabs phân loại theo nhóm: CAD, Civil, Menu, Help"
                 }
             });
+
+            // ========== CIVIL TOOL - PARCEL (THỬA ĐẤT) ==========
+            AddCommand(new CommandInfo
+            {
+                Name = "CTPA_BangThongKeParcel",
+                Category = "Civil - Parcel",
+                Description = "Thống kê danh sách thuộc tính Parcel (thửa đất) và xuất thành Bảng AutoCAD Table / Excel",
+                Usage = "CTPA_BangThongKeParcel hoặc CTPA_ThongKeParcel, CTPA_BangParcel",
+                Steps = new[] {
+                    "1. Gõ lệnh CTPA_BangThongKeParcel (hoặc CTPA_ThongKeParcel)",
+                    "2. Form giao diện hiện lên hiển thị danh sách toàn bộ Parcel",
+                    "3. Có thể lọc theo Phân khu (Site) hoặc bấm 'Chọn trên màn hình' để chọn thửa mong muốn",
+                    "4. Nhấp đúp vào dòng để Zoom & Highlight thửa đất trên AutoCAD",
+                    "5. Tùy chọn các cột cần xuất và thiết lập chiều cao chữ, chiều cao dòng",
+                    "6. Nhấn 'VẼ BẢNG VÀO AUTOCAD' và pick điểm đặt bảng trên bản vẽ",
+                    "7. Có thể bấm 'Xuất File Excel (.xlsx)' hoặc 'Xuất CSV' nếu cần"
+                },
+                Notes = new[] {
+                    "Tự động ghi nhớ toàn bộ thiết lập: Cột xuất, Tiêu đề, Cao chữ, Cao dòng, Phân khu chọn",
+                    "Bảng vẽ ra bao gồm Tiêu đề, Headers, Dữ liệu và dòng Tổng cộng diện tích (SUM)"
+                }
+            });
+
+            AddCommand(new CommandInfo
+            {
+                Name = "CTPA_DoiTen_Parcel",
+                Category = "Civil - Parcel",
+                Description = "Đổi tên và đánh số thứ tự thửa đất (Parcel) hàng loạt",
+                Usage = "CTPA_DoiTen_Parcel",
+                Steps = new[] {
+                    "1. Gõ lệnh CTPA_DoiTen_Parcel",
+                    "2. Nhập tiền tố, số bắt đầu, hậu tố",
+                    "3. Chọn các Parcel cần đổi tên theo thứ tự",
+                    "4. Lệnh cập nhật tên và số thứ tự mới cho Parcel"
+                }
+            });
         }
 
         /// <summary>

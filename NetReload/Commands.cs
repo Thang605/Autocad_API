@@ -61,17 +61,26 @@ namespace NetReload
 
 				// 2. Run dotnet build with unique AssemblyName
 				string configuration = "Debug";
+				string dotnetExe = GetDotNetPath();
+				string dotnetDir = Path.GetDirectoryName(dotnetExe) ?? "";
 
 				ProcessStartInfo psi = new ProcessStartInfo
 				{
-					FileName = "dotnet",
-					Arguments = $"build -c {configuration} /p:AssemblyName={uniqueAssemblyName}",
+					FileName = dotnetExe,
+					Arguments = $"build \"{csprojFile}\" -c {configuration} /p:AssemblyName={uniqueAssemblyName}",
 					WorkingDirectory = projectDir,
 					RedirectStandardOutput = true,
 					RedirectStandardError = true,
 					UseShellExecute = false,
 					CreateNoWindow = true
 				};
+
+				if (!string.IsNullOrEmpty(dotnetDir) && Directory.Exists(dotnetDir))
+				{
+					psi.EnvironmentVariables["DOTNET_ROOT"] = dotnetDir;
+					string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+					psi.EnvironmentVariables["PATH"] = $"{dotnetDir};{currentPath}";
+				}
 
 				using (Process process = Process.Start(psi))
 				{
@@ -152,6 +161,19 @@ namespace NetReload
 			{
 				ed.WriteMessage($"\nError: {ex.Message}");
 			}
+		}
+
+		private static string GetDotNetPath()
+		{
+			string userDotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet.exe");
+			if (File.Exists(userDotnet))
+				return userDotnet;
+
+			string programFilesDotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
+			if (File.Exists(programFilesDotnet))
+				return programFilesDotnet;
+
+			return "dotnet";
 		}
 	}
 }

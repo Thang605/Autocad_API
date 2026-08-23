@@ -390,8 +390,11 @@ namespace Civil3DCsharp
             }
 
             // Get values from form
+            bool isCustom = form.IsCustomSelection;
             ObjectId pointGroupId = form.SelectedPointGroupId;
+            bool limitOffset = form.LimitOffset;
             double saiSo = form.SaiSo;
+            bool filterByStationRange = form.FilterByStationRange;
             List<ObjectId> profileViewIds = form.SelectedProfileViewIds;
 
             if (profileViewIds.Count == 0)
@@ -400,28 +403,43 @@ namespace Civil3DCsharp
                 return;
             }
 
-            // Get points from point group first
-            ObjectIdCollection pointIds;
+            // Get points based on user source selection
+            ObjectIdCollection pointIds = new ObjectIdCollection();
             using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 try
                 {
-                    pointIds = UtilitiesC3D.GPointIdsFromPointGroup(pointGroupId);
+                    if (isCustom)
+                    {
+                        foreach (ObjectId id in form.CustomSelectedPointIds)
+                        {
+                            if (id.IsValid && !id.IsNull) pointIds.Add(id);
+                        }
+                    }
+                    else if (pointGroupId == ObjectId.Null)
+                    {
+                        pointIds = UtilitiesC3D.GetAllCogoPointIds();
+                    }
+                    else
+                    {
+                        pointIds = UtilitiesC3D.GPointIdsFromPointGroup(pointGroupId);
+                    }
+
                     if (pointIds.Count == 0)
                     {
-                        A.Ed.WriteMessage("\n Cảnh báo: Không tìm thấy điểm nào trong nhóm điểm.");
+                        A.Ed.WriteMessage("\n Cảnh báo: Không tìm thấy điểm CogoPoint nào từ nguồn đã chọn.");
                         return;
                     }
                     tr.Commit();
                 }
                 catch (System.Exception ex)
                 {
-                    A.Ed.WriteMessage($"\n Lỗi khi lấy điểm từ Point Group: {ex.Message}");
+                    A.Ed.WriteMessage($"\n Lỗi khi lấy danh sách điểm: {ex.Message}");
                     return;
                 }
             }
 
-            A.Ed.WriteMessage($"\n=== BẮT ĐẦU XỬ LÝ {profileViewIds.Count} PROFILEVIEW ===");
+            A.Ed.WriteMessage($"\n=== BẮT ĐẦU XỬ LÝ {profileViewIds.Count} PROFILEVIEW (Tổng {pointIds.Count} điểm CogoPoint) ===");
             int processedCount = 0;
 
             // Process each selected ProfileView
@@ -445,23 +463,34 @@ namespace Civil3DCsharp
                         
                         if (alignment == null)
                         {
-                            A.Ed.WriteMessage("\n Lỗi: Không thể lấy alignment từ ProfileView.");
+                            A.Ed.WriteMessage($"\n Lỗi: Không thể lấy alignment từ ProfileView '{profileView.Name}'.");
                             innerTr.Commit();
                             continue;
                         }
 
-                        A.Ed.WriteMessage($"\n\n Đang xử lý ProfileView: {profileView.Name}");
-                        A.Ed.WriteMessage($"\n Alignment tương ứng: {alignment.Name}");
+                        double pvStationStart = profileView.StationStart;
+                        double pvStationEnd = profileView.StationEnd;
+
+                        A.Ed.WriteMessage($"\n\n--------------------------------------------------");
+                        A.Ed.WriteMessage($"\n Đang xử lý ProfileView: {profileView.Name}");
+                        A.Ed.WriteMessage($"\n Alignment: {alignment.Name} (Lý trình ProfileView: {pvStationStart:F2}m -> {pvStationEnd:F2}m)");
                         
-                        // Filter points that are on this alignment
+                        // Filter points that belong to this ProfileView / alignment
                         ObjectIdCollection validPointIds = new ObjectIdCollection();
                         int totalPoints = 0;
+                        int inStationPoints = 0;
                         int validPoints = 0;
                         
                         foreach (ObjectId pointId in pointIds)
                         {
                             totalPoints++;
-                            CogoPoint? point = innerTr.GetObject(pointId, OpenMode.ForRead) as CogoPoint;
+                            CogoPoint? point = null;
+                            try
+                            {
+                                point = innerTr.GetObject(pointId, OpenMode.ForRead) as CogoPoint;
+                            }
+                            catch { }
+
                             if (point == null) continue;
 
                             double station = 0;
@@ -470,25 +499,51 @@ namespace Civil3DCsharp
                             try
                             {
                                 alignment.StationOffset(point.Easting, point.Northing, ref station, ref offset);
-                                double absOffset = Math.Abs(offset);
                                 
-                                if (absOffset <= saiSo)
+                                // Check station range if requested
+                                bool passStation = true;
+                                if (filterByStationRange)
                                 {
-                                    validPointIds.Add(pointId);
-                                    validPoints++;
+                                    passStation = (station >= pvStationStart - 0.1 && station <= pvStationEnd + 0.1);
+                                }
+
+                                if (passStation)
+                                {
+                                    inStationPoints++;
+                                    
+                                    // Check offset limit if requested
+                                    bool passOffset = true;
+                                    if (limitOffset)
+                                    {
+                                        passOffset = (Math.Abs(offset) <= saiSo);
+                                    }
+
+                                    if (passOffset)
+                                    {
+                                        validPointIds.Add(pointId);
+                                        validPoints++;
+                                    }
                                 }
                             }
                             catch (System.Exception)
                             {
-                                // Skip points that fail station/offset calculation
+                                // Skip points that cannot be projected to this alignment
                             }
                         }
                         
-                        A.Ed.WriteMessage($"\n Điểm hợp lệ (≤ {saiSo}m): {validPoints}/{totalPoints}");
+                        A.Ed.WriteMessage($"\n Điểm trong phạm vi lý trình: {inStationPoints}/{totalPoints}");
+                        if (limitOffset)
+                        {
+                            A.Ed.WriteMessage($"\n Điểm thỏa mãn sai số offset (≤ {saiSo}m): {validPoints}/{inStationPoints}");
+                        }
+                        else
+                        {
+                            A.Ed.WriteMessage($"\n (Không giới hạn offset - lấy toàn bộ {validPoints} điểm trong phạm vi lý trình)");
+                        }
                         
                         if (validPointIds.Count == 0)
                         {
-                            A.Ed.WriteMessage($"\n CẢNH BÁO: Không có điểm nào trong phạm vi sai số {saiSo}m so với alignment '{alignment.Name}'");
+                            A.Ed.WriteMessage($"\n CẢNH BÁO: Không có điểm nào thỏa mãn điều kiện để gắn lên ProfileView '{profileView.Name}'.");
                             innerTr.Commit();
                             continue;
                         }
@@ -520,7 +575,7 @@ namespace Civil3DCsharp
                 }
             }
             
-            A.Ed.WriteMessage($"\n\n=== HOÀN THÀNH ===");
+            A.Ed.WriteMessage($"\n\n=== HOÀN THÀNH GẮN NHÃN ===");
             A.Ed.WriteMessage($"\n Đã xử lý thành công: {processedCount}/{profileViewIds.Count} ProfileView(s)");
         }
 

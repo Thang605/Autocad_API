@@ -606,15 +606,59 @@ namespace MyFirstProject.Extensions
 
         public static ObjectIdCollection GPointIdsFromPointGroup(ObjectId pointGroupId)
         {
-            PointGroup? pointGroup = pointGroupId.GetObject(OpenMode.ForWrite) as PointGroup;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-            uint[] numberPoint = pointGroup.GetPointNumbers();
-#pragma warning restore CS8602 // Dereference of apossibly null reference.
-            CogoPointCollection cogoPointCollection = A.Cdoc.CogoPoints;
-            ObjectIdCollection pointIds = [];
-            for (int i = 0; i < numberPoint.Length; i++)
+            ObjectIdCollection pointIds = new ObjectIdCollection();
+            if (!pointGroupId.IsValid || pointGroupId.IsNull) return pointIds;
+
+            try
             {
-                pointIds.Add(cogoPointCollection.GetPointByPointNumber(numberPoint[i]));
+                PointGroup? pointGroup = pointGroupId.GetObject(OpenMode.ForWrite) as PointGroup;
+                if (pointGroup == null) return pointIds;
+
+                try
+                {
+                    pointGroup.Update();
+                }
+                catch { }
+
+                uint[] numberPoint = pointGroup.GetPointNumbers();
+                CogoPointCollection cogoPointCollection = A.Cdoc.CogoPoints;
+                for (int i = 0; i < numberPoint.Length; i++)
+                {
+                    try
+                    {
+                        ObjectId ptId = cogoPointCollection.GetPointByPointNumber(numberPoint[i]);
+                        if (ptId.IsValid && !ptId.IsNull)
+                        {
+                            pointIds.Add(ptId);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                A.Ed.WriteMessage($"\n Lỗi truy vấn PointGroup: {ex.Message}");
+            }
+            return pointIds;
+        }
+
+        public static ObjectIdCollection GetAllCogoPointIds()
+        {
+            ObjectIdCollection pointIds = new ObjectIdCollection();
+            try
+            {
+                CogoPointCollection cogoPointCollection = A.Cdoc.CogoPoints;
+                foreach (ObjectId ptId in cogoPointCollection)
+                {
+                    if (ptId.IsValid && !ptId.IsNull)
+                    {
+                        pointIds.Add(ptId);
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                A.Ed.WriteMessage($"\n Lỗi lấy tất cả CogoPoints: {ex.Message}");
             }
             return pointIds;
         }

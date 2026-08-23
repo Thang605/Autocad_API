@@ -100,6 +100,7 @@ namespace MyFirstProject
 
             // Parcel
             dynamic subMenuParcel = menu.AddSubMenu(menu.Count + 1, "Parcel");
+            AddMenuItem(subMenuParcel, "Thống Kê Parcel Ra Bảng CAD/Excel", "CTPA_BangThongKeParcel ");
             AddMenuItem(subMenuParcel, "Đổi Tên Parcel (Template)", "CTPA_DoiTen_Parcel ");
 
             dynamic subMenuPipe = menu.AddSubMenu(menu.Count + 1, "Pipe Network");

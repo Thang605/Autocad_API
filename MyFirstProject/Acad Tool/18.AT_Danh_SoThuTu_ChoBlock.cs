@@ -1,6 +1,6 @@
-// (C) Copyright 2024 by T27
+// (C) Copyright 2024-2026 by T27
 // Lệnh đánh số thứ tự cho Block theo vị trí
-// Cấu trúc số thứ tự: "thứ tự/tổng số" (VD: 1/10, 2/10, ...)
+// Hỗ trợ cấu hình số bắt đầu, tổng số bản vẽ, tiền tố, ký tự phân cách
 //
 using System;
 using System.Collections.Generic;
@@ -21,6 +21,8 @@ using WinFormsLabel = System.Windows.Forms.Label;
 using WinFormsTextBox = System.Windows.Forms.TextBox;
 using WinFormsButton = System.Windows.Forms.Button;
 using WinFormsComboBox = System.Windows.Forms.ComboBox;
+using WinFormsCheckBox = System.Windows.Forms.CheckBox;
+using WinFormsNumericUpDown = System.Windows.Forms.NumericUpDown;
 using DrawingFont = System.Drawing.Font;
 
 [assembly: CommandClass(typeof(Civil3DCsharp.AT_DanhSoThuTu_ChoBlock))]
@@ -65,26 +67,39 @@ namespace Civil3DCsharp
         // Controls
         private WinFormsLabel lblBlockName;
         private WinFormsTextBox txtBlockName;
+        private WinFormsButton btnPickBlock;
         private WinFormsLabel lblBlockCount;
+        private WinFormsButton btnSelectBlocks;
+
         private WinFormsLabel lblAttributeTag;
         private WinFormsTextBox txtAttributeTag;
+
         private WinFormsLabel lblSortOrder;
         private WinFormsComboBox cmbSortOrder;
 
+        private WinFormsLabel lblStartNumber;
+        private WinFormsNumericUpDown numStartNumber;
+        private WinFormsLabel lblTotalCount;
+        private WinFormsNumericUpDown numTotalCount;
+        private WinFormsCheckBox chkAutoTotal;
+
+        private WinFormsLabel lblPrefix;
         private WinFormsTextBox txtPrefix;
         private WinFormsLabel lblSeparator;
         private WinFormsTextBox txtSeparator;
+        private WinFormsCheckBox chkShowTotal;
         private WinFormsLabel lblPreview;
+
         private WinFormsButton btnOK;
         private WinFormsButton btnCancel;
-        private WinFormsButton btnSelectBlocks;
-        private WinFormsButton btnPickBlock;
-        private CheckBox chkShowTotal;
 
         // Properties
         public string BlockName { get; set; } = "";
         public string AttributeTag { get; set; } = "NUMBER";
         public BlockSortOrder SortOrder { get; set; } = BlockSortOrder.TopToBottom_LeftToRight;
+        public int StartNumber { get; set; } = 1;
+        public int TotalCount { get; set; } = 1;
+        public bool AutoTotal { get; set; } = true;
         public string Prefix { get; set; } = "";
         public string Separator { get; set; } = "/";
         public bool ShowTotal { get; set; } = true;
@@ -95,6 +110,9 @@ namespace Civil3DCsharp
         public static string LastBlockName { get; set; } = "";
         private static string _lastAttributeTag = "NUMBER";
         private static BlockSortOrder _lastSortOrder = BlockSortOrder.TopToBottom_LeftToRight;
+        private static int _lastStartNumber = 1;
+        private static int _lastTotalCount = 1;
+        private static bool _lastAutoTotal = true;
         private static string _lastPrefix = "";
         private static string _lastSeparator = "/";
         private static bool _lastShowTotal = true;
@@ -113,17 +131,17 @@ namespace Civil3DCsharp
         private void InitializeComponent()
         {
             this.Text = "🔢 Đánh Số Thứ Tự Block";
-            this.Size = new Size(400, 380);
+            this.Size = new Size(430, 460);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
 
             int y = 15;
-            int labelWidth = 120;
-            int controlLeft = 130;
+            int labelWidth = 110;
+            int controlLeft = 125;
 
-            // Block Name
+            // 1. Block Name
             lblBlockName = new WinFormsLabel
             {
                 Text = "Tên Block:",
@@ -134,7 +152,7 @@ namespace Civil3DCsharp
             txtBlockName = new WinFormsTextBox
             {
                 Location = new Point(controlLeft, y),
-                Size = new Size(140, 23),
+                Size = new Size(160, 23),
                 Text = BlockName,
                 ReadOnly = true,
                 BackColor = Color.LightGray
@@ -144,7 +162,7 @@ namespace Civil3DCsharp
             btnPickBlock = new WinFormsButton
             {
                 Text = "...",
-                Location = new Point(275, y),
+                Location = new Point(290, y),
                 Size = new Size(35, 23)
             };
             btnPickBlock.Click += BtnPickBlock_Click;
@@ -152,8 +170,8 @@ namespace Civil3DCsharp
             lblBlockCount = new WinFormsLabel
             {
                 Text = "Số block: 0",
-                Location = new Point(320, y + 3),
-                Size = new Size(70, 20),
+                Location = new Point(330, y + 3),
+                Size = new Size(80, 20),
                 ForeColor = Color.Blue
             };
 
@@ -164,19 +182,19 @@ namespace Civil3DCsharp
 
             y += 35;
 
-            // Button Select Blocks
+            // 2. Button Select Blocks
             btnSelectBlocks = new WinFormsButton
             {
-                Text = "📍 Chọn các Block",
+                Text = "📍 Quét chọn các Block",
                 Location = new Point(controlLeft, y),
-                Size = new Size(150, 28)
+                Size = new Size(160, 28)
             };
             btnSelectBlocks.Click += BtnSelectBlocks_Click;
             this.Controls.Add(btnSelectBlocks);
 
-            y += 45;
+            y += 40;
 
-            // Attribute Tag
+            // 3. Attribute Tag
             lblAttributeTag = new WinFormsLabel
             {
                 Text = "Tên Attribute:",
@@ -187,7 +205,7 @@ namespace Civil3DCsharp
             txtAttributeTag = new WinFormsTextBox
             {
                 Location = new Point(controlLeft, y),
-                Size = new Size(150, 23),
+                Size = new Size(160, 23),
                 Text = "NUMBER"
             };
             txtAttributeTag.TextChanged += (s, e) => UpdatePreview();
@@ -197,7 +215,7 @@ namespace Civil3DCsharp
 
             y += 35;
 
-            // Sort Order
+            // 4. Sort Order
             lblSortOrder = new WinFormsLabel
             {
                 Text = "Thứ tự sắp xếp:",
@@ -208,7 +226,7 @@ namespace Civil3DCsharp
             cmbSortOrder = new WinFormsComboBox
             {
                 Location = new Point(controlLeft, y),
-                Size = new Size(230, 23),
+                Size = new Size(270, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
             cmbSortOrder.Items.Add("Trên→Dưới, Trái→Phải");
@@ -222,84 +240,151 @@ namespace Civil3DCsharp
 
             y += 40;
 
-            // Format Group
+            // 5. Format & Numbering GroupBox
             var grpFormat = new GroupBox
             {
-                Text = "📝 Định dạng số thứ tự",
+                Text = "📝 Cấu hình số thứ tự & Định dạng",
                 Location = new Point(15, y),
-                Size = new Size(355, 100)
+                Size = new Size(385, 165)
             };
 
-            // Prefix
-            var lblPrefixInner = new WinFormsLabel
+            // Row 1: Số bắt đầu & Tổng số bản vẽ
+            lblStartNumber = new WinFormsLabel
+            {
+                Text = "Số bắt đầu:",
+                Location = new Point(10, 25),
+                Size = new Size(75, 20)
+            };
+
+            numStartNumber = new WinFormsNumericUpDown
+            {
+                Location = new Point(88, 22),
+                Size = new Size(60, 23),
+                Minimum = 1,
+                Maximum = 999999,
+                Value = 1
+            };
+            numStartNumber.ValueChanged += (s, e) =>
+            {
+                RecalculateAutoTotal();
+                UpdatePreview();
+            };
+
+            lblTotalCount = new WinFormsLabel
+            {
+                Text = "Tổng số BV:",
+                Location = new Point(160, 25),
+                Size = new Size(75, 20)
+            };
+
+            numTotalCount = new WinFormsNumericUpDown
+            {
+                Location = new Point(238, 22),
+                Size = new Size(60, 23),
+                Minimum = 1,
+                Maximum = 999999,
+                Value = 1
+            };
+            numTotalCount.ValueChanged += (s, e) => UpdatePreview();
+
+            chkAutoTotal = new WinFormsCheckBox
+            {
+                Text = "Tự động",
+                Location = new Point(305, 23),
+                Size = new Size(75, 20),
+                Checked = true
+            };
+            chkAutoTotal.CheckedChanged += (s, e) =>
+            {
+                numTotalCount.Enabled = !chkAutoTotal.Checked && chkShowTotal.Checked;
+                RecalculateAutoTotal();
+                UpdatePreview();
+            };
+
+            grpFormat.Controls.Add(lblStartNumber);
+            grpFormat.Controls.Add(numStartNumber);
+            grpFormat.Controls.Add(lblTotalCount);
+            grpFormat.Controls.Add(numTotalCount);
+            grpFormat.Controls.Add(chkAutoTotal);
+
+            // Row 2: Tiền tố & Ký tự ngăn
+            lblPrefix = new WinFormsLabel
             {
                 Text = "Tiền tố:",
-                Location = new Point(10, 25),
-                Size = new Size(60, 20)
+                Location = new Point(10, 58),
+                Size = new Size(75, 20)
             };
 
             txtPrefix = new WinFormsTextBox
             {
-                Location = new Point(75, 22),
-                Size = new Size(80, 23),
+                Location = new Point(88, 55),
+                Size = new Size(60, 23),
                 Text = ""
             };
             txtPrefix.TextChanged += (s, e) => UpdatePreview();
 
-            // Separator
             lblSeparator = new WinFormsLabel
             {
                 Text = "Ký tự ngăn:",
-                Location = new Point(165, 25),
+                Location = new Point(160, 58),
                 Size = new Size(75, 20)
             };
 
             txtSeparator = new WinFormsTextBox
             {
-                Location = new Point(245, 22),
-                Size = new Size(40, 23),
+                Location = new Point(238, 55),
+                Size = new Size(60, 23),
                 Text = "/",
                 TextAlign = HorizontalAlignment.Center
             };
             txtSeparator.TextChanged += (s, e) => UpdatePreview();
 
-            // Show Total checkbox
-            chkShowTotal = new CheckBox
-            {
-                Text = "Hiển thị tổng số (VD: 1/10)",
-                Location = new Point(10, 55),
-                Size = new Size(200, 20),
-                Checked = true
-            };
-            chkShowTotal.CheckedChanged += (s, e) => UpdatePreview();
-
-            // Preview
-            lblPreview = new WinFormsLabel
-            {
-                Text = "Xem trước: 1/10",
-                Location = new Point(220, 55),
-                Size = new Size(130, 20),
-                ForeColor = Color.DarkGreen,
-                Font = new DrawingFont("Segoe UI", 9, FontStyle.Bold)
-            };
-
-            grpFormat.Controls.Add(lblPrefixInner);
+            grpFormat.Controls.Add(lblPrefix);
             grpFormat.Controls.Add(txtPrefix);
             grpFormat.Controls.Add(lblSeparator);
             grpFormat.Controls.Add(txtSeparator);
+
+            // Row 3: Checkbox Hiển thị tổng số
+            chkShowTotal = new WinFormsCheckBox
+            {
+                Text = "Hiển thị tổng số (VD: 1/10)",
+                Location = new Point(10, 92),
+                Size = new Size(200, 20),
+                Checked = true
+            };
+            chkShowTotal.CheckedChanged += (s, e) =>
+            {
+                bool show = chkShowTotal.Checked;
+                lblTotalCount.Enabled = show;
+                chkAutoTotal.Enabled = show;
+                numTotalCount.Enabled = show && !chkAutoTotal.Checked;
+                lblSeparator.Enabled = show;
+                txtSeparator.Enabled = show;
+                UpdatePreview();
+            };
             grpFormat.Controls.Add(chkShowTotal);
+
+            // Row 4: Preview
+            lblPreview = new WinFormsLabel
+            {
+                Text = "Xem trước: 1/10",
+                Location = new Point(10, 125),
+                Size = new Size(365, 25),
+                ForeColor = Color.DarkGreen,
+                Font = new DrawingFont("Segoe UI", 9.5f, FontStyle.Bold)
+            };
             grpFormat.Controls.Add(lblPreview);
 
             this.Controls.Add(grpFormat);
 
-            y += 115;
+            y += 180;
 
-            // Buttons
+            // 6. OK / Cancel Buttons
             btnOK = new WinFormsButton
             {
                 Text = "✅ Đánh số",
-                Location = new Point(100, y),
-                Size = new Size(90, 30),
+                Location = new Point(110, y),
+                Size = new Size(100, 32),
                 DialogResult = DialogResult.OK
             };
             btnOK.Click += BtnOK_Click;
@@ -307,8 +392,8 @@ namespace Civil3DCsharp
             btnCancel = new WinFormsButton
             {
                 Text = "❌ Hủy",
-                Location = new Point(200, y),
-                Size = new Size(90, 30),
+                Location = new Point(220, y),
+                Size = new Size(95, 32),
                 DialogResult = DialogResult.Cancel
             };
 
@@ -319,17 +404,41 @@ namespace Civil3DCsharp
             this.CancelButton = btnCancel;
         }
 
+        private void RecalculateAutoTotal()
+        {
+            if (chkAutoTotal.Checked)
+            {
+                int start = (int)numStartNumber.Value;
+                int count = SelectedBlockIds.Count;
+                int total = count > 0 ? (start + count - 1) : start;
+                if (total < 1) total = 1;
+                numTotalCount.Value = Math.Min(999999, Math.Max(1, total));
+            }
+        }
+
         private void LoadLastValues()
         {
             txtAttributeTag.Text = _lastAttributeTag;
-            cmbSortOrder.SelectedIndex = (int)_lastSortOrder;
+            cmbSortOrder.SelectedIndex = Math.Min(Math.Max(0, (int)_lastSortOrder), cmbSortOrder.Items.Count - 1);
+            numStartNumber.Value = Math.Max(1, _lastStartNumber);
+            chkAutoTotal.Checked = _lastAutoTotal;
+            numTotalCount.Value = Math.Max(1, _lastTotalCount);
             txtPrefix.Text = _lastPrefix;
             txtSeparator.Text = _lastSeparator;
             chkShowTotal.Checked = _lastShowTotal;
+
+            bool show = chkShowTotal.Checked;
+            lblTotalCount.Enabled = show;
+            chkAutoTotal.Enabled = show;
+            numTotalCount.Enabled = show && !_lastAutoTotal;
+            lblSeparator.Enabled = show;
+            txtSeparator.Enabled = show;
         }
 
         private void UpdatePreview()
         {
+            int startNum = (int)numStartNumber.Value;
+            int totalNum = (int)numTotalCount.Value;
             string prefix = txtPrefix.Text;
             string separator = txtSeparator.Text;
             bool showTotal = chkShowTotal.Checked;
@@ -337,11 +446,11 @@ namespace Civil3DCsharp
             string preview;
             if (showTotal)
             {
-                preview = $"{prefix}1{separator}10";
+                preview = $"{prefix}{startNum}{separator}{totalNum}";
             }
             else
             {
-                preview = $"{prefix}1";
+                preview = $"{prefix}{startNum}";
             }
 
             lblPreview.Text = $"Xem trước: {preview}";
@@ -385,6 +494,8 @@ namespace Civil3DCsharp
                     }
 
                     lblBlockCount.Text = $"Số block: {SelectedBlockIds.Count}";
+                    RecalculateAutoTotal();
+                    UpdatePreview();
                     ed.WriteMessage($"\n✅ Đã chọn {SelectedBlockIds.Count} block '{BlockName}'");
                 }
             }
@@ -431,6 +542,8 @@ namespace Civil3DCsharp
                                 LastBlockName = BlockName;  // Cập nhật block đã nhớ
                                 SelectedBlockIds.Clear();   // Reset danh sách block đã chọn
                                 lblBlockCount.Text = "Số block: 0";
+                                RecalculateAutoTotal();
+                                UpdatePreview();
                                 ed.WriteMessage($"\n✅ Đã đổi Block mẫu: {BlockName}");
                             }
                         }
@@ -454,7 +567,7 @@ namespace Civil3DCsharp
         {
             if (string.IsNullOrWhiteSpace(BlockName))
             {
-                MessageBox.Show("Vui lòng chọn Block mẫu bằng nút 🔄!", "Thông báo",
+                MessageBox.Show("Vui lòng chọn Block mẫu bằng nút ...!", "Thông báo",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -474,14 +587,34 @@ namespace Civil3DCsharp
                 return;
             }
 
-            // Save values
+            StartNumber = (int)numStartNumber.Value;
+            TotalCount = (int)numTotalCount.Value;
+            AutoTotal = chkAutoTotal.Checked;
             AttributeTag = txtAttributeTag.Text.Trim();
             SortOrder = (BlockSortOrder)cmbSortOrder.SelectedIndex;
             Prefix = txtPrefix.Text;
             Separator = txtSeparator.Text;
             ShowTotal = chkShowTotal.Checked;
 
+            // Kiểm tra cảnh báo nếu tổng số nhỏ hơn số thứ tự kết thúc
+            int lastIndex = StartNumber + SelectedBlockIds.Count - 1;
+            if (ShowTotal && TotalCount < lastIndex)
+            {
+                var confirm = MessageBox.Show(
+                    $"Tổng số bản vẽ ({TotalCount}) nhỏ hơn số bản vẽ cuối cùng ({lastIndex}).\nBạn có chắc chắn muốn tiếp tục?",
+                    "Cảnh báo số lượng",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+                if (confirm != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+
             // Save for next session
+            _lastStartNumber = StartNumber;
+            _lastTotalCount = TotalCount;
+            _lastAutoTotal = AutoTotal;
             _lastAttributeTag = AttributeTag;
             _lastSortOrder = SortOrder;
             _lastPrefix = Prefix;
@@ -562,17 +695,22 @@ namespace Civil3DCsharp
                     // 4. Sắp xếp theo thứ tự đã chọn
                     blockInfos = SortBlocks(blockInfos, form.SortOrder);
 
-                    // 5. Đánh số thứ tự
-                    int total = blockInfos.Count;
+                    // 5. Đánh số thứ tự theo số bắt đầu được chỉ định
+                    int startNumber = form.StartNumber;
+                    int totalDrawings = form.TotalCount;
+
                     for (int i = 0; i < blockInfos.Count; i++)
                     {
-                        blockInfos[i].Index = i + 1;
+                        blockInfos[i].Index = startNumber + i;
                     }
 
                     ed.WriteMessage($"\n📊 Thứ tự sắp xếp ({GetSortOrderName(form.SortOrder)}):");
                     foreach (var info in blockInfos)
                     {
-                        ed.WriteMessage($"\n   {info.Index}/{total}: X={info.Position.X:F2}, Y={info.Position.Y:F2}");
+                        if (form.ShowTotal)
+                            ed.WriteMessage($"\n   {info.Index}/{totalDrawings}: X={info.Position.X:F2}, Y={info.Position.Y:F2}");
+                        else
+                            ed.WriteMessage($"\n   {info.Index}: X={info.Position.X:F2}, Y={info.Position.Y:F2}");
                     }
 
                     // 6. Cập nhật attribute cho từng block
@@ -597,7 +735,7 @@ namespace Civil3DCsharp
                                         if (attRef != null && attRef.Tag.Equals(form.AttributeTag, StringComparison.OrdinalIgnoreCase))
                                         {
                                             // Tạo giá trị theo format đã chọn
-                                            string newValue = FormatNumber(info.Index, total, form.Prefix, form.Separator, form.ShowTotal);
+                                            string newValue = FormatNumber(info.Index, totalDrawings, form.Prefix, form.Separator, form.ShowTotal);
                                             attRef.TextString = newValue;
                                             foundAttribute = true;
                                             successCount++;
@@ -629,7 +767,7 @@ namespace Civil3DCsharp
                     {
                         ed.WriteMessage($"\n   ⚠️ Không cập nhật được: {failCount} block");
                     }
-                    string exampleFormat = FormatNumber(1, total, form.Prefix, form.Separator, form.ShowTotal);
+                    string exampleFormat = FormatNumber(startNumber, totalDrawings, form.Prefix, form.Separator, form.ShowTotal);
                     ed.WriteMessage($"\n   📝 Format số thứ tự: {exampleFormat}");
                 }
             }

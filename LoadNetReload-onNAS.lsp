@@ -1,14 +1,9 @@
-;;; ==========================================================================
-;;; LoadCivil3D2026.lsp
-;;; Bộ công cụ TỰ ĐỘNG BUILD (Unique Assembly) & HOT-RELOAD cho AutoCAD Civil 3D
-;;; ==========================================================================
+;;; LoadNetReload-onNAS.lsp
+;;; Tự động Build C# (Unique Assembly) và load DLL
 
 (vl-load-com)
 
-;;; ==========================================================================
-;;; 1. LỆNH RELOAD (RL, NRL, RELOAD, LOAD_CT_AI)
-;;; ==========================================================================
-(defun C:RL (/ wsh psCmd buildScript buildRes lspPath txtPath dllPath f _oldCmdEcho _oldNoMutt _oldSecure)
+(defun C:LOAD_CT_AI (/ wsh psCmd buildScript buildRes lspPath txtPath dllPath f _oldCmdEcho _oldNoMutt _oldSecure)
   (setq _oldCmdEcho (getvar "CMDECHO")
         _oldNoMutt  (getvar "NOMUTT")
         _oldSecure  (getvar "SECURELOAD"))
@@ -22,7 +17,6 @@
         lspPath "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/last_reload.lsp"
         txtPath "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/last_dll.txt")
 
-  ;; Xóa file reload cũ nếu có
   (if (findfile lspPath) (vl-file-delete lspPath))
   (if (findfile txtPath) (vl-file-delete txtPath))
 
@@ -31,7 +25,6 @@
   (setq wsh (vlax-create-object "WScript.Shell"))
   (if wsh
     (progn
-      ;; Chạy ngầm và chờ kết thúc (0: hide, 1: wait)
       (setq buildRes (vlax-invoke-method wsh 'Run psCmd 0 1))
       (vlax-release-object wsh)
       
@@ -67,15 +60,10 @@
   (princ)
 )
 
-;;; Các lệnh tắt tương đương cho Reload
-(defun C:NRL () (C:RL))
-(defun C:RELOAD () (C:RL))
-(defun C:LOAD_CT_AI () (C:RL))
+(defun C:RL () (C:LOAD_CT_AI))
+(defun C:NRL () (C:LOAD_CT_AI))
+(defun C:RELOAD () (C:LOAD_CT_AI))
 
-
-;;; ==========================================================================
-;;; 2. LỆNH NẠP NHANH MẶC ĐỊNH (LOADC3D)
-;;; ==========================================================================
 (defun C:LOADC3D (/ lastLsp localDebug localRelease dllPath)
   (setq lastLsp "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/last_reload.lsp"
         localDebug "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/MyFirstProject/bin/Debug/Civil3D_Tools.dll"
@@ -96,14 +84,11 @@
      (command "._NETLOAD" dllPath)
      (princ "\n[C3D] ✅ Nạp thành công Civil3D tool từ ổ mạng!"))
     (t
-     (C:RL))
+     (C:LOAD_CT_AI))
   )
   (princ)
 )
 
-;;; ==========================================================================
-;;; 3. CÁC TIỆN ÍCH DỌN DẸP
-;;; ==========================================================================
 (defun C:CLS ()
   (textscr)
   (graphscr)
@@ -134,13 +119,8 @@
   (princ)
 )
 
-;;; Tự động nạp khi load file LISP
 (C:LOADC3D)
 
-(princ "\n========================================================")
-(princ "\n*** ĐÃ NẠP LoadCivil3D2026.lsp (Unique Assembly Mode) ***")
-(princ "\n* Gõ lệnh: RL hoặc NRL để TỰ ĐỘNG BUILD & NẠP CODE MỚI  *")
-(princ "\n* Gõ lệnh: CTPA_BangThongKeParcel để thống kê Parcel   *")
-(princ "\n* Gõ lệnh: CLEANNRL để dọn dẹp các file DLL tạm        *")
-(princ "\n========================================================")
+(princ "\n*** LoadNetReload-onNAS.lsp loaded (Unique Assembly Mode) ***")
+(princ "\n*** Go RL hoac NRL de Auto-Build & Reload ***")
 (princ)

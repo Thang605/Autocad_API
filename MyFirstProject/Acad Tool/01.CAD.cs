@@ -108,7 +108,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_DanhSoThuTu")]
+        [CommandMethod("AT_DanhSoThuTu_Legacy")]
         public static void ET_DanhSoThuTu()
         {
             // start transantion

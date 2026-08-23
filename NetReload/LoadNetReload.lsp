@@ -21,9 +21,25 @@
   (C:LOADNRL)
 )
 
-;;; Load ngay khi file LISP được load lần đầu
-(C:LOADNRL)
+(defun C:RL ()
+  (princ "\n--- Đang Build MyFirstProject va Reload DLL ---")
+  (startapp "powershell.exe" "-ExecutionPolicy Bypass -NoProfile -File \"C:\\Dropbox\\0.AI AGENT\\6.C#\\Autocad 2026_API\\BuildAndReload.ps1\"")
+  (princ "\nĐang build trong nền... Sau 3 giay, go RL2 de hoan tat nap DLL vao AutoCAD.")
+  (princ)
+)
+
+(defun C:RL2 ()
+  (setq *lspPath* "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/last_reload.lsp")
+  (if (findfile *lspPath*)
+    (progn
+      (load *lspPath*)
+      (princ "\n[Thanh cong] Da nap phien ban DLL moi nhat vao AutoCAD!")
+    )
+    (princ "\n[Loi] Chua tim thay last_reload.lsp, hay go RL truoc.")
+  )
+  (princ)
+)
 
 (princ "\n*** LoadNetReload.lsp loaded ***")
-(princ "\n*** Type LOADNRL to reload NetReload.dll manually ***")
+(princ "\n*** Go RL (hoac RL2) de build va reload Civil3D_Tools ***")
 (princ)
