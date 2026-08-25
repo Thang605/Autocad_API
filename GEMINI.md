@@ -28,3 +28,12 @@
 - **Tránh xung đột namespace**: Sử dụng alias chuẩn (`Application = Autodesk.AutoCAD.ApplicationServices.Application`, `ATable = Autodesk.AutoCAD.DatabaseServices.Table`, `WinFormsLabel = System.Windows.Forms.Label`...).
 - **Build kiểm tra**: Sau khi viết code, PHẢI build kiểm tra thành công `0 Error(s)` bằng:
   `& "C:\Users\thang\.dotnet\dotnet.exe" build "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject\MyFirstProject.csproj"`.
+
+---
+
+## 4. 🎯 QUY TẮC TINH GỌN FILE KHI TẠO LỆNH MỚI
+- Khi tạo lệnh mới, **CHỈ tập trung vào các file cốt lõi**:
+  1. **File Form UI**: `TenLenhForm.cs` (giao diện, controls, persistent state).
+  2. **File Lệnh Logic**: `TenLenh.cs` (command methods, xử lý CAD/Civil 3D transaction).
+  3. *(Tùy chọn)*: Thêm 1 dòng vào `ClassicMenu.cs` nếu cần mục trên thanh Menu.
+- **KHÔNG** tạo hay chỉnh sửa các file phụ trợ thừa thãi (như chatbot, doc trợ giúp gõ tay...).

@@ -241,11 +241,6 @@ namespace MyFirstProject
             // Thông tin
             dynamic subMenuInfo = menu.AddSubMenu(menu.Count + 1, "Thông tin");
             AddMenuItem(subMenuInfo, "Thông Tin Đối Tượng", "CT_ThongTinDoiTuong ");
-
-            // Trợ giúp
-            dynamic subMenuHelp = menu.AddSubMenu(menu.Count + 1, "Trợ giúp");
-            AddMenuItem(subMenuHelp, "📋 Danh Sách Lệnh", "AT_HelpForm ");
-            AddMenuItem(subMenuHelp, "🔧 Quản Lý Lệnh Tắt", "SHORTCUT_MANAGER ");
         }
 
         private static void BuildAcadToolStructure(dynamic menu)
@@ -331,6 +326,7 @@ namespace MyFirstProject
 
             // Xuất bảng
             dynamic subMenuExport = menu.AddSubMenu(menu.Count + 1, "Xuất bảng");
+            AddMenuItem(subMenuExport, "Xuất Bảng CAD ra Excel (Form)", "AT_XuatBangCadRaExcel ");
             AddMenuItem(subMenuExport, "Xuất Bảng Tọa Độ Polyline", "XUATBANG_ToaDoPolyline ");
             AddMenuItem(subMenuExport, "Xuất Bảng Civil3D ra Excel", "AT_XuatBang_Civil3D_ToExcel ");
 
@@ -343,11 +339,6 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Annotative Scale Current Only", "AT_annotive_scale_currentOnly ");
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");
             AddMenuItem(subMenuOther, "Dim Đường Cong", "AT_DIM_DUONGCONG ");
-
-            // Trợ giúp
-            dynamic subMenuHelp = menu.AddSubMenu(menu.Count + 1, "Trợ giúp");
-            AddMenuItem(subMenuHelp, "📋 Danh Sách Lệnh", "AT_HelpForm ");
-            AddMenuItem(subMenuHelp, "🔧 Quản Lý Lệnh Tắt", "SHORTCUT_MANAGER ");
         }
 
         private static void AddMenuItem(dynamic menu, string label, string macro)

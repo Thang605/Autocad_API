@@ -34,19 +34,6 @@
           (if (not *nrl-load-count*) (setq *nrl-load-count* 0))
           (setq *nrl-load-count* (1+ *nrl-load-count*))
           (princ (strcat "\n✅ [Civil3D Tools] Build & Nạp thành công lần " (itoa *nrl-load-count*) "!"))
-          (if (findfile txtPath)
-            (progn
-              (setq f (open txtPath "r"))
-              (if f
-                (progn
-                  (setq dllPath (read-line f))
-                  (close f)
-                  (princ (strcat "\n   • Assembly đã nạp: " (vl-filename-base dllPath) ".dll"))
-                )
-              )
-            )
-          )
-          (princ "\n   • Lệnh khả dụng: CTPA_BangThongKeParcel, RL, NRL, CLEANNRL...")
         )
         (princ (strcat "\n❌ [Civil3D Tools] Build C# THẤT BẠI! (Mã lỗi: " (itoa buildRes) ")."))
       )
