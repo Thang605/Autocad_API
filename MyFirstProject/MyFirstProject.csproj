@@ -92,14 +92,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Civil Tool\bk\" />
-    <Folder Include="Data\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="ExcelNumberFormat" Version="1.1.0" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="System.IO.Packaging" Version="9.0.0" />
   </ItemGroup>
 </Project>

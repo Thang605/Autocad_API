@@ -226,7 +226,7 @@ namespace MyFirstProject
             AddHeader(subMenuSection, "--- Xuất/Khối lượng ---");
             AddMenuItem(subMenuSection, "Xuất Khối Lượng ra Excel", "CTSV_XuatKhoiLuongRaExcel ");
             AddMenuItem(subMenuSection, "Khối Lượng Cắt Ngang", "CTSV_KhoiLuongCatNgang ");
-            AddMenuItem(subMenuSection, "Xuất Bảng Sang Excel", "AT_XuatBang_SangExcel ");
+            AddMenuItem(subMenuSection, "Xuất Bảng Sang Excel", "AT_XuatBangCadRaExcel ");
             AddHeader(subMenuSection, "--- Material ---");
             AddMenuItem(subMenuSection, "Thêm Material List", "CTS_Them_MaterialList ");
             AddMenuItem(subMenuSection, "Xem Material List", "CTS_Xem_MaterialList ");
@@ -272,7 +272,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuText, "Tạo Mới Text Layout", "AT_TaoMoi_TextLayout ");
             AddMenuItem(subMenuText, "Label From Text", "AT_Label_FromText ");
             AddMenuItem(subMenuText, "Đánh Số Thứ Tự", "AT_DanhSoThuTu ");
-            AddMenuItem(subMenuText, "Copy Nội Dung Text", "CT_Copy_NoiDung_Text ");
+            AddMenuItem(subMenuText, "Copy Nội Dung Text", "CN ");
             AddMenuItem(subMenuText, "Copy và Dịch Tiếng Anh", "CA ");
 
             // In ấn
@@ -326,9 +326,8 @@ namespace MyFirstProject
 
             // Xuất bảng
             dynamic subMenuExport = menu.AddSubMenu(menu.Count + 1, "Xuất bảng");
-            AddMenuItem(subMenuExport, "Xuất Bảng CAD ra Excel (Form)", "AT_XuatBangCadRaExcel ");
+            AddMenuItem(subMenuExport, "Xuất Bảng CAD ra Excel", "AT_XuatBangCadRaExcel ");
             AddMenuItem(subMenuExport, "Xuất Bảng Tọa Độ Polyline", "XUATBANG_ToaDoPolyline ");
-            AddMenuItem(subMenuExport, "Xuất Bảng Civil3D ra Excel", "AT_XuatBang_Civil3D_ToExcel ");
 
             // Khác
             dynamic subMenuOther = menu.AddSubMenu(menu.Count + 1, "Khác");
