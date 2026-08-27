@@ -1,5 +1,5 @@
 ;;; LoadNetReload-onNAS.lsp
-;;; Tự động Build C# (Unique Assembly) và load DLL
+;;; Tu dong Build C# (Unique Assembly) va load DLL
 
 (vl-load-com)
 
@@ -11,7 +11,7 @@
   (setvar "NOMUTT" 1)
   (setvar "SECURELOAD" 0)
 
-  (princ "\n[Civil3D Tools] 🔨 Đang tiến hành Build C# với Assembly mới...")
+  (princ "\n[Civil3D Tools] >> Dang tien hanh Build C# voi Assembly moi...")
   
   (setq buildScript "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/BuildProject.ps1"
         lspPath "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/last_reload.lsp"
@@ -33,12 +33,12 @@
           (load lspPath)
           (if (not *nrl-load-count*) (setq *nrl-load-count* 0))
           (setq *nrl-load-count* (1+ *nrl-load-count*))
-          (princ (strcat "\n✅ [Civil3D Tools] Build & Nạp thành công lần " (itoa *nrl-load-count*) "!"))
+          (princ (strcat "\n[Civil3D Tools] [OK] Build & Nap thanh cong lan " (itoa *nrl-load-count*) "!"))
         )
-        (princ (strcat "\n❌ [Civil3D Tools] Build C# THẤT BẠI! (Mã lỗi: " (itoa buildRes) ")."))
+        (princ (strcat "\n[Civil3D Tools] [LOI] Build C# THAT BAI! (Ma loi: " (itoa buildRes) ")."))
       )
     )
-    (princ "\n❌ [Civil3D Tools] Không thể khởi tạo WScript.Shell!")
+    (princ "\n[Civil3D Tools] [LOI] Khong the khoi tao WScript.Shell!")
   )
 
   (setvar "SECURELOAD" _oldSecure)
@@ -51,28 +51,44 @@
 (defun C:NRL () (C:LOAD_CT_AI))
 (defun C:RELOAD () (C:LOAD_CT_AI))
 
-(defun C:LOADC3D (/ lastLsp localDebug localRelease dllPath)
+(defun C:LOADC3D (/ lastLsp localDebug localRelease dllPath _oldCmdEcho _oldNoMutt _oldSecure)
+  (setq _oldCmdEcho (getvar "CMDECHO")
+        _oldNoMutt  (getvar "NOMUTT")
+        _oldSecure  (getvar "SECURELOAD"))
+  (setvar "CMDECHO" 0)
+  (setvar "NOMUTT" 1)
+  (setvar "SECURELOAD" 0)
+
   (setq lastLsp "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/last_reload.lsp"
         localDebug "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/MyFirstProject/bin/Debug/Civil3D_Tools.dll"
         localRelease "C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API/MyFirstProject/bin/Release/Civil3D_Tools.dll"
-        dllPath "Y:/5.SOFT T27/1. FOR WORK/1. THIET KE DUONG/2.CIVIL 3D/2026/AutoCAD Civil 3D 2026 Win x64/x64/c3d/Civil3D2026.dll")
+        dllPath "Y:/5.SOFT T27/1. FOR WORK/1. THIET KE DUONG/2.CIVIL 3D/2026/AutoCAD Civil 3D 2026 Win x64/x64/c3d/2461254.392280.dll")
 
   (cond
     ((findfile lastLsp)
      (load lastLsp)
-     (princ "\n[C3D] ✅ Nạp thành công bản build gần nhất!"))
+     (setvar "NOMUTT" _oldNoMutt)
+     (princ "\n[C3D] [OK] Nap thanh cong ban build gan nhat!"))
     ((findfile localDebug)
      (command "._NETLOAD" localDebug)
-     (princ "\n[C3D] ✅ Nạp thành công Civil3D_Tools.dll (Debug)!"))
+     (setvar "NOMUTT" _oldNoMutt)
+     (princ "\n[C3D] [OK] Nap thanh cong Civil3D_Tools.dll (Debug)!"))
     ((findfile localRelease)
      (command "._NETLOAD" localRelease)
-     (princ "\n[C3D] ✅ Nạp thành công Civil3D_Tools.dll (Release)!"))
+     (setvar "NOMUTT" _oldNoMutt)
+     (princ "\n[C3D] [OK] Nap thanh cong Civil3D_Tools.dll (Release)!"))
     ((findfile dllPath)
      (command "._NETLOAD" dllPath)
-     (princ "\n[C3D] ✅ Nạp thành công Civil3D tool từ ổ mạng!"))
+     (setvar "NOMUTT" _oldNoMutt)
+     (princ "\n[C3D] [OK] Nap thanh cong Civil3D tool tu o mang!"))
     (t
+     (setvar "NOMUTT" _oldNoMutt)
      (C:LOAD_CT_AI))
   )
+
+  (setvar "SECURELOAD" _oldSecure)
+  (setvar "NOMUTT" _oldNoMutt)
+  (setvar "CMDECHO" _oldCmdEcho)
   (princ)
 )
 
@@ -102,12 +118,19 @@
       )
     )
   )
-  (princ (strcat "\n*** Đã dọn dẹp " (itoa delCount) " file build tạm cũ. ***"))
+  (princ (strcat "\n*** Da don dep " (itoa delCount) " file build tam cu. ***"))
   (princ)
 )
 
-(C:LOADC3D)
+;; Undefine C# NRL/RELOAD command trong che do an (khong echo ra dong lenh)
+(setq _oldCE (getvar "CMDECHO") _oldNM (getvar "NOMUTT"))
+(setvar "CMDECHO" 0)
+(setvar "NOMUTT" 1)
+(vl-catch-all-apply '(lambda () (command "._UNDEFINE" "NRL")))
+(vl-catch-all-apply '(lambda () (command "._UNDEFINE" "RELOAD")))
+(setvar "NOMUTT" _oldNM)
+(setvar "CMDECHO" _oldCE)
 
-(princ "\n*** LoadNetReload-onNAS.lsp loaded (Unique Assembly Mode) ***")
-(princ "\n*** Go RL hoac NRL de Auto-Build & Reload ***")
+(princ "\n[Civil3D Tools] [OK] LoadNetReload-onNAS.lsp da san sang. (Go NRL hoac RL de Reload)")
 (princ)
+

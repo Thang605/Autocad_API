@@ -1,0 +1,12 @@
+;;; Visual LISP make file [V1.0] LOAD_CT_AI saved to:[C:/Dropbox/0.AI AGENT/6.C#/Autocad 2026_API] at:[8/27/26] 
+(PRV-DEF (:target . "LOAD_CT_AI.VLX")
+	 (:active-x . T)
+	 (:separate-namespace)
+	 (:protected . T)
+	 (:load-file-list (:lsp "LOAD_CT_AI.lsp"))
+	 (:require-file-list)
+	 (:ob-directory)
+	 (:tmp-directory)
+	 (:optimization . st)
+)
+;; EOF

@@ -338,6 +338,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Annotative Scale Current Only", "AT_annotive_scale_currentOnly ");
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");
             AddMenuItem(subMenuOther, "Dim Đường Cong", "AT_DIM_DUONGCONG ");
+            AddMenuItem(subMenuOther, "Đồng Bộ Đỉnh Polyline", "AT_DongBoDinhPolyline ");
         }
 
         private static void AddMenuItem(dynamic menu, string label, string macro)

@@ -9,15 +9,15 @@ Khi người dùng nói "phát hành", thực hiện các bước sau:
 // turbo-all
 
 1. Build project ở chế độ Release:
+```powershell
+& "C:\Users\thang\.dotnet\dotnet.exe" build "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject\MyFirstProject.csproj" -c Release
 ```
-dotnet build -c Release
-```
-Working directory: `d:\OneDrive\0.AI AGENT\C#\Autocad 2026_API\MyFirstProject`
 
 2. Copy file DLL đến đường dẫn phát hành:
-```
-Copy-Item -Path "d:\OneDrive\0.AI AGENT\C#\Autocad 2026_API\MyFirstProject\bin\Release\Civil3D_Tools.dll" -Destination "Y:\5.SOFT T27\1. FOR WORK\1. THIET KE DUONG\2.CIVIL 3D\2026\AutoCAD Civil 3D 2026 Win x64\x64\c3d\Civil3D2026.dll" -Force
+```powershell
+Copy-Item -Path "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject\bin\Release\Civil3D_Tools.dll" -Destination "Y:\5.SOFT T27\1. FOR WORK\1. THIET KE DUONG\2.CIVIL 3D\2026\AutoCAD Civil 3D 2026 Win x64\x64\c3d\2461254.392280.dll" -Force
 ```
 
 3. Thông báo cho người dùng biết file đã được phát hành tại:
-`Y:\5.SOFT T27\1. FOR WORK\1. THIET KE DUONG\2.CIVIL 3D\2026\AutoCAD Civil 3D 2026 Win x64\x64\c3d\Civil3D2026.dll`
+`Y:\5.SOFT T27\1. FOR WORK\1. THIET KE DUONG\2.CIVIL 3D\2026\AutoCAD Civil 3D 2026 Win x64\x64\c3d\2461254.392280.dll`
+

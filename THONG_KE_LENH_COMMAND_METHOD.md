@@ -160,6 +160,13 @@
 |-----|------|-------|
 | 49 | `AT_TXTEXP` | Explode text (no text) |
 
+### 29.AT_ChuanHoaBanVe.cs (3 lenh)
+| STT | Lenh | Mo ta |
+|-----|------|-------|
+| 50 | `AT_ChuanHoaBanVe` | Chuẩn hóa định dạng bản vẽ theo tiêu chuẩn T27 (Layer, TextStyle, DimStyle, MLeader, Purge) |
+| 51 | `CHBV` | Lệnh tắt chuẩn hóa bản vẽ T27 |
+| 52 | `AT_StandardizeDrawing` | Standardize drawing to T27 standard |
+
 ---
 
 ## Civil Tool (94 lenh)
