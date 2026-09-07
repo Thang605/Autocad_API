@@ -11,8 +11,7 @@
   <PropertyGroup>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>AT_XREFTOBLOCK_Standalone</AssemblyName>
-    <OutputPath>bin\$(Configuration)\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- OutputPath/obj do Directory.Build.props ở gốc solution quyết định (ngoài Dropbox) -->
   </PropertyGroup>
 
   <ItemGroup>

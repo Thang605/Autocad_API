@@ -2,21 +2,31 @@
 $ErrorActionPreference = "Continue"
 $projectDir = "C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject"
 $csprojFile = "$projectDir\MyFirstProject.csproj"
-$dotnetExe = "C:\Users\thang\.dotnet\dotnet.exe"
+# Detect dotnet executable & directory dynamically
+$dotnetExe = ""
+$dotnetDir = ""
 
-if (-not (Test-Path $dotnetExe)) {
+$userDotnet = "$env:USERPROFILE\.dotnet\dotnet.exe"
+$pfDotnet = "$env:ProgramFiles\dotnet\dotnet.exe"
+
+if (Test-Path $userDotnet) {
+    $dotnetExe = $userDotnet
+    $dotnetDir = "$env:USERPROFILE\.dotnet"
+} elseif (Test-Path $pfDotnet) {
+    $dotnetExe = $pfDotnet
+    $dotnetDir = "$env:ProgramFiles\dotnet"
+} else {
     $dotnetExe = "dotnet"
+}
+
+if ($dotnetDir) {
+    $env:DOTNET_ROOT = $dotnetDir
+    $env:PATH = "$dotnetDir;" + $env:PATH
 }
 
 # Generate unique assembly name
 $randomName = [System.IO.Path]::GetRandomFileName().Replace(".", "")
 $uniqueAssemblyName = "Civil3D_Tools_$randomName"
-
-Write-Host "Building project with AssemblyName: $uniqueAssemblyName..." -ForegroundColor Cyan
-
-# Set environment
-$env:DOTNET_ROOT = "C:\Users\thang\.dotnet"
-$env:PATH = "C:\Users\thang\.dotnet;" + $env:PATH
 
 # Execute build
 & $dotnetExe build $csprojFile -c Debug /p:AssemblyName=$uniqueAssemblyName

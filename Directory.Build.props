@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    Đưa toàn bộ output build (bin + obj) ra NGOÀI thư mục Dropbox.
+
+    Lý do: khi bin/obj nằm trong C:\Dropbox, mỗi lần build/NRL sẽ ghi thêm
+    DLL ~1.7 MB + PDB ~0.7 MB. Dropbox phải hash + upload, Kaspersky phải quét,
+    và mọi File.Exists() từ AssemblyResolve handler phải đi qua filter driver
+    của cả hai -> giật/lag máy theo chu kỳ vài giây khi đang chạy Civil 3D.
+
+    Directory.Build.props được MSBuild import TRƯỚC Sdk.props, nên đây là chỗ
+    duy nhất đặt được BaseIntermediateOutputPath (obj) một cách hợp lệ.
+  -->
+  <PropertyGroup>
+    <CadBuildRoot>C:\CadBuild\Autocad2026_API\</CadBuildRoot>
+
+    <BaseOutputPath>$(CadBuildRoot)$(MSBuildProjectName)\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(CadBuildRoot)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+
+    <!-- Giữ layout phẳng: bin\Debug\ chứ không bin\Debug\net10.0-windows\ -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+</Project>

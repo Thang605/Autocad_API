@@ -51,7 +51,6 @@
   (princ)
 )
 
-;; Lenh rut gon
+;; Lenh rut gon cho nguoi dung
 (defun c:LDLL () (c:LOAD_CT_AI))
 (defun c:L246 () (c:LOAD_CT_AI))
-(defun c:RL   () (c:LOAD_CT_AI))

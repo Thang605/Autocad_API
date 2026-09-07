@@ -91,10 +91,13 @@ namespace MyFirstProject
             AddHeader(subMenuCorridor, "--- Tạo Corridor ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Cho Tuyến Đường", "CTC_TaoCorridor_ChoTuyenDuong ");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Đường Đô Thị Rẽ Phải", "CAC_TaoCooridor_DuongDoThi_RePhai ");
-            AddHeader(subMenuCorridor, "--- Thiết lập ---");
-            AddMenuItem(subMenuCorridor, "Add All Section", "CTC_AddAllSection ");
+            AddHeader(subMenuCorridor, "--- Thiết lập Section ---");
+            AddMenuItem(subMenuCorridor, "Thêm Section Cho Tất Cả Region", "CTC_ThemSection_TatCaRegion ");
+            AddMenuItem(subMenuCorridor, "Add All Section (SampleLine)", "CTC_AddAllSection ");
             AddHeader(subMenuCorridor, "--- Điều chỉnh ---");
             AddMenuItem(subMenuCorridor, "Điều Chỉnh Phân Đoạn", "CTC_DieuChinh_PhanDoan ");
+            AddMenuItem(subMenuCorridor, "Chọn Đoạn Corridor (Multi-Region)", "CTC_ChonDoan_Corridor ");
+            AddMenuItem(subMenuCorridor, "Phân Chia Corridor Theo Profile", "CTC_PhanChia_Corridor_TheoProfile ");
             AddHeader(subMenuCorridor, "--- Corridor Surface ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Surface", "CTSV_TaoCorridorSurface ");
 
@@ -338,7 +341,6 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Annotative Scale Current Only", "AT_annotive_scale_currentOnly ");
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");
             AddMenuItem(subMenuOther, "Dim Đường Cong", "AT_DIM_DUONGCONG ");
-            AddMenuItem(subMenuOther, "Đồng Bộ Đỉnh Polyline", "AT_DongBoDinhPolyline ");
         }
 
         private static void AddMenuItem(dynamic menu, string label, string macro)

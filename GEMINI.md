@@ -23,11 +23,13 @@
 
 ---
 
-## 3. ⚙️ QUY CHUẨN KỸ THUẬT & TRANSACTION
+## 3. ⚙️ QUY CHUẨN KỸ THUẬT, TRANSACTION & BẮT BUỘC BUILD KIỂM TRA
 - **Transaction & OpenMode**: Luôn sử dụng `OpenMode.ForWrite` khi sửa đổi đối tượng Civil 3D/AutoCAD trong `Transaction`.
 - **Tránh xung đột namespace**: Sử dụng alias chuẩn (`Application = Autodesk.AutoCAD.ApplicationServices.Application`, `ATable = Autodesk.AutoCAD.DatabaseServices.Table`, `WinFormsLabel = System.Windows.Forms.Label`...).
-- **Build kiểm tra**: Sau khi viết code, PHẢI build kiểm tra thành công `0 Error(s)` bằng:
-  `& "C:\Users\thang\.dotnet\dotnet.exe" build "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject\MyFirstProject.csproj"`.
+- 🚨 **BẮT BUỘC BUILD KIỂM TRA SAU MỌI LẦN SỬA CODE**:
+  - Sau **BẤT KỲ** thao tác chỉnh sửa, tạo mới, sửa lỗi, đổi tên hoặc refactor code nào, AI **BẮT BUỘC** phải tự động chạy lệnh build để xác nhận kết quả `0 Error(s)` trước khi hoàn thành phản hồi:
+    `powershell -ExecutionPolicy Bypass -NoProfile -File "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\BuildProject.ps1"`
+  - **Tuyệt đối không bỏ qua bước build hoặc chỉ trả lời bằng lời nói mà chưa kiểm chứng kết quả biên dịch.**
 
 ---
 
