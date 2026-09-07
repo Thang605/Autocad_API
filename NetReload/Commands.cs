@@ -36,8 +36,7 @@ namespace NetReload
 			Reload();
 		}
 
-		// RELOAD command - Hot reload project without Visual Studio.
-		[CommandMethod("RELOAD")]
+		// Hot reload project without Visual Studio (internal method called by NRL).
 		public static void Reload()
 		{
 			Autodesk.AutoCAD.ApplicationServices.Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
@@ -55,7 +54,7 @@ namespace NetReload
 					return;
 				}
 
-				string csprojFile = Directory.GetFiles(projectDir, "*.csproj").FirstOrDefault();
+				string? csprojFile = Directory.GetFiles(projectDir, "*.csproj").FirstOrDefault();
 				if (string.IsNullOrEmpty(csprojFile))
 				{
 					ed.WriteMessage("\nCould not find .csproj file. *Cancel*");
@@ -93,8 +92,14 @@ namespace NetReload
 					psi.EnvironmentVariables["PATH"] = $"{dotnetDir};{currentPath}";
 				}
 
-				using (Process process = Process.Start(psi))
+				using (Process? process = Process.Start(psi))
 				{
+					if (process == null)
+					{
+						ed.WriteMessage("\nFailed to start dotnet build process. *Cancel*");
+						return;
+					}
+
 					StringBuilder outputBuilder = new StringBuilder();
 					StringBuilder errorBuilder = new StringBuilder();
 

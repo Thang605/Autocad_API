@@ -17,7 +17,7 @@ namespace CAD_Reloader
         // ═══════════════════════════════════════════════════════════════
         //  PERSISTENT SETTINGS (Ghi nhớ cấu hình giữa các lần gọi)
         // ═══════════════════════════════════════════════════════════════
-        public static string LastDllPath { get; set; } = @"c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject\bin\Debug\net10.0-windows\Civil3D_Tools.dll";
+        public static string LastDllPath { get; set; } = @"C:\CadBuild\Autocad2026_API\MyFirstProject\bin\Debug\Civil3D_Tools.dll";
         public static bool LastCopyPdb { get; set; } = true;
         public static bool LastListCommands { get; set; } = true;
         public static bool LastAutoCloseOnSuccess { get; set; } = false;
