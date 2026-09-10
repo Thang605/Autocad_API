@@ -39,6 +39,7 @@ namespace MyFirstProject.Civil_Tool_2
         // ═══════════════════════════════════════════════════════════════
         public ObjectId SelectedCorridorId { get; private set; } = ObjectId.Null;
         public string NewCorridorName { get; private set; } = string.Empty;
+        public string Suffix => string.IsNullOrWhiteSpace(txtSuffix?.Text) ? "_Copy" : txtSuffix.Text.Trim();
         public ObjectId SelectedCodeSetStyleId { get; private set; } = ObjectId.Null;
         public bool CopyTargets { get; private set; } = true;
         public bool CopyFrequencies { get; private set; } = true;
@@ -53,6 +54,9 @@ namespace MyFirstProject.Civil_Tool_2
         private Button btnPickCorridor = null!;
         private WinFormsLabel lblCorridorInfo = null!;
 
+        private TextBox txtSuffix = null!;
+        private Button btnRefreshName = null!;
+        private WinFormsLabel lblSuffixHint = null!;
         private TextBox txtNewCorridorName = null!;
         private ComboBox cmbCodeSetStyle = null!;
 
@@ -149,20 +153,55 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 Text = "Thiết lập Corridor mới",
                 Location = new Point(15, 148),
-                Size = new Size(634, 90),
+                Size = new Size(634, 120),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+
+            var lblSuffix = new WinFormsLabel
+            {
+                Text = "Hậu tố (Suffix):",
+                Location = new Point(15, 25),
+                Size = new Size(115, 22)
+            };
+
+            txtSuffix = new TextBox
+            {
+                Text = "_Copy",
+                Location = new Point(135, 22),
+                Size = new Size(120, 23)
+            };
+            txtSuffix.TextChanged += (s, e) => RefreshSuggestedName();
+
+            btnRefreshName = new Button
+            {
+                Text = "🔄 Gợi ý lại tên",
+                Location = new Point(265, 21),
+                Size = new Size(110, 25),
+                Cursor = Cursors.Hand,
+                Font = new WinFormsFont("Segoe UI", 8.5F, FontStyle.Regular)
+            };
+            btnRefreshName.Click += (s, e) => RefreshSuggestedName();
+
+            lblSuffixHint = new WinFormsLabel
+            {
+                Text = "(Áp dụng cho tên Corridor & Surface)",
+                Location = new Point(385, 25),
+                Size = new Size(235, 22),
+                ForeColor = Color.Gray,
+                Font = new WinFormsFont("Segoe UI", 8.5F, FontStyle.Italic),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             var lblNewName = new WinFormsLabel
             {
                 Text = "Tên Corridor mới:",
-                Location = new Point(15, 26),
+                Location = new Point(15, 55),
                 Size = new Size(115, 22)
             };
 
             txtNewCorridorName = new TextBox
             {
-                Location = new Point(135, 23),
+                Location = new Point(135, 52),
                 Size = new Size(485, 23),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
@@ -171,25 +210,29 @@ namespace MyFirstProject.Civil_Tool_2
             var lblCodeSet = new WinFormsLabel
             {
                 Text = "Code Set Style:",
-                Location = new Point(15, 56),
+                Location = new Point(15, 85),
                 Size = new Size(115, 22)
             };
 
             cmbCodeSetStyle = new ComboBox
             {
-                Location = new Point(135, 53),
+                Location = new Point(135, 82),
                 Size = new Size(485, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
-            grpNew.Controls.AddRange(new Control[] { lblNewName, txtNewCorridorName, lblCodeSet, cmbCodeSetStyle });
+            grpNew.Controls.AddRange(new Control[] {
+                lblSuffix, txtSuffix, btnRefreshName, lblSuffixHint,
+                lblNewName, txtNewCorridorName,
+                lblCodeSet, cmbCodeSetStyle
+            });
 
             // ── Group 3: Tùy chọn nhân bản ──
             var grpOptions = new GroupBox
             {
                 Text = "Tùy chọn sao chép chi tiết",
-                Location = new Point(15, 244),
+                Location = new Point(15, 274),
                 Size = new Size(634, 75),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
@@ -234,8 +277,8 @@ namespace MyFirstProject.Civil_Tool_2
             var grpPreview = new GroupBox
             {
                 Text = "Danh sách phân đoạn (Regions Preview)",
-                Location = new Point(15, 325),
-                Size = new Size(634, 200),
+                Location = new Point(15, 355),
+                Size = new Size(634, 170),
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
 
@@ -259,6 +302,7 @@ namespace MyFirstProject.Civil_Tool_2
             dgvRegions.Columns.Add("Assembly", "Mặt Cắt Mẫu (Assembly)");
             dgvRegions.Columns.Add("Profile", "Đường Đỏ (Profile)");
             dgvRegions.Columns.Add("Stations", "Phạm Vi Lý Trình");
+            dgvRegions.Columns.Add("Targets", "Số Targets Đã Gán");
 
             grpPreview.Controls.Add(dgvRegions);
 
@@ -306,6 +350,8 @@ namespace MyFirstProject.Civil_Tool_2
             this.FormClosing += (s, e) => SaveCurrentSettings();
         }
 
+        private readonly HashSet<string> _existingCorridorNames = new(StringComparer.OrdinalIgnoreCase);
+
         // ═══════════════════════════════════════════════════════════════
         //  DATA LOADING & BINDING
         // ═══════════════════════════════════════════════════════════════
@@ -313,6 +359,7 @@ namespace MyFirstProject.Civil_Tool_2
         {
             // Load Corridors
             cmbSourceCorridor.Items.Clear();
+            _existingCorridorNames.Clear();
             try
             {
                 using (var tr = _db.TransactionManager.StartTransaction())
@@ -323,9 +370,10 @@ namespace MyFirstProject.Civil_Tool_2
                         foreach (ObjectId id in cdoc.CorridorCollection)
                         {
                             var c = tr.GetObject(id, OpenMode.ForRead) as Corridor;
-                            if (c != null)
+                            if (c != null && !string.IsNullOrEmpty(c.Name))
                             {
                                 cmbSourceCorridor.Items.Add(new CorridorItem(c.Name, id));
+                                _existingCorridorNames.Add(c.Name);
                             }
                         }
 
@@ -411,12 +459,28 @@ namespace MyFirstProject.Civil_Tool_2
                                     if (asm != null) assemblyName = asm.Name;
                                 }
 
+                                int targetCount = 0;
+                                try
+                                {
+                                    var tgts = rg.GetTargets();
+                                    if (tgts != null)
+                                    {
+                                        foreach (SubassemblyTargetInfo t in tgts)
+                                        {
+                                            if (t.TargetIds != null && t.TargetIds.Count > 0)
+                                                targetCount += t.TargetIds.Count;
+                                        }
+                                    }
+                                }
+                                catch { }
+
                                 dgvRegions.Rows.Add(
                                     rg.Name,
                                     $"{bl.Name} ({alignmentName})",
                                     assemblyName,
                                     profileName,
-                                    $"{rg.StartStation:F2}m – {rg.EndStation:F2}m"
+                                    $"{rg.StartStation:F2}m – {rg.EndStation:F2}m",
+                                    targetCount > 0 ? $"{targetCount} target(s)" : "0 (Không có)"
                                 );
                             }
                         }
@@ -424,7 +488,7 @@ namespace MyFirstProject.Civil_Tool_2
                         lblCorridorInfo.Text = $"Thông tin: {totalBaselines} Baseline(s), {totalRegions} Phân đoạn (Region). Bề mặt liên kết: {corridor.CorridorSurfaces.Count}";
 
                         // Tự động gợi ý tên mới
-                        txtNewCorridorName.Text = GenerateUniqueCorridorName(corridor.Name + _lastSuffix);
+                        txtNewCorridorName.Text = GenerateUniqueCorridorName(corridor.Name + Suffix);
                     }
                     tr.Commit();
                 }
@@ -437,30 +501,20 @@ namespace MyFirstProject.Civil_Tool_2
             ValidateForm();
         }
 
+        private void RefreshSuggestedName()
+        {
+            var item = cmbSourceCorridor.SelectedItem as CorridorItem;
+            if (item != null && !item.Id.IsNull)
+            {
+                txtNewCorridorName.Text = GenerateUniqueCorridorName(item.Name + Suffix);
+            }
+        }
+
         private string GenerateUniqueCorridorName(string baseName)
         {
-            HashSet<string> existingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            try
-            {
-                using (var tr = _db.TransactionManager.StartTransaction())
-                {
-                    CivilDocument cdoc = CivilDocument.GetCivilDocument(_db);
-                    if (cdoc != null)
-                    {
-                        foreach (ObjectId id in cdoc.CorridorCollection)
-                        {
-                            var c = tr.GetObject(id, OpenMode.ForRead) as Corridor;
-                            if (c != null) existingNames.Add(c.Name);
-                        }
-                    }
-                    tr.Commit();
-                }
-            }
-            catch { }
-
             string candidate = baseName;
             int count = 1;
-            while (existingNames.Contains(candidate))
+            while (_existingCorridorNames.Contains(candidate))
             {
                 candidate = $"{baseName}_{count}";
                 count++;
@@ -507,7 +561,7 @@ namespace MyFirstProject.Civil_Tool_2
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  FORM VALIDATION
+        //  FORM VALIDATION (Kiểm tra siêu tốc trong bộ nhớ)
         // ═══════════════════════════════════════════════════════════════
         private void ValidateForm()
         {
@@ -530,31 +584,8 @@ namespace MyFirstProject.Civil_Tool_2
                 return;
             }
 
-            // Kiểm tra trùng tên với các Corridor hiện hữu
-            bool nameExists = false;
-            try
-            {
-                using (var tr = _db.TransactionManager.StartTransaction())
-                {
-                    CivilDocument cdoc = CivilDocument.GetCivilDocument(_db);
-                    if (cdoc != null)
-                    {
-                        foreach (ObjectId id in cdoc.CorridorCollection)
-                        {
-                            var c = tr.GetObject(id, OpenMode.ForRead) as Corridor;
-                            if (c != null && c.Name.Equals(newName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                nameExists = true;
-                                break;
-                            }
-                        }
-                    }
-                    tr.Commit();
-                }
-            }
-            catch { }
-
-            if (nameExists)
+            // Kiểm tra trùng tên tức thì từ HashSet bộ nhớ
+            if (_existingCorridorNames.Contains(newName))
             {
                 lblStatus.Text = $"⚠ Tên Corridor '{newName}' đã tồn tại trong bản vẽ!";
                 lblStatus.ForeColor = Color.Red;
@@ -604,6 +635,9 @@ namespace MyFirstProject.Civil_Tool_2
                 _lastCorridorId = srcItem.Id;
             }
 
+            _lastSuffix = txtSuffix.Text.Trim();
+            if (string.IsNullOrEmpty(_lastSuffix)) _lastSuffix = "_Copy";
+
             _lastCopyTargets = chkCopyTargets.Checked;
             _lastCopyFrequencies = chkCopyFrequencies.Checked;
             _lastCopySurfaces = chkCopySurfaces.Checked;
@@ -613,6 +647,7 @@ namespace MyFirstProject.Civil_Tool_2
 
         public void RestoreLastSettings()
         {
+            txtSuffix.Text = string.IsNullOrWhiteSpace(_lastSuffix) ? "_Copy" : _lastSuffix;
             chkCopyTargets.Checked = _lastCopyTargets;
             chkCopyFrequencies.Checked = _lastCopyFrequencies;
             chkCopySurfaces.Checked = _lastCopySurfaces;

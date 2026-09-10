@@ -23,7 +23,8 @@ if ($dotnetDir) {
     $env:PATH = "$dotnetDir;" + $env:PATH
 }
 
-$projectDir = "C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject"
+$repoRoot = $PSScriptRoot
+$projectDir = "$repoRoot\MyFirstProject"
 $csproj = "$projectDir\MyFirstProject.csproj"
 
 # Generate unique assembly name
@@ -33,15 +34,39 @@ $uniqueAssemblyName = "Civil3D_Tools_$randomName"
 & $dotnetExe build $csproj -c Debug /p:AssemblyName=$uniqueAssemblyName /p:Clean=false /nowarn:MSB3061,NU1510
 
 if ($LASTEXITCODE -eq 0) {
-    $dllPath = "$projectDir\bin\Debug\$uniqueAssemblyName.dll"
+    $binDebugDir = "C:\CadBuild\Autocad2026_API\MyFirstProject\bin\Debug"
+    $dllPath = "$binDebugDir\$uniqueAssemblyName.dll"
     $forwardSlashPath = $dllPath.Replace("\", "/")
 
+    # Đồng bộ sang Civil3D_Tools.dll để lệnh RELOAD / NETRELOAD luôn nhận bản mới nhất
+    try {
+        Copy-Item $dllPath "$binDebugDir\Civil3D_Tools.dll" -Force
+        $pdbPath = "$binDebugDir\$uniqueAssemblyName.pdb"
+        if (Test-Path $pdbPath) {
+            Copy-Item $pdbPath "$binDebugDir\Civil3D_Tools.pdb" -Force
+        }
+    } catch { }
+
+    # Dọn dẹp các bản build cũ, giữ lại 5 bản gần nhất
+    try {
+        $staleDlls = Get-ChildItem -Path $binDebugDir -Filter "Civil3D_Tools_*.dll" |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -Skip 5
+        foreach ($f in $staleDlls) {
+            Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+            $p = [System.IO.Path]::ChangeExtension($f.FullName, ".pdb")
+            if (Test-Path $p) { Remove-Item $p -Force -ErrorAction SilentlyContinue }
+            $d = [System.IO.Path]::ChangeExtension($f.FullName, ".deps.json")
+            if (Test-Path $d) { Remove-Item $d -Force -ErrorAction SilentlyContinue }
+        }
+    } catch { }
+
     # Output path for AutoLISP to read directly
-    [System.IO.File]::WriteAllText("C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\last_dll.txt", $forwardSlashPath, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText("$repoRoot\last_dll.txt", $forwardSlashPath, [System.Text.Encoding]::UTF8)
     
-    # Write cleanly formatted AutoLISP command with forward slashes
-    $lspContent = "(command `"._NETLOAD`" `"$forwardSlashPath`")"
-    [System.IO.File]::WriteAllText("C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\last_reload.lsp", $lspContent, [System.Text.Encoding]::UTF8)
+    # Write cleanly formatted AutoLISP command
+    $lspContent = "(vl-load-com)`n(vl-cmdf `"._NETLOAD`" `"$forwardSlashPath`")`n(princ `"\n=======================================================\n`")`n(princ `"\n[NETLOAD] DA NAP THANH CONG: $uniqueAssemblyName.dll\n`")`n(princ `"\n👉 Go lenh: AT_Solid_Update_PropertySet de mo Form!\n`")`n(princ `"\n=======================================================\n`")`n(princ)"
+    [System.IO.File]::WriteAllText("$repoRoot\last_reload.lsp", $lspContent, [System.Text.Encoding]::UTF8)
 
     exit 0
 } else {

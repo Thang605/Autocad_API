@@ -39,3 +39,27 @@
   2. **File Lệnh Logic**: `TenLenh.cs` (command methods, xử lý CAD/Civil 3D transaction).
   3. *(Tùy chọn)*: Thêm 1 dòng vào `ClassicMenu.cs` nếu cần mục trên thanh Menu.
 - **KHÔNG** tạo hay chỉnh sửa các file phụ trợ thừa thãi (như chatbot, doc trợ giúp gõ tay...).
+
+---
+
+## 5. 🏗️ CẤU TRÚC HẠ TẦNG BUILD & RELOAD
+- **Output build nằm NGOÀI Dropbox**: `C:\CadBuild\Autocad2026_API\{ProjectName}\bin\{Config}\` do `Directory.Build.props` ở gốc solution quyết định. **KHÔNG** dùng đường dẫn Dropbox cho output.
+- **Không có thư mục con TFM**: `AppendTargetFrameworkToOutputPath=false` → output là `bin\Debug\` chứ KHÔNG phải `bin\Debug\net10.0-windows\`.
+- **dotnet SDK chỉ có tại per-user**: `$env:USERPROFILE\.dotnet\dotnet.exe` (ưu tiên 1). Đường dẫn `$env:ProgramFiles\dotnet\dotnet.exe` chỉ có Runtime, KHÔNG có SDK → `dotnet build` sẽ lỗi "No .NET SDKs were found". Khi gọi dotnet trực tiếp (ngoài BuildProject.ps1), luôn set `$env:DOTNET_ROOT` và thêm vào `$env:PATH`:
+  ```powershell
+  $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"
+  $env:PATH = "$env:USERPROFILE\.dotnet;" + $env:PATH
+  ```
+- **CAD_Reloader.dll bị lock khi AutoCAD đang chạy**: Không thể build ghi đè. Dùng output tạm: `/p:OutputPath="C:\CadBuild\...\Debug_new"`. Thay đổi sẽ có hiệu lực khi khởi động lại AutoCAD.
+- **Hệ thống Reload**:
+  - **CAD_Reloader** (project chính): Lệnh `NETRELOAD` / `RELOAD` / `NETRELOADUI` — shadow copy → `ExtensionLoader.Load()`, có Form UI, tự xử lý `SECURELOAD` và `TRUSTEDPATHS`.
+  - **NetReload** (project phụ/cũ): Lệnh `NRL` — `dotnet build` với random AssemblyName → `Assembly.LoadFrom()`.
+  - **KHÔNG** để hai project cùng đăng ký lệnh trùng tên (đã bỏ `RELOAD` khỏi NetReload).
+- **PowerShell**: Dùng `;` để nối lệnh, **KHÔNG** dùng `&&` (không hỗ trợ trên hệ thống này).
+
+---
+
+## 6. 📦 GIT WORKFLOW
+- Remote: `https://github.com/Thang605/Autocad_API.git`, branch `master`.
+- Commit message bằng tiếng Việt không dấu, prefix theo conventional commits (`fix:`, `feat:`, `refactor:`...).
+- Chỉ commit các file source code đã sửa, **KHÔNG** commit output build (`C:\CadBuild\`), file tạm (`last_dll.txt`, `last_reload.lsp`).

@@ -1,15 +1,36 @@
-﻿using Autodesk.Aec.PropertyData.DatabaseServices;
+using Autodesk.Aec.PropertyData.DatabaseServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using MyFirstProject.Extensions;
 
 namespace MyFirstProject.Extensions
 {
+    /// <summary>
+    /// Model chứa thông tin ánh xạ Layer với thuộc tính Property Set
+    /// </summary>
+    public class LayerPropertyMapping
+    {
+        public bool IsSelected { get; set; } = true;
+        public string LayerName { get; set; } = "";
+        public int SolidCount { get; set; }
+        public int BodyCount { get; set; }
+        public int TotalCount => SolidCount + BodyCount;
+        public string CauKien { get; set; } = "";
+        public string VatLieu { get; set; } = "";
+    }
+
     public class PropertySetUtils
     {
+        /// <summary>
+        /// Tên Property Set mặc định cho Solid và Body
+        /// </summary>
+        public const string DefaultPropertySetName = "IFC ĐƯỜNG GIAO THÔNG2";
+
         /// <summary>
         /// Thiết lập Property Set cho 3D Solid với các thuộc tính được tính toán
         /// </summary>
@@ -27,7 +48,7 @@ namespace MyFirstProject.Extensions
                 Point3d centroid = solid.MassProperties.Centroid;
 
                 // Sử dụng tên Property Set cố định
-                string propertySetName = "IFC ĐƯỜNG GIAO THÔNG2";
+                string propertySetName = DefaultPropertySetName;
 
                 // Kiểm tra và tạo Property Set Definition nếu chưa có
                 ObjectId propertySetDefId = GetOrCreatePropertySetDefinition(tr, propertySetName);
@@ -40,12 +61,9 @@ namespace MyFirstProject.Extensions
                 // Set các giá trị properties
                 SetPropertyValues(tr, solid, propertySetDefId, new Dictionary<string, object>
                 {
-                    { "Layer", layerName },
-                    { "Volume", Math.Round(volume, 3) },
-                    { "CentroidX", Math.Round(centroid.X, 3) },
-                    { "CentroidY", Math.Round(centroid.Y, 3) },
-                    { "CentroidZ", Math.Round(centroid.Z, 3) },
-                    { "CreatedDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") }
+                    { "Cấu kiện", "" },
+                    { "Vật liệu", "" },
+                    { "Thể tích (m3)", Math.Round(volume, 3) }
                 });
             }
             catch (System.Exception ex)
@@ -55,9 +73,9 @@ namespace MyFirstProject.Extensions
         }
 
         /// <summary>
-        /// Lấy hoặc tạo Property Set Definition
+        /// Lấy hoặc tạo Property Set Definition (hỗ trợ cả AcDb3dSolid và AcDbBody)
         /// </summary>
-        private static ObjectId GetOrCreatePropertySetDefinition(Transaction tr, string propertySetName)
+        public static ObjectId GetOrCreatePropertySetDefinition(Transaction tr, string propertySetName)
         {
             try
             {
@@ -67,7 +85,79 @@ namespace MyFirstProject.Extensions
                 // Kiểm tra xem Property Set Definition đã tồn tại chưa
                 if (propSetDefs.Has(propertySetName, tr))
                 {
-                    return propSetDefs.GetAt(propertySetName);
+                    ObjectId existingId = propSetDefs.GetAt(propertySetName);
+                    try
+                    {
+                        var existingDef = tr.GetObject(existingId, OpenMode.ForWrite) as PropertySetDefinition;
+                        if (existingDef != null)
+                        {
+                            var filter = existingDef.AppliesToFilter;
+                            bool modified = false;
+                            if (!filter.Contains("AcDb3dSolid")) { filter.Add("AcDb3dSolid"); modified = true; }
+                            if (!filter.Contains("AcDbBody")) { filter.Add("AcDbBody"); modified = true; }
+                            if (modified)
+                            {
+                                existingDef.SetAppliesToFilter(filter, false);
+                            }
+
+                            // Xóa bớt các thuộc tính không dùng (chỉ giữ Cấu kiện, Vật liệu, Thể tích (m3))
+                            var allowedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                "Cấu kiện", "Vật liệu", "Thể tích (m3)"
+                            };
+                            for (int i = existingDef.Definitions.Count - 1; i >= 0; i--)
+                            {
+                                if (!allowedNames.Contains(existingDef.Definitions[i].Name))
+                                {
+                                    try
+                                    {
+                                        existingDef.Definitions.RemoveAt(i);
+                                    }
+                                    catch { }
+                                }
+                            }
+
+                            // Đảm bảo có đủ 3 thuộc tính
+                            var currentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            for (int i = 0; i < existingDef.Definitions.Count; i++)
+                            {
+                                currentNames.Add(existingDef.Definitions[i].Name);
+                            }
+
+                            if (!currentNames.Contains("Cấu kiện"))
+                            {
+                                existingDef.Definitions.Add(new PropertyDefinition
+                                {
+                                    Name = "Cấu kiện",
+                                    Description = "Loại cấu kiện",
+                                    DataType = Autodesk.Aec.PropertyData.DataType.Text,
+                                    DefaultData = ""
+                                });
+                            }
+                            if (!currentNames.Contains("Vật liệu"))
+                            {
+                                existingDef.Definitions.Add(new PropertyDefinition
+                                {
+                                    Name = "Vật liệu",
+                                    Description = "Loại vật liệu",
+                                    DataType = Autodesk.Aec.PropertyData.DataType.Text,
+                                    DefaultData = ""
+                                });
+                            }
+                            if (!currentNames.Contains("Thể tích (m3)"))
+                            {
+                                existingDef.Definitions.Add(new PropertyDefinition
+                                {
+                                    Name = "Thể tích (m3)",
+                                    Description = "Thể tích của đối tượng (m³)",
+                                    DataType = Autodesk.Aec.PropertyData.DataType.Real,
+                                    DefaultData = 0.0
+                                });
+                            }
+                        }
+                    }
+                    catch { }
+                    return existingId;
                 }
 
                 // Tạo mới Property Set Definition
@@ -78,8 +168,8 @@ namespace MyFirstProject.Extensions
                 // Thêm các Property Definitions
                 AddPropertyDefinitions(propSetDef);
 
-                // Thiết lập Applies To
-                StringCollection appliesToFilter = ["AcDb3dSolid"];
+                // Thiết lập Applies To (cả 3D Solid và Body)
+                StringCollection appliesToFilter = ["AcDb3dSolid", "AcDbBody"];
                 propSetDef.SetAppliesToFilter(appliesToFilter, false);
 
                 propSetDefs.AddNewRecord(propertySetName, propSetDef);
@@ -95,7 +185,7 @@ namespace MyFirstProject.Extensions
         }
 
         /// <summary>
-        /// Thêm các Property Definitions vào Property Set Definition
+        /// Thêm các Property Definitions vào Property Set Definition (chỉ giữ Cấu kiện, Vật liệu, Thể tích (m3))
         /// </summary>
         private static void AddPropertyDefinitions(PropertySetDefinition propSetDef)
         {
@@ -123,82 +213,30 @@ namespace MyFirstProject.Extensions
             PropertyDefinition theTichProp = new()
             {
                 Name = "Thể tích (m3)",
-                Description = "Thể tích của đối tượng",
+                Description = "Thể tích của đối tượng (m³)",
                 DataType = Autodesk.Aec.PropertyData.DataType.Real,
                 DefaultData = 0.0
             };
             propSetDef.Definitions.Add(theTichProp);
-
-            // Property: CentroidX
-            PropertyDefinition centroidXProp = new()
-            {
-                Name = "CentroidX",
-                Description = "Tọa độ X trọng tâm",
-                DataType = Autodesk.Aec.PropertyData.DataType.Real,
-                DefaultData = 0.0
-            };
-            propSetDef.Definitions.Add(centroidXProp);
-
-            // Property: CentroidY
-            PropertyDefinition centroidYProp = new()
-            {
-                Name = "CentroidY",
-                Description = "Tọa độ Y trọng tâm",
-                DataType = Autodesk.Aec.PropertyData.DataType.Real,
-                DefaultData = 0.0
-            };
-            propSetDef.Definitions.Add(centroidYProp);
-
-            // Property: CentroidZ
-            PropertyDefinition centroidZProp = new()
-            {
-                Name = "CentroidZ",
-                Description = "Tọa độ Z trọng tâm",
-                DataType = Autodesk.Aec.PropertyData.DataType.Real,
-                DefaultData = 0.0
-            };
-            propSetDef.Definitions.Add(centroidZProp);
-
-            // Property: CreatedDate
-            PropertyDefinition dateProp = new()
-            {
-                Name = "CreatedDate",
-                Description = "Ngày tạo",
-                DataType = Autodesk.Aec.PropertyData.DataType.Text,
-                DefaultData = ""
-            };
-            propSetDef.Definitions.Add(dateProp);
-
-            // Property: Layer
-            PropertyDefinition layerProp = new()
-            {
-                Name = "Layer",
-                Description = "Layer của đối tượng",
-                DataType = Autodesk.Aec.PropertyData.DataType.Text,
-                DefaultData = ""
-            };
-            propSetDef.Definitions.Add(layerProp);
-
-            // Property: Volume
-            PropertyDefinition volumeProp = new()
-            {
-                Name = "Volume",
-                Description = "Thể tích (m³)",
-                DataType = Autodesk.Aec.PropertyData.DataType.Real,
-                DefaultData = 0.0
-            };
-            propSetDef.Definitions.Add(volumeProp);
         }
 
         /// <summary>
-        /// Attach Property Set vào object
+        /// Attach Property Set vào object (bỏ qua nếu đã gắn)
         /// </summary>
-#pragma warning disable IDE0060 // Remove unused parameter
         private static void AttachPropertySetToObject(Transaction tr, DBObject dbObject, ObjectId propertySetDefId)
-#pragma warning restore IDE0060 // Remove unused parameter
         {
             try
             {
+                ObjectIdCollection existingSets = PropertyDataServices.GetPropertySets(dbObject);
+                foreach (ObjectId propSetId in existingSets)
+                {
+                    if (tr.GetObject(propSetId, OpenMode.ForRead) is PropertySet propSet &&
+                        propSet.PropertySetDefinition == propertySetDefId)
+                    {
+                        return; // Đã gắn Property Set này rồi
+                    }
+                }
+
                 PropertyDataServices.AddPropertySet(dbObject, propertySetDefId);
             }
             catch (System.Exception ex)
@@ -348,6 +386,166 @@ namespace MyFirstProject.Extensions
             {
                 A.Ed.WriteMessage($"\nLỗi khi hiển thị thông tin: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Quét tất cả các đối tượng Solid3d và Body trong ModelSpace theo Layer
+        /// </summary>
+        public static List<LayerPropertyMapping> ScanSolidsAndBodies(Transaction tr)
+        {
+            var layerMap = new Dictionary<string, LayerPropertyMapping>(StringComparer.OrdinalIgnoreCase);
+            Database db = A.Db;
+            BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+            var solidRx = RXClass.GetClass(typeof(Solid3d));
+            var bodyRx = RXClass.GetClass(typeof(Body));
+
+            foreach (ObjectId id in btr)
+            {
+                if (id.IsErased || !id.IsValid) continue;
+
+                if (id.ObjectClass.IsDerivedFrom(solidRx))
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null) continue;
+                    string layer = ent.Layer ?? "0";
+                    if (!layerMap.TryGetValue(layer, out var item))
+                    {
+                        item = new LayerPropertyMapping { LayerName = layer, IsSelected = true };
+                        layerMap[layer] = item;
+                    }
+                    item.SolidCount++;
+                }
+                else if (id.ObjectClass.IsDerivedFrom(bodyRx))
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null) continue;
+                    string layer = ent.Layer ?? "0";
+                    if (!layerMap.TryGetValue(layer, out var item))
+                    {
+                        item = new LayerPropertyMapping { LayerName = layer, IsSelected = true };
+                        layerMap[layer] = item;
+                    }
+                    item.BodyCount++;
+                }
+            }
+
+            return layerMap.Values.OrderBy(x => x.LayerName).ToList();
+        }
+
+        private static PropertySet? FindPropertySet(Transaction tr, DBObject entity, ObjectId definitionId)
+        {
+            foreach (ObjectId id in PropertyDataServices.GetPropertySets(entity))
+            {
+                if (tr.GetObject(id, OpenMode.ForRead) is PropertySet propertySet &&
+                    propertySet.PropertySetDefinition == definitionId)
+                    return propertySet;
+            }
+            return null;
+        }
+
+        private static void SetPropertyIfChanged(PropertySet propertySet, int propertyId, object value)
+        {
+            if (propertyId < 0) return;
+            try
+            {
+                object currentVal = propertySet.GetAt(propertyId);
+                if (currentVal != null)
+                {
+                    if (value is double dNew && (currentVal is double || double.TryParse(currentVal.ToString(), out _)))
+                    {
+                        double dOld = Convert.ToDouble(currentVal);
+                        if (Math.Abs(dNew - dOld) < 1e-4) return;
+                    }
+                    else if (string.Equals(currentVal.ToString()?.Trim(), value?.ToString()?.Trim() ?? "", StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+                }
+                else if (value == null || string.IsNullOrWhiteSpace(value.ToString()))
+                {
+                    return;
+                }
+
+                if (!propertySet.IsWriteEnabled) propertySet.UpgradeOpen();
+                propertySet.SetAt(propertyId, value);
+            }
+            catch { }
+        }
+        /// <summary>
+        /// Gán / Cập nhật Property Set cho các 3D Solid và Body theo danh sách mapping Layer
+        /// </summary>
+        public static int ApplyPropertySetsByMapping(Transaction tr, string propertySetName, List<LayerPropertyMapping> mappings)
+        {
+            if (mappings == null || mappings.Count == 0) return 0;
+
+            var mappingDict = mappings
+                .Where(m => m.IsSelected)
+                .ToDictionary(m => m.LayerName, m => m, StringComparer.OrdinalIgnoreCase);
+
+            if (mappingDict.Count == 0) return 0;
+
+            ObjectId propertySetDefId = GetOrCreatePropertySetDefinition(tr, propertySetName);
+            if (propertySetDefId.IsNull) return 0;
+
+            Database db = A.Db;
+            BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+            var solidRx = RXClass.GetClass(typeof(Solid3d));
+            var bodyRx = RXClass.GetClass(typeof(Body));
+            // Resolve layer names once, instead of querying the layer name for every entity.
+            var selectedLayers = new Dictionary<ObjectId, LayerPropertyMapping>();
+            var layers = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            foreach (var mapping in mappingDict.Values)
+            {
+                if (layers.Has(mapping.LayerName))
+                    selectedLayers[layers[mapping.LayerName]] = mapping;
+            }
+
+            int count = 0;
+            int[]? propertyIds = null;
+            foreach (ObjectId id in btr)
+            {
+                if (!id.IsValid || id.IsErased) continue;
+                var objectClass = id.ObjectClass;
+                if (!objectClass.IsDerivedFrom(solidRx) && !objectClass.IsDerivedFrom(bodyRx)) continue;
+
+                var entity = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (entity == null || !selectedLayers.TryGetValue(entity.LayerId, out var map)) continue;
+
+                PropertySet? propertySet = FindPropertySet(tr, entity, propertySetDefId);
+                if (propertySet == null)
+                {
+                    entity.UpgradeOpen();
+                    PropertyDataServices.AddPropertySet(entity, propertySetDefId);
+                    propertySet = FindPropertySet(tr, entity, propertySetDefId)
+                        ?? throw new InvalidOperationException("Không tìm thấy Property Set vừa gắn.");
+                }
+
+                // AEC property IDs are not necessarily collection indexes after schema edits.
+                // All sets in this batch share the same definition; resolve IDs only once.
+                propertyIds ??= new[]
+                {
+                    propertySet.PropertyNameToId("Cấu kiện"),
+                    propertySet.PropertyNameToId("Vật liệu"),
+                    propertySet.PropertyNameToId("Thể tích (m3)")
+                };
+
+                double volume = 0.0;
+                if (entity is Solid3d solid)
+                {
+                    try { volume = solid.MassProperties.Volume; }
+                    catch { } // Preserve the existing fallback for invalid solid geometry.
+                }
+
+                SetPropertyIfChanged(propertySet, propertyIds[0], map.CauKien ?? "");
+                SetPropertyIfChanged(propertySet, propertyIds[1], map.VatLieu ?? "");
+                SetPropertyIfChanged(propertySet, propertyIds[2], Math.Round(volume, 3));
+                count++;
+            }
+            return count;
         }
     }
 }

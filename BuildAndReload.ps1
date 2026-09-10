@@ -32,7 +32,7 @@ $uniqueAssemblyName = "Civil3D_Tools_$randomName"
 & $dotnetExe build $csprojFile -c Debug /p:AssemblyName=$uniqueAssemblyName
 
 if ($LASTEXITCODE -eq 0) {
-    $dllPath = "$projectDir\bin\Debug\$uniqueAssemblyName.dll"
+    $dllPath = "C:\CadBuild\Autocad2026_API\MyFirstProject\bin\Debug\$uniqueAssemblyName.dll"
     $escapedDllPath = $dllPath.Replace("\", "\\")
     
     # Generate auto-load LISP file

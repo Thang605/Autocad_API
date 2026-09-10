@@ -98,8 +98,12 @@ namespace MyFirstProject
             AddMenuItem(subMenuCorridor, "Điều Chỉnh Phân Đoạn", "CTC_DieuChinh_PhanDoan ");
             AddMenuItem(subMenuCorridor, "Chọn Đoạn Corridor (Multi-Region)", "CTC_ChonDoan_Corridor ");
             AddMenuItem(subMenuCorridor, "Phân Chia Corridor Theo Profile", "CTC_PhanChia_Corridor_TheoProfile ");
+            AddMenuItem(subMenuCorridor, "Nhân Bản Corridor (Copy)", "CTC_NhanBan_Corridor ");
+            AddMenuItem(subMenuCorridor, "Bật/Tắt & Chia Nhỏ Region Theo Polyline", "CTC_BatTat_CorridorRegion_Polyline ");
             AddHeader(subMenuCorridor, "--- Corridor Surface ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Surface", "CTSV_TaoCorridorSurface ");
+            AddHeader(subMenuCorridor, "--- Xuất 3D Solid / Body ---");
+            AddMenuItem(subMenuCorridor, "Xuất Solid & Body Ra File Khác", "CTC_XuatSolidCorridor ");
 
             // Parcel
             dynamic subMenuParcel = menu.AddSubMenu(menu.Count + 1, "Parcel");
@@ -237,7 +241,9 @@ namespace MyFirstProject
 
             // Property Sets
             dynamic subMenuProp = menu.AddSubMenu(menu.Count + 1, "Property Sets");
-            AddHeader(subMenuProp, "--- 3D Solid ---");
+            AddHeader(subMenuProp, "--- 3D Solid & Body ---");
+            AddMenuItem(subMenuProp, "Phối Hợp Màu & PropertySet Layer (BIM)", "AT_CapNhatMauVaPropertySet ");
+            AddMenuItem(subMenuProp, "Cập Nhật PropertySet Theo Layer", "AT_Solid_Update_PropertySet ");
             AddMenuItem(subMenuProp, "Set PropertySet 3D Solid", "AT_Solid_Set_PropertySet ");
             AddMenuItem(subMenuProp, "Show 3D Solid Info", "AT_Solid_Show_Info ");
 
@@ -341,6 +347,8 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Annotative Scale Current Only", "AT_annotive_scale_currentOnly ");
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");
             AddMenuItem(subMenuOther, "Dim Đường Cong", "AT_DIM_DUONGCONG ");
+            AddMenuItem(subMenuOther, "Cập Nhật Màu Layer (BIM EIR)", "AT_CapNhatMauLayer ");
+            AddMenuItem(subMenuOther, "Phối Hợp Màu & PropertySet (BIM)", "AT_CapNhatMauVaPropertySet ");
         }
 
         private static void AddMenuItem(dynamic menu, string label, string macro)

@@ -1,4 +1,4 @@
-﻿// (C) Copyright 2015 by  
+// (C) Copyright 2015 by  
 //
 using Autodesk.Aec.PropertyData.DatabaseServices;
 using Autodesk.AutoCAD.ApplicationServices;
@@ -74,6 +74,70 @@ namespace Civil3D_Csharp
             {
                 A.Ed.WriteMessage($"\nLỗi: {ex.Message}");
                 tr.Abort();
+            }
+        }
+
+        [CommandMethod("AT_Solid_Update_PropertySet")]
+        public static void UpdateSolidPropertySet()
+        {
+            try
+            {
+                // 1. Quét ban đầu các 3D Solid và Body theo Layer
+                List<LayerPropertyMapping> mappings;
+                using (var tr = A.Db.TransactionManager.StartTransaction())
+                {
+                    mappings = PropertySetUtils.ScanSolidsAndBodies(tr);
+                    tr.Commit();
+                }
+
+                if (mappings.Count == 0)
+                {
+                    A.Ed.WriteMessage("\nKhông tìm thấy đối tượng 3D Solid hoặc 3D Body nào trong ModelSpace.");
+                }
+
+                // 2. Tạo và mở Form
+                var form = new UpdatePropertySetForm(mappings);
+
+                // Callback quét lại từ CAD
+                form.OnRescanCad = () =>
+                {
+                    using var trRescan = A.Db.TransactionManager.StartTransaction();
+                    var list = PropertySetUtils.ScanSolidsAndBodies(trRescan);
+                    trRescan.Commit();
+                    return list;
+                };
+
+                // Callback thực thi Apply Property Set
+                form.OnApplyPropertySet = (propSetName, selectedMappings) =>
+                {
+                    using var trApply = A.Db.TransactionManager.StartTransaction();
+                    try
+                    {
+                        var timer = System.Diagnostics.Stopwatch.StartNew();
+                        int updatedCount = PropertySetUtils.ApplyPropertySetsByMapping(trApply, propSetName, selectedMappings);
+                        trApply.Commit();
+                        timer.Stop();
+
+                        A.Ed.WriteMessage($"\n[AT_Solid_Update_PropertySet] Đã cập nhật Property Set '{propSetName}' thành công cho {updatedCount} đối tượng 3D Solid / Body trong {timer.ElapsedMilliseconds} ms ({timer.Elapsed.TotalSeconds:F2}s).");
+                        System.Windows.Forms.MessageBox.Show(
+                            $"Đã cập nhật Property Set '{propSetName}' thành công cho {updatedCount} đối tượng!",
+                            "Thành công",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Information);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        trApply.Abort();
+                        A.Ed.WriteMessage($"\nLỗi khi cập nhật Property Set: {ex.Message}");
+                        throw;
+                    }
+                };
+
+                Application.ShowModalDialog(form);
+            }
+            catch (System.Exception ex)
+            {
+                A.Ed.WriteMessage($"\nLỗi khi chạy lệnh AT_Solid_Update_PropertySet: {ex.Message}");
             }
         }
     }
