@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.Runtime;
+using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -31,7 +31,7 @@ namespace Civil3DCsharp
         [CommandMethod("CAC_TaoCooridor_DuongDoThi_RePhai")]
         public static void CAC_TaoCooridor_DuongDoThi_RePhai()
         {
-            if (!System.IO.File.Exists(@"C:\Windows\KeyLoadCT.txt")) return;
+            if (A.Doc == null) return;
 
             using Transaction tr = A.Db.TransactionManager.StartTransaction();
             try
@@ -256,7 +256,7 @@ namespace Civil3DCsharp
         {
             try
             {
-                var corridor = tr.GetObject(formData.CorridorId, OpenMode.ForRead) as Corridor;
+                var corridor = tr.GetObject(formData.CorridorId, OpenMode.ForWrite) as Corridor;
                 if (corridor == null)
                 {
                     return new ExecutionResult<CorridorObjects>
@@ -774,6 +774,8 @@ namespace Civil3DCsharp
             using Transaction tr = A.Db.TransactionManager.StartTransaction();
             try
             {
+                Corridor corridorWrite = tr.GetObject(corridor.Id, OpenMode.ForWrite) as Corridor ?? corridor;
+
                 //get station from alignment
                 double[] station = new double[alignment.Entities.Count];
                 for (int i = 0; i < alignment.Entities.Count; i++)
@@ -800,17 +802,17 @@ namespace Civil3DCsharp
 
                 //check baseline exist
                 string baselineName = "BL-" + alignment.Name + "-" + profile?.Name;
-                foreach (Baseline BL in corridor.Baselines)
+                foreach (Baseline BL in corridorWrite.Baselines)
                 {
                     if (BL.Name == baselineName)
                     {
-                        corridor.Baselines.Remove(corridor.Baselines[baselineName]);
+                        corridorWrite.Baselines.Remove(corridorWrite.Baselines[baselineName]);
                         break;
                     }
                 }
 
                 // then add it again
-                Baseline baselineAdd = corridor.Baselines.Add("BL-" + alignment.Name + "-" + profile?.Name, alignment.Id, profileId);
+                Baseline baselineAdd = corridorWrite.Baselines.Add("BL-" + alignment.Name + "-" + profile?.Name, alignment.Id, profileId);
 
                 // Use the provided assembly
                 A.Ed.WriteMessage($"\nSử dụng assembly: {assemblyName}");
@@ -939,21 +941,23 @@ namespace Civil3DCsharp
                 ObjectId profileId = alignment.GetProfileIds()[0];
                 Profile? profile = tr.GetObject(profileId, OpenMode.ForRead) as Profile;
 
+                Corridor corridorWrite = tr.GetObject(corridor.Id, OpenMode.ForWrite) as Corridor ?? corridor;
+
                 //check baseline exist
 #pragma warning disable CS8602 // Dereference of apossibly null reference.
                 string baselineName = "BL-" + alignment.Name + "-" + profile.Name;
 #pragma warning restore CS8602 // Dereference of apossibly null reference.
-                foreach (Baseline BL in corridor.Baselines)
+                foreach (Baseline BL in corridorWrite.Baselines)
                 {
                     if (BL.Name == baselineName)
                     {
-                        corridor.Baselines.Remove(corridor.Baselines[baselineName]);
+                        corridorWrite.Baselines.Remove(corridorWrite.Baselines[baselineName]);
                         break;
                     }
                 }
 
                 // then add it again
-                Baseline baselineAdd = corridor.Baselines.Add("BL-" + alignment.Name + "-" + profile.Name, alignment.Id, profileId);
+                Baseline baselineAdd = corridorWrite.Baselines.Add("BL-" + alignment.Name + "-" + profile.Name, alignment.Id, profileId);
 
                 // Use the provided assembly
                 A.Ed.WriteMessage($"\nSử dụng assembly: {assemblyName}");

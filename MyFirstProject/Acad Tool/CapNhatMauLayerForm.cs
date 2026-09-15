@@ -110,69 +110,69 @@ namespace Civil3DCsharp
         {
             return new List<BimStandardPreset>
             {
-                // 1-Hệ thống đường giao thông
+                // 1-Hệ thống đường giao thông (Bảng màu chuẩn mới)
                 new BimStandardPreset {
                     Code = "1.1",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Bê tông nhựa chặt 16",
-                    R = 102, G = 102, B = 102,
-                    Keywords = new[] { "BTNC16", "BTNC_16", "BTN16", "ASPHALT16", "C16", "MAT_DUONG_16", "BTN_16" }
+                    MaterialName = "Bê tông nhựa chặt 19",
+                    R = 80, G = 80, B = 80,
+                    Keywords = new[] { "BTNC19", "BTNC_19", "BTN19", "ASPHALT19", "C19", "MAT_DUONG_19", "BTN_19", "BTNC", "MAT_DUONG", "BE_TONG_NHUA" }
                 },
                 new BimStandardPreset {
                     Code = "1.2",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Bê tông nhựa chặt 19",
-                    R = 80, G = 80, B = 80,
-                    Keywords = new[] { "BTNC19", "BTNC_19", "BTN19", "ASPHALT19", "C19", "MAT_DUONG_19", "BTN_19" }
+                    MaterialName = "CPĐD loại 1 Dmax 25",
+                    R = 55, G = 108, B = 189,
+                    Keywords = new[] { "CPDD1", "CPDD_1", "CPDDLOAI1", "CPDD_LOAI_1", "BASE", "CPDD_L1", "DMAX25", "DMAX_25" }
                 },
                 new BimStandardPreset {
                     Code = "1.3",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "CPĐD loại 1",
-                    R = 55, G = 108, B = 189,
-                    Keywords = new[] { "CPDD1", "CPDD_1", "CPDDLOAI1", "CPDD_LOAI_1", "BASE", "CPDD_L1", "CPDD_1" }
+                    MaterialName = "CPĐD loại 2 Dmax 37.5",
+                    R = 61, G = 120, B = 210,
+                    Keywords = new[] { "CPDD2", "CPDD_2", "CPDDLOAI2", "CPDD_LOAI_2", "SUBBASE", "CPDD_L2", "DMAX37", "DMAX_37" }
                 },
                 new BimStandardPreset {
                     Code = "1.4",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "CPĐD loại 2",
-                    R = 61, G = 120, B = 210,
-                    Keywords = new[] { "CPDD2", "CPDD_2", "CPDDLOAI2", "CPDD_LOAI_2", "SUBBASE", "CPDD_L2", "CPDD_2" }
+                    MaterialName = "Đất đắp nền K90",
+                    R = 0, G = 165, B = 82,
+                    Keywords = new[] { "K90", "K_90", "DATK90", "DAT_K90", "DAP_K90", "NEN_K90", "DAP_NEN_K90" }
                 },
                 new BimStandardPreset {
                     Code = "1.5",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Đất đầm chặt K98",
-                    R = 242, G = 108, B = 19,
-                    Keywords = new[] { "K98", "K_98", "DATK98", "DAT_K98", "K_95", "DAM_CHAT", "K95" }
+                    MaterialName = "Đất đắp nền K95",
+                    R = 255, G = 255, B = 128,
+                    Keywords = new[] { "K95", "K_95", "DATK95", "DAT_K95", "DAP_K95", "NEN_K95", "DAP_NEN_K95" }
                 },
                 new BimStandardPreset {
                     Code = "1.6",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Bề mặt vỉa hè trồng cỏ",
-                    R = 101, G = 168, B = 67,
-                    Keywords = new[] { "TRONGCO", "TRONG_CO", "CO", "GRASS", "THAM_CO", "VIA_HE_CO", "TRONG_CO" }
+                    MaterialName = "Đất đắp nền K98",
+                    R = 70, G = 110, B = 50,
+                    Keywords = new[] { "K98", "K_98", "DATK98", "DAT_K98", "DAP_K98", "NEN_K98", "DAP_NEN_K98", "DAM_CHAT" }
                 },
                 new BimStandardPreset {
                     Code = "1.7",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Bề mặt vỉa hè",
-                    R = 204, G = 204, B = 204,
-                    Keywords = new[] { "VIAHE", "VIA_HE", "LAT_GACH", "PAVEMENT", "SIDEWALK", "GACH_VIA_HE", "BE_MAT_VIA_HE" }
+                    MaterialName = "Đào nền",
+                    R = 80, G = 80, B = 50,
+                    Keywords = new[] { "DAO", "DAO_NEN", "EXCAVATION", "CUT", "NEN_DAO", "TALUY_DAO" }
                 },
                 new BimStandardPreset {
                     Code = "1.8",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Đắp nền",
-                    R = 70, G = 110, B = 50,
-                    Keywords = new[] { "DAP", "DAP_NEN", "EMBANKMENT", "FILL", "NEN_DAP", "TALUY_DAP" }
+                    MaterialName = "Bề mặt vỉa hè trồng cỏ",
+                    R = 101, G = 168, B = 67,
+                    Keywords = new[] { "TRONGCO", "TRONG_CO", "CO", "GRASS", "THAM_CO", "VIA_HE_CO" }
                 },
                 new BimStandardPreset {
                     Code = "1.9",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Đào nền",
-                    R = 80, G = 80, B = 50,
-                    Keywords = new[] { "DAO", "DAO_NEN", "EXCAVATION", "CUT", "NEN_DAO", "TALUY_DAO" }
+                    MaterialName = "Bề mặt vỉa hè BTXM hoặc lát đá",
+                    R = 255, G = 128, B = 0,
+                    Keywords = new[] { "VIAHE", "VIA_HE", "LAT_GACH", "LAT_DA", "PAVEMENT", "SIDEWALK", "GACH_VIA_HE", "BE_MAT_VIA_HE", "VIA_HE_BTXM", "LATDA" }
                 },
                 new BimStandardPreset {
                     Code = "1.10",
@@ -184,16 +184,23 @@ namespace Civil3DCsharp
                 new BimStandardPreset {
                     Code = "1.11",
                     GroupName = "1-Hệ thống đường giao thông",
-                    MaterialName = "Các cấu kiện BTXM",
-                    R = 230, G = 152, B = 0,
-                    Keywords = new[] { "BTXM", "BO_VIA", "DANH_RANG", "CONCRETE_STRUCTURE", "BOVIA", "TAM_DAN" }
+                    MaterialName = "Tường chắn",
+                    R = 192, G = 192, B = 192,
+                    Keywords = new[] { "TUONGCHAN", "TUONG_CHAN", "RETAINING_WALL", "TUONG_CHAN_BT", "TUONG_CHAN_BTCT", "TUONG_CHAN_DAT", "RETAINING" }
                 },
                 new BimStandardPreset {
                     Code = "1.12",
                     GroupName = "1-Hệ thống đường giao thông",
+                    MaterialName = "Các cấu kiện BTXM",
+                    R = 192, G = 192, B = 192,
+                    Keywords = new[] { "BTXM", "BO_VIA", "DANH_RANG", "CONCRETE_STRUCTURE", "BOVIA", "TAM_DAN", "TAM_DAN_BTXM" }
+                },
+                new BimStandardPreset {
+                    Code = "1.13",
+                    GroupName = "1-Hệ thống đường giao thông",
                     MaterialName = "Các loại cấu kiện khác",
-                    R = 130, G = 130, B = 130,
-                    Keywords = new[] { "CAUKIEN", "STRUCTURE", "OTHER", "CAU_KIEN", "PHU_TRO" }
+                    R = 128, G = 128, B = 128,
+                    Keywords = new[] { "CAUKIEN", "STRUCTURE", "OTHER", "CAU_KIEN", "PHU_TRO", "KHAC" }
                 },
 
                 // 2-Mạng lưới thoát nước mưa
@@ -317,7 +324,7 @@ namespace Civil3DCsharp
         public CapNhatMauLayerForm()
         {
             InitializeComponent();
-            _presets = GetDefaultPresets();
+            _presets = BimPresetManager.LoadPresets();
             LoadLayersFromDrawing();
             PopulatePresetReferenceGrid();
             PopulateLayersGrid();

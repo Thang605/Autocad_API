@@ -13,30 +13,31 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Colors;
+using Autodesk.Aec.PropertyData.DatabaseServices;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Color = Autodesk.AutoCAD.Colors.Color;
 using DrawingColor = System.Drawing.Color;
 using DrawingFont = System.Drawing.Font;
 using WinFormsLabel = System.Windows.Forms.Label;
 using WinFormsPoint = System.Drawing.Point;
-using MyFirstProject.Extensions;
 
 namespace Civil3DCsharp
 {
     /// <summary>
-    /// Model dữ liệu cho mỗi dòng Layer trong bảng phối hợp Màu & Property Set
+    /// Model dữ liệu cho mỗi dòng Layer trong bảng cập nhật Màu và Property Set theo chuẩn BIM
     /// </summary>
     public class LayerBimRowModel
     {
         public bool IsSelected { get; set; } = false;
         public string LayerName { get; set; } = "";
-        public int SolidCount { get; set; }
-        public int BodyCount { get; set; }
-        public int TotalCount => SolidCount + BodyCount;
 
+        public int SolidCount { get; set; } = 0;              // Số lượng 3D Solid / Body thuộc layer này
         public string SelectedPresetCode { get; set; } = ""; // Mã mẫu (hoặc "CUSTOM" / "")
-        public string CauKien { get; set; } = "";             // Hạng mục / Cấu kiện (Property Set "Cấu kiện" & Description)
-        public string VatLieu { get; set; } = "";             // Vật liệu (Property Set "Vật liệu" & Description)
+        public string CauKien { get; set; } = "";             // Hạng mục / Cấu kiện (dùng cho Layer Description & Property Set "Tên cấu kiện")
+        public string VatLieu { get; set; } = "";             // Vật liệu (dùng cho Layer Description & Property Set "Loại vật liệu")
+        public string DoChat { get; set; } = "";              // Độ chặt (Property Set "Độ chặt", VD: K95, K98)
+        public double? BeDay { get; set; }                    // Bề dày m (Property Set "Bề dày", VD: 0.05, 0.15)
+        public string HangMuc { get; set; } = "Đường giao thông"; // Hạng mục công trình (Property Set "Hạng mục")
 
         public byte? NewR { get; set; }
         public byte? NewG { get; set; }
@@ -53,6 +54,7 @@ namespace Civil3DCsharp
         public DrawingColor? NewColor => (NewR.HasValue && NewG.HasValue && NewB.HasValue) ? DrawingColor.FromArgb(NewR.Value, NewG.Value, NewB.Value) : (DrawingColor?)null;
         public string NewRgbText => (NewR.HasValue && NewG.HasValue && NewB.HasValue) ? $"({NewR.Value}, {NewG.Value}, {NewB.Value})" : "---";
         public string NewHexText => (NewR.HasValue && NewG.HasValue && NewB.HasValue) ? $"#{NewR.Value:X2}{NewG.Value:X2}{NewB.Value:X2}" : "---";
+        public string BeDayText => BeDay.HasValue ? BeDay.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "";
     }
 
     /// <summary>
@@ -63,6 +65,9 @@ namespace Civil3DCsharp
         public string PresetCode { get; set; } = "";
         public string CauKien { get; set; } = "";
         public string VatLieu { get; set; } = "";
+        public string DoChat { get; set; } = "";
+        public double? BeDay { get; set; }
+        public string HangMuc { get; set; } = "";
         public byte? R { get; set; }
         public byte? G { get; set; }
         public byte? B { get; set; }
@@ -70,22 +75,72 @@ namespace Civil3DCsharp
     }
 
     /// <summary>
-    /// Form giao diện phối hợp Cập Nhật Màu Layer và Cập Nhật Property Set theo mẫu BIM
+    /// Form giao diện Cập Nhật Màu Layer & Thuộc Tính Property Set cho 3D Solid theo Tiêu Chuẩn BIM / EIR (BEP T27)
     /// Hỗ trợ Xuất/Nhập Excel, Tự động nhận diện từ khóa, Pick CAD và ghi nhớ toàn bộ thông số.
     /// </summary>
     public class CapNhatMauVaPropertySetForm : Form
     {
         #region Persistent State (Ghi nhớ giữa các lần chạy)
         private static Dictionary<string, LayerBimSavedState> _savedLayerStates = new(StringComparer.OrdinalIgnoreCase);
-        private static string _lastPropertySetName = PropertySetUtils.DefaultPropertySetName;
         private static string _lastExcelPath = "";
         private static bool _lastUpdateColor = true;
-        private static bool _lastUpdatePropSet = true;
         private static bool _lastUpdateDescription = true;
         private static bool _lastApplyByLayer = true;
         private static bool _lastUnlockLayers = true;
-        private static Size _lastFormSize = new Size(1180, 760);
+        private static bool _lastUpdatePropertySet = true;
+        private static bool _lastOnlyMissing = true;
+        private static string _lastTenCongTrinh = "";
+        private static string _lastViTri = "";
+        private static string _lastNhomCauKien = "Hạ tầng kỹ thuật";
+        private static string _lastHangMuc = "Đường giao thông";
+        private static Size _lastFormSize = new Size(1280, 780);
         private static int _lastSelectedTab = 0;
+        #endregion
+
+        #region Smart Extractors: Độ chặt & Bề dày từ Tên Layer
+        public static string ExtractDoChat(string layerName)
+        {
+            if (string.IsNullOrEmpty(layerName)) return "";
+            var m = Regex.Match(layerName, @"\bK\s*([0-9]{2,3})\b", RegexOptions.IgnoreCase);
+            if (m.Success) return "K" + m.Groups[1].Value;
+            var m2 = Regex.Match(layerName, @"K\s*=\s*0?\.?([0-9]{2,3})", RegexOptions.IgnoreCase);
+            if (m2.Success) return "K" + m2.Groups[1].Value;
+            return "";
+        }
+
+        public static double? ExtractBeDay(string layerName)
+        {
+            if (string.IsNullOrEmpty(layerName)) return null;
+
+            // Pattern 1: có từ khóa day, chieu day, h=, d=, t=
+            var m = Regex.Match(layerName, @"(?:d[aà]y|chieu\s*d[aà]y|thickness|[_\s-]h\s*=|d\s*=|t\s*=)[_\s-]*(\d+(?:[.,]\d+)?)\s*(cm|mm|m)?", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                if (double.TryParse(m.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                {
+                    string unit = m.Groups[2].Value.ToLowerInvariant();
+                    if (unit == "cm") return Math.Round(val / 100.0, 3);
+                    if (unit == "mm") return Math.Round(val / 1000.0, 3);
+                    if (unit == "m") return Math.Round(val, 3);
+                    if (val >= 1.0) return Math.Round(val / 100.0, 3);
+                    return Math.Round(val, 3);
+                }
+            }
+
+            // Pattern 2: số liền kề đơn vị cm hoặc mm (vd: 5cm, 15cm, 20cm, 50mm)
+            var m2 = Regex.Match(layerName, @"[_\s-](\d+(?:[.,]\d+)?)\s*(cm|mm)\b", RegexOptions.IgnoreCase);
+            if (m2.Success)
+            {
+                if (double.TryParse(m2.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                {
+                    string unit = m2.Groups[2].Value.ToLowerInvariant();
+                    if (unit == "cm") return Math.Round(val / 100.0, 3);
+                    if (unit == "mm") return Math.Round(val / 1000.0, 3);
+                }
+            }
+
+            return null;
+        }
         #endregion
 
         #region UI Controls
@@ -112,24 +167,50 @@ namespace Civil3DCsharp
         private Label lblBatch = null!;
         private ComboBox cboBatchPreset = null!;
         private Button btnApplyBatchPreset = null!;
+        private Label lblBatchBeDay = null!;
+        private TextBox txtBatchBeDay = null!;
+        private Button btnApplyBatchBeDay = null!;
         private Label lblStats = null!;
 
         private DataGridView dgvLayers = null!;
 
-        // Tab 2: Preset Reference Grid
+        // Tab 2: Preset Management & Reference
+        private Panel pnlPresetToolbar = null!;
+        private Button btnAddPreset = null!;
+        private Button btnPickPresetColor = null!;
+        private Button btnDeletePreset = null!;
+        private Button btnSavePresets = null!;
+        private Button btnResetPresets = null!;
+        private Button btnImportPresetExcel = null!;
+        private Button btnExportPresetExcel = null!;
+        private Label lblPresetStats = null!;
         private DataGridView dgvPresets = null!;
 
         // Bottom Configuration & Actions
         private Panel pnlBottom = null!;
-        private GroupBox grpPropSetAndExcel = null!;
-        private Label lblPropSetName = null!;
-        private TextBox txtPropSetName = null!;
+
+        // Group 0: Project Information
+        private GroupBox grpProjectInfo = null!;
+        private Label lblTenCongTrinh = null!;
+        private TextBox txtTenCongTrinh = null!;
+        private Label lblViTri = null!;
+        private TextBox txtViTri = null!;
+        private Label lblNhomCauKien = null!;
+        private TextBox txtNhomCauKien = null!;
+        private Label lblHangMuc = null!;
+        private TextBox txtHangMuc = null!;
+
+        // Group 1: Excel
+        private GroupBox grpExcelConfig = null!;
         private Button btnImportExcel = null!;
         private Button btnExportExcel = null!;
+        private Label lblExcelHint = null!;
 
+        // Group 2: Options
         private GroupBox grpOptions = null!;
+        private CheckBox chkUpdatePropertySet = null!;
+        private CheckBox chkOnlyMissing = null!;
         private CheckBox chkUpdateColor = null!;
-        private CheckBox chkUpdatePropSet = null!;
         private CheckBox chkUpdateDescription = null!;
         private CheckBox chkApplyByLayer = null!;
         private CheckBox chkUnlockLayers = null!;
@@ -148,7 +229,8 @@ namespace Civil3DCsharp
         public CapNhatMauVaPropertySetForm()
         {
             InitializeComponent();
-            _presets = CapNhatMauLayerForm.GetDefaultPresets();
+            _presets = BimPresetManager.LoadPresets();
+
             LoadDataFromDrawing();
             PopulatePresetReferenceGrid();
             PopulateLayersGrid();
@@ -163,9 +245,9 @@ namespace Civil3DCsharp
             var subFont = new DrawingFont("Segoe UI", 8.25F, FontStyle.Regular);
 
             this.SuspendLayout();
-            this.Text = "Phối Hợp Cập Nhật Màu Layer & Cập Nhật Property Set Theo Mẫu Chuẩn BIM / EIR";
+            this.Text = "Cập Nhật Màu & Property Set Cho 3D Solid (Chuẩn BIM / EIR)";
             this.Size = _lastFormSize;
-            this.MinimumSize = new Size(1000, 620);
+            this.MinimumSize = new Size(1080, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Font = regularFont;
             this.BackColor = DrawingColor.FromArgb(246, 248, 250);
@@ -174,27 +256,27 @@ namespace Civil3DCsharp
             pnlHeader = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 65,
-                BackColor = DrawingColor.FromArgb(20, 38, 66),
+                Height = 62,
+                BackColor = DrawingColor.FromArgb(27, 54, 93),
                 Padding = new Padding(16, 8, 16, 8)
             };
 
             lblHeaderTitle = new Label
             {
-                Text = "⚡ PHỐI HỢP CẬP NHẬT MÀU LAYER VÀ PROPERTY SET THEO MẪU CHUẨN BIM",
+                Text = "🎨 CẬP NHẬT MÀU & PROPERTY SET CHO 3D SOLID (CHUẨN BIM / EIR)",
                 Font = titleFont,
                 ForeColor = DrawingColor.White,
                 AutoSize = true,
-                Location = new Point(14, 10)
+                Location = new Point(14, 8)
             };
 
             lblHeaderSub = new Label
             {
-                Text = "Chọn Cấu kiện & Vật liệu -> Tự động nhận Màu TrueColor và Property Set tương ứng. Hỗ trợ Xuất / Nhập Excel tái sử dụng.",
+                Text = "Tự động nhận diện màu sắc, cấu kiện, vật liệu, độ chặt, bề dày. Tính toán Diện tích (S=V/h) & Khối lượng Property Set cho 3D Solid.",
                 Font = subFont,
-                ForeColor = DrawingColor.FromArgb(195, 215, 245),
+                ForeColor = DrawingColor.FromArgb(200, 220, 245),
                 AutoSize = true,
-                Location = new Point(16, 36)
+                Location = new Point(16, 34)
             };
 
             pnlHeader.Controls.Add(lblHeaderTitle);
@@ -205,11 +287,11 @@ namespace Civil3DCsharp
             {
                 Dock = DockStyle.Fill,
                 Font = boldFont,
-                Padding = new Point(12, 6)
+                Padding = new Point(14, 6)
             };
 
-            tabMainCoordination = new TabPage { Text = "📑 Danh Sách Layer & Gán Thuộc Tính BIM", BackColor = DrawingColor.White };
-            tabPresetReference = new TabPage { Text = "📋 Bảng Tra Cứu Mẫu Màu & Cấu Kiện Chuẩn (BEP T27)", BackColor = DrawingColor.White };
+            tabMainCoordination = new TabPage { Text = "🎨 Cập Nhật Màu & Property Set (3D Solid)", BackColor = DrawingColor.White };
+            tabPresetReference = new TabPage { Text = "📚 Bảng Tra Cứu & Quản Lý Mẫu Màu (BIM / EIR)", BackColor = DrawingColor.White };
 
             tabControlMain.TabPages.Add(tabMainCoordination);
             tabControlMain.TabPages.Add(tabPresetReference);
@@ -217,53 +299,127 @@ namespace Civil3DCsharp
             BuildTabMainCoordination(regularFont, boldFont);
             BuildTabPresetReference(regularFont, boldFont);
 
-            // ================= 3. BOTTOM AREA =================
+            // ================= 3. BOTTOM PANEL =================
             pnlBottom = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 240,
-                Padding = new Padding(10, 4, 10, 4),
+                Height = 285,
+                Padding = new Padding(10, 4, 10, 8),
                 BackColor = DrawingColor.FromArgb(246, 248, 250)
             };
 
-            // Group 1: Property Set & Excel Config
-            grpPropSetAndExcel = new GroupBox
+            // Group 0: Project Information (Property Set "1. Thông tin dự án")
+            grpProjectInfo = new GroupBox
             {
-                Text = "🛠️ Thiết lập Property Set & Tái Sử Dụng Cấu Hình (Excel)",
+                Text = "🏢 Thông tin dự án (Gán cho Property Set '1. Thông tin dự án' nếu còn thiếu)",
                 Font = boldFont,
                 Dock = DockStyle.Top,
-                Height = 56,
+                Height = 50,
                 Padding = new Padding(8, 2, 8, 2)
             };
 
-            lblPropSetName = new Label
+            lblTenCongTrinh = new Label
             {
-                Text = "Tên Property Set:",
+                Text = "Tên công trình:",
+                Font = regularFont,
                 AutoSize = true,
-                Font = boldFont,
-                Location = new Point(12, 22)
+                Location = new Point(10, 20)
             };
 
-            txtPropSetName = new TextBox
+            txtTenCongTrinh = new TextBox
             {
-                Location = new Point(126, 19),
+                Location = new Point(102, 17),
                 Width = 230,
                 Font = regularFont,
-                Text = _lastPropertySetName
+                Text = _lastTenCongTrinh
+            };
+
+            lblViTri = new Label
+            {
+                Text = "Vị trí:",
+                Font = regularFont,
+                AutoSize = true,
+                Location = new Point(342, 20)
+            };
+
+            txtViTri = new TextBox
+            {
+                Location = new Point(382, 17),
+                Width = 190,
+                Font = regularFont,
+                Text = _lastViTri
+            };
+
+            lblNhomCauKien = new Label
+            {
+                Text = "Nhóm cấu kiện:",
+                Font = regularFont,
+                AutoSize = true,
+                Location = new Point(582, 20)
+            };
+
+            txtNhomCauKien = new TextBox
+            {
+                Location = new Point(680, 17),
+                Width = 140,
+                Font = regularFont,
+                Text = _lastNhomCauKien
+            };
+
+            lblHangMuc = new Label
+            {
+                Text = "Hạng mục mặc định:",
+                Font = regularFont,
+                AutoSize = true,
+                Location = new Point(830, 20)
+            };
+
+            txtHangMuc = new TextBox
+            {
+                Location = new Point(955, 17),
+                Width = 150,
+                Font = regularFont,
+                Text = _lastHangMuc
+            };
+
+            grpProjectInfo.Controls.AddRange(new Control[]
+            {
+                lblTenCongTrinh, txtTenCongTrinh,
+                lblViTri, txtViTri,
+                lblNhomCauKien, txtNhomCauKien,
+                lblHangMuc, txtHangMuc
+            });
+
+            // Group 1: Excel Config
+            grpExcelConfig = new GroupBox
+            {
+                Text = "📊 Tái Sử Dụng Cấu Hình Qua Excel",
+                Font = boldFont,
+                Dock = DockStyle.Top,
+                Height = 52,
+                Padding = new Padding(8, 2, 8, 2)
             };
 
             btnImportExcel = CreateFlatButton("📥 Nhập từ Excel (.xlsx)", 175, DrawingColor.FromArgb(13, 110, 253), boldFont);
-            btnImportExcel.Location = new Point(370, 16);
+            btnImportExcel.Location = new Point(12, 16);
             btnImportExcel.Click += BtnImportExcel_Click;
 
             btnExportExcel = CreateFlatButton("📤 Xuất ra Excel (.xlsx)", 175, DrawingColor.FromArgb(25, 135, 84), boldFont);
-            btnExportExcel.Location = new Point(555, 16);
+            btnExportExcel.Location = new Point(195, 16);
             btnExportExcel.Click += BtnExportExcel_Click;
 
-            grpPropSetAndExcel.Controls.Add(lblPropSetName);
-            grpPropSetAndExcel.Controls.Add(txtPropSetName);
-            grpPropSetAndExcel.Controls.Add(btnImportExcel);
-            grpPropSetAndExcel.Controls.Add(btnExportExcel);
+            lblExcelHint = new Label
+            {
+                Text = "💡 Xuất ra Excel để chỉnh sửa hàng loạt hoặc nạp file cấu hình có sẵn để tự động gán cho bản vẽ.",
+                Font = subFont,
+                ForeColor = DrawingColor.FromArgb(100, 110, 120),
+                AutoSize = true,
+                Location = new Point(385, 21)
+            };
+
+            grpExcelConfig.Controls.Add(btnImportExcel);
+            grpExcelConfig.Controls.Add(btnExportExcel);
+            grpExcelConfig.Controls.Add(lblExcelHint);
 
             // Group 2: Options
             grpOptions = new GroupBox
@@ -275,39 +431,50 @@ namespace Civil3DCsharp
                 Padding = new Padding(8, 2, 8, 2)
             };
 
-            chkUpdateColor = new CheckBox
+            chkUpdatePropertySet = new CheckBox
             {
-                Text = "Đổi Màu Layer (TrueColor)",
-                Font = regularFont,
+                Text = "🔹 Cập nhật Property Set cho 3D Solid",
+                Font = boldFont,
+                ForeColor = DrawingColor.FromArgb(10, 50, 120),
                 AutoSize = true,
-                Location = new Point(12, 20),
-                Checked = _lastUpdateColor
+                Location = new Point(12, 18),
+                Checked = _lastUpdatePropertySet
             };
 
-            chkUpdatePropSet = new CheckBox
+            chkOnlyMissing = new CheckBox
             {
-                Text = "Gán / Cập nhật Property Set cho 3D Solid & Body",
+                Text = "🔹 Chỉ điền thuộc tính còn thiếu (không ghi đè)",
+                Font = boldFont,
+                ForeColor = DrawingColor.FromArgb(20, 110, 50),
+                AutoSize = true,
+                Location = new Point(275, 18),
+                Checked = _lastOnlyMissing
+            };
+
+            chkUpdateColor = new CheckBox
+            {
+                Text = "Đổi Màu Layer",
                 Font = regularFont,
                 AutoSize = true,
-                Location = new Point(205, 20),
-                Checked = _lastUpdatePropSet
+                Location = new Point(590, 18),
+                Checked = _lastUpdateColor
             };
 
             chkUpdateDescription = new CheckBox
             {
-                Text = "Ghi Description ([Cấu kiện] | [Vật liệu])",
+                Text = "Ghi Description",
                 Font = regularFont,
                 AutoSize = true,
-                Location = new Point(515, 20),
+                Location = new Point(720, 18),
                 Checked = _lastUpdateDescription
             };
 
             chkApplyByLayer = new CheckBox
             {
-                Text = "Chuyển đối tượng về ByLayer",
+                Text = "Về ByLayer",
                 Font = regularFont,
                 AutoSize = true,
-                Location = new Point(785, 20),
+                Location = new Point(855, 18),
                 Checked = _lastApplyByLayer
             };
 
@@ -316,23 +483,24 @@ namespace Civil3DCsharp
                 Text = "Tự mở khóa Layer",
                 Font = regularFont,
                 AutoSize = true,
-                Location = new Point(995, 20),
+                Location = new Point(965, 18),
                 Checked = _lastUnlockLayers
             };
 
+            grpOptions.Controls.Add(chkUpdatePropertySet);
+            grpOptions.Controls.Add(chkOnlyMissing);
             grpOptions.Controls.Add(chkUpdateColor);
-            grpOptions.Controls.Add(chkUpdatePropSet);
             grpOptions.Controls.Add(chkUpdateDescription);
             grpOptions.Controls.Add(chkApplyByLayer);
             grpOptions.Controls.Add(chkUnlockLayers);
 
-            // Group 3: Log
+            // Group 3: Log Box
             grpLog = new GroupBox
             {
-                Text = "📝 Nhật ký hoạt động",
+                Text = "📋 Nhật ký tiến trình",
                 Font = boldFont,
                 Dock = DockStyle.Fill,
-                Padding = new Padding(6, 3, 6, 3)
+                Padding = new Padding(6)
             };
 
             txtLog = new TextBox
@@ -341,50 +509,26 @@ namespace Civil3DCsharp
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
                 Dock = DockStyle.Fill,
-                Font = new DrawingFont("Consolas", 8.5F),
-                BackColor = DrawingColor.FromArgb(250, 250, 250)
+                BackColor = DrawingColor.FromArgb(250, 252, 255),
+                Font = new DrawingFont("Consolas", 8.25F, FontStyle.Regular),
+                BorderStyle = BorderStyle.None
             };
             grpLog.Controls.Add(txtLog);
 
-            // Panel Action Buttons
+            // Action Buttons
             pnlButtons = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 48,
-                BackColor = DrawingColor.FromArgb(235, 239, 244),
-                Padding = new Padding(10, 6, 16, 6)
+                Height = 36,
+                Padding = new Padding(0, 4, 0, 0)
             };
 
-            btnExecute = new Button
-            {
-                Text = "🚀 ÁP DỤNG CẬP NHẬT MÀU & PROPERTY SET",
-                Font = boldFont,
-                BackColor = DrawingColor.FromArgb(13, 110, 253),
-                ForeColor = DrawingColor.White,
-                FlatStyle = FlatStyle.Flat,
-                Height = 36,
-                Width = 370,
-                Location = new Point(pnlButtons.Width - 500, 6),
-                Anchor = AnchorStyles.Right | AnchorStyles.Top,
-                Cursor = Cursors.Hand
-            };
-            btnExecute.FlatAppearance.BorderSize = 0;
+            btnExecute = CreateFlatButton("🚀 Cập Nhật Ngay", 170, DrawingColor.FromArgb(220, 53, 69), boldFont);
+            btnExecute.Dock = DockStyle.Right;
             btnExecute.Click += BtnExecute_Click;
 
-            btnClose = new Button
-            {
-                Text = "❌ Đóng",
-                Font = boldFont,
-                BackColor = DrawingColor.FromArgb(108, 117, 125),
-                ForeColor = DrawingColor.White,
-                FlatStyle = FlatStyle.Flat,
-                Height = 36,
-                Width = 110,
-                Location = new Point(pnlButtons.Width - 120, 6),
-                Anchor = AnchorStyles.Right | AnchorStyles.Top,
-                Cursor = Cursors.Hand
-            };
-            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose = CreateFlatButton("Đóng", 100, DrawingColor.FromArgb(108, 117, 125), regularFont);
+            btnClose.Dock = DockStyle.Left;
             btnClose.Click += (s, e) => this.Close();
 
             pnlButtons.Controls.Add(btnExecute);
@@ -392,26 +536,28 @@ namespace Civil3DCsharp
 
             pnlBottom.Controls.Add(grpLog);
             pnlBottom.Controls.Add(grpOptions);
-            pnlBottom.Controls.Add(grpPropSetAndExcel);
+            pnlBottom.Controls.Add(grpExcelConfig);
+            pnlBottom.Controls.Add(grpProjectInfo);
+            pnlBottom.Controls.Add(pnlButtons);
 
+            // Add all main controls
             this.Controls.Add(tabControlMain);
             this.Controls.Add(pnlBottom);
-            this.Controls.Add(pnlButtons);
             this.Controls.Add(pnlHeader);
 
             this.FormClosing += CapNhatMauVaPropertySetForm_FormClosing;
             this.ResumeLayout(false);
         }
 
-        #region Build Tab 1: Coordination List
+        #region Build Tab 1: Main Coordination
         private void BuildTabMainCoordination(DrawingFont regularFont, DrawingFont boldFont)
         {
-            // Panel 1: Filter & Action Buttons
+            // Panel 1: Toolbar
             pnlToolbar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 40,
-                BackColor = DrawingColor.FromArgb(240, 243, 248),
+                Height = 38,
+                BackColor = DrawingColor.FromArgb(243, 245, 248),
                 Padding = new Padding(8, 4, 8, 4)
             };
 
@@ -420,7 +566,7 @@ namespace Civil3DCsharp
                 Text = "🔍 Tìm kiếm:",
                 AutoSize = true,
                 Font = boldFont,
-                Location = new Point(8, 10)
+                Location = new Point(8, 9)
             };
 
             txtSearch = new TextBox
@@ -453,7 +599,7 @@ namespace Civil3DCsharp
             {
                 LoadDataFromDrawing();
                 PopulateLayersGrid();
-                AppendLog("Đã nạp lại danh sách Layer và thống kê đối tượng 3D từ bản vẽ.");
+                AppendLog("Đã nạp lại danh sách Layer từ bản vẽ.");
             };
 
             pnlToolbar.Controls.AddRange(new Control[]
@@ -465,31 +611,53 @@ namespace Civil3DCsharp
             pnlBatch = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 36,
+                Height = 38,
                 BackColor = DrawingColor.FromArgb(248, 249, 250),
                 Padding = new Padding(8, 3, 8, 3)
             };
 
             lblBatch = new Label
             {
-                Text = "⚡ Gán nhanh mẫu cho Layer đã chọn:",
+                Text = "⚡ Mẫu BIM:",
                 AutoSize = true,
                 Font = boldFont,
                 ForeColor = DrawingColor.FromArgb(10, 50, 100),
-                Location = new Point(8, 8)
+                Location = new Point(8, 9)
             };
 
             cboBatchPreset = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 320,
-                Location = new Point(265, 5),
+                Width = 230,
+                Location = new Point(90, 6),
                 Font = regularFont
             };
 
-            btnApplyBatchPreset = CreateFlatButton("👉 Áp dụng", 90, DrawingColor.FromArgb(220, 53, 69), boldFont);
-            btnApplyBatchPreset.Location = new Point(592, 4);
+            btnApplyBatchPreset = CreateFlatButton("👉 Gán Mẫu", 85, DrawingColor.FromArgb(220, 53, 69), boldFont);
+            btnApplyBatchPreset.Location = new Point(325, 5);
             btnApplyBatchPreset.Click += BtnApplyBatchPreset_Click;
+
+            lblBatchBeDay = new Label
+            {
+                Text = "📏 Bề dày kết cấu (m):",
+                AutoSize = true,
+                Font = boldFont,
+                ForeColor = DrawingColor.FromArgb(180, 50, 0),
+                Location = new Point(425, 9)
+            };
+
+            txtBatchBeDay = new TextBox
+            {
+                Location = new Point(565, 6),
+                Width = 55,
+                Font = regularFont,
+                Text = "0.05",
+                TextAlign = HorizontalAlignment.Right
+            };
+
+            btnApplyBatchBeDay = CreateFlatButton("📏 Gán Bề Dày", 105, DrawingColor.FromArgb(13, 110, 253), boldFont);
+            btnApplyBatchBeDay.Location = new Point(625, 5);
+            btnApplyBatchBeDay.Click += BtnApplyBatchBeDay_Click;
 
             lblStats = new Label
             {
@@ -497,12 +665,14 @@ namespace Civil3DCsharp
                 AutoSize = true,
                 Font = boldFont,
                 ForeColor = DrawingColor.FromArgb(20, 80, 150),
-                Location = new Point(695, 8)
+                Location = new Point(740, 9)
             };
 
             pnlBatch.Controls.AddRange(new Control[]
             {
-                lblBatch, cboBatchPreset, btnApplyBatchPreset, lblStats
+                lblBatch, cboBatchPreset, btnApplyBatchPreset,
+                lblBatchBeDay, txtBatchBeDay, btnApplyBatchBeDay,
+                lblStats
             });
 
             // DataGridView dgvLayers
@@ -549,38 +719,64 @@ namespace Civil3DCsharp
                 Width = 65,
                 ReadOnly = true,
                 Name = "colSolidCount",
-                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleRight }
-            };
-
-            var colBodyCount = new DataGridViewTextBoxColumn
-            {
-                HeaderText = "3D Body",
-                Width = 65,
-                ReadOnly = true,
-                Name = "colBodyCount",
-                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleRight }
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleCenter,
+                    Font = boldFont,
+                    ForeColor = DrawingColor.FromArgb(10, 50, 120)
+                }
             };
 
             var colPreset = new DataGridViewComboBoxColumn
             {
                 HeaderText = "Chọn Mẫu BIM / EIR (BEP T27)",
-                Width = 240,
+                Width = 210,
                 Name = "colPreset",
                 FlatStyle = FlatStyle.Flat
             };
 
             var colCauKien = new DataGridViewTextBoxColumn
             {
-                HeaderText = "Cấu kiện (Property Set)",
-                Width = 175,
+                HeaderText = "Tên cấu kiện",
+                Width = 140,
                 Name = "colCauKien"
             };
 
             var colVatLieu = new DataGridViewTextBoxColumn
             {
-                HeaderText = "Vật liệu (Property Set)",
-                Width = 175,
+                HeaderText = "Loại vật liệu",
+                Width = 140,
                 Name = "colVatLieu"
+            };
+
+            var colDoChat = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Độ chặt",
+                Width = 75,
+                Name = "colDoChat",
+                DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+            };
+
+            var colBeDay = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Bề dày h (m)",
+                Width = 100,
+                Name = "colBeDay",
+                ToolTipText = "Bề dày kết cấu theo Layer (m). Dùng để tính Diện tích S = V / h",
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleRight,
+                    BackColor = DrawingColor.FromArgb(255, 255, 230),
+                    ForeColor = DrawingColor.FromArgb(170, 40, 0),
+                    Font = boldFont
+                }
+            };
+
+            var colHangMuc = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Hạng mục",
+                Width = 130,
+                Name = "colHangMuc"
             };
 
             var colNewColorPreview = new DataGridViewTextBoxColumn
@@ -620,16 +816,16 @@ namespace Civil3DCsharp
             var colCurrentDesc = new DataGridViewTextBoxColumn
             {
                 HeaderText = "Mô tả hiện tại trong CAD",
-                Width = 150,
+                Width = 160,
                 ReadOnly = true,
                 Name = "colCurrentDesc"
             };
 
             dgvLayers.Columns.AddRange(new DataGridViewColumn[]
             {
-                colCheck, colLayerName, colSolidCount, colBodyCount,
-                colPreset, colCauKien, colVatLieu, colNewColorPreview,
-                colNewRgb, colCustomColorBtn, colCurrentColorPreview, colCurrentDesc
+                colCheck, colLayerName, colSolidCount, colPreset, colCauKien, colVatLieu,
+                colDoChat, colBeDay, colHangMuc,
+                colNewColorPreview, colNewRgb, colCustomColorBtn, colCurrentColorPreview, colCurrentDesc
             });
 
             dgvLayers.CellPainting += DgvLayers_CellPainting;
@@ -649,9 +845,61 @@ namespace Civil3DCsharp
         }
         #endregion
 
-        #region Build Tab 2: Preset Reference
+        #region Build Tab 2: Preset Reference & Management
         private void BuildTabPresetReference(DrawingFont regularFont, DrawingFont boldFont)
         {
+            pnlPresetToolbar = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 38,
+                BackColor = DrawingColor.FromArgb(243, 245, 248),
+                Padding = new Padding(8, 4, 8, 4)
+            };
+
+            btnAddPreset = CreateFlatButton("➕ Thêm Mẫu Mới", 130, DrawingColor.FromArgb(25, 135, 84), boldFont);
+            btnAddPreset.Location = new Point(8, 4);
+            btnAddPreset.Click += BtnAddPreset_Click;
+
+            btnPickPresetColor = CreateFlatButton("🎨 Chọn Màu...", 110, DrawingColor.FromArgb(111, 66, 193), boldFont);
+            btnPickPresetColor.Location = new Point(144, 4);
+            btnPickPresetColor.Click += BtnPickPresetColor_Click;
+
+            btnDeletePreset = CreateFlatButton("🗑️ Xóa Mẫu", 90, DrawingColor.FromArgb(220, 53, 69), regularFont);
+            btnDeletePreset.Location = new Point(260, 4);
+            btnDeletePreset.Click += BtnDeletePreset_Click;
+
+            btnSavePresets = CreateFlatButton("💾 Lưu & Cập Nhật Bảng Mẫu", 200, DrawingColor.FromArgb(13, 110, 253), boldFont);
+            btnSavePresets.Location = new Point(356, 4);
+            btnSavePresets.Click += BtnSavePresets_Click;
+
+            btnResetPresets = CreateFlatButton("🔄 Mặc Định Ban Đầu", 145, DrawingColor.FromArgb(108, 117, 125), regularFont);
+            btnResetPresets.Location = new Point(562, 4);
+            btnResetPresets.Click += BtnResetPresets_Click;
+
+            btnImportPresetExcel = CreateFlatButton("📥 Nạp Mẫu Từ Excel", 150, DrawingColor.FromArgb(10, 88, 202), regularFont);
+            btnImportPresetExcel.Location = new Point(713, 4);
+            btnImportPresetExcel.Click += BtnImportPresetExcel_Click;
+
+            btnExportPresetExcel = CreateFlatButton("📤 Xuất Mẫu Ra Excel", 150, DrawingColor.FromArgb(20, 108, 67), regularFont);
+            btnExportPresetExcel.Location = new Point(869, 4);
+            btnExportPresetExcel.Click += BtnExportPresetExcel_Click;
+
+            lblPresetStats = new Label
+            {
+                Text = "0 mẫu",
+                AutoSize = true,
+                Font = boldFont,
+                ForeColor = DrawingColor.FromArgb(50, 70, 90),
+                Location = new Point(1025, 10)
+            };
+
+            pnlPresetToolbar.Controls.AddRange(new Control[]
+            {
+                btnAddPreset, btnPickPresetColor, btnDeletePreset, btnSavePresets,
+                btnResetPresets, btnImportPresetExcel, btnExportPresetExcel, lblPresetStats
+            });
+
+            // DataGridView dgvPresets
             dgvPresets = new DataGridView
             {
                 Dock = DockStyle.Fill,
@@ -673,22 +921,86 @@ namespace Civil3DCsharp
             dgvPresets.ColumnHeadersDefaultCellStyle.Font = boldFont;
             dgvPresets.ColumnHeadersHeight = 32;
 
-            var colPCode = new DataGridViewTextBoxColumn { HeaderText = "Mã", Width = 55, ReadOnly = true, Name = "colPCode" };
-            var colPGroup = new DataGridViewTextBoxColumn { HeaderText = "Hạng mục / Cấu kiện", Width = 230, ReadOnly = true, Name = "colPGroup" };
-            var colPMaterial = new DataGridViewTextBoxColumn { HeaderText = "Vật liệu / Loại kết cấu", Width = 280, ReadOnly = true, Name = "colPMaterial" };
-            var colPColor = new DataGridViewTextBoxColumn { HeaderText = "Màu sắc", Width = 70, ReadOnly = true, Name = "colPColor" };
-            var colPRgb = new DataGridViewTextBoxColumn { HeaderText = "RGB (R, G, B)", Width = 120, ReadOnly = true, Name = "colPRgb" };
-            var colPHex = new DataGridViewTextBoxColumn { HeaderText = "Mã HEX", Width = 85, ReadOnly = true, Name = "colPHex" };
-            var colPKeywords = new DataGridViewTextBoxColumn { HeaderText = "Từ khóa nhận diện tự động", Width = 250, ReadOnly = true, Name = "colPKeywords" };
+            var colPCode = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Mã Mẫu",
+                Width = 70,
+                Name = "colPCode"
+            };
+
+            var colPGroup = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Hạng Mục / Nhóm Cấu Kiện",
+                Width = 240,
+                Name = "colPGroup"
+            };
+
+            var colPMaterial = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Tên Cấu Kiện / Vật Liệu",
+                Width = 240,
+                Name = "colPMaterial"
+            };
+
+            var colPColor = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Màu Sắc",
+                Width = 75,
+                ReadOnly = true,
+                Name = "colPColor"
+            };
+
+            var colPRgb = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Mã RGB",
+                Width = 100,
+                ReadOnly = true,
+                Name = "colPRgb"
+            };
+
+            var colPHex = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Mã HEX (#RRGGBB)",
+                Width = 135,
+                Name = "colPHex"
+            };
+
+            var colPKeywords = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Từ Khóa Nhận Diện (phân cách bằng dấu phẩy)",
+                Width = 280,
+                Name = "colPKeywords"
+            };
+
+            var colPPickBtn = new DataGridViewButtonColumn
+            {
+                HeaderText = "Đổi Màu",
+                Text = "🎨",
+                UseColumnTextForButtonValue = true,
+                Width = 65,
+                Name = "colPPickBtn",
+                FlatStyle = FlatStyle.Flat
+            };
 
             dgvPresets.Columns.AddRange(new DataGridViewColumn[]
             {
-                colPCode, colPGroup, colPMaterial, colPColor, colPRgb, colPHex, colPKeywords
+                colPCode, colPGroup, colPMaterial, colPColor, colPRgb, colPHex, colPKeywords, colPPickBtn
             });
 
             dgvPresets.CellPainting += DgvPresets_CellPainting;
+            dgvPresets.CellContentClick += DgvPresets_CellContentClick;
+            dgvPresets.CellDoubleClick += DgvPresets_CellDoubleClick;
+            dgvPresets.CellValueChanged += DgvPresets_CellValueChanged;
+            dgvPresets.CurrentCellDirtyStateChanged += (s, e) =>
+            {
+                if (dgvPresets.IsCurrentCellDirty)
+                {
+                    dgvPresets.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                }
+            };
 
             tabPresetReference.Controls.Add(dgvPresets);
+            tabPresetReference.Controls.Add(pnlPresetToolbar);
         }
 
         private void PopulatePresetReferenceGrid()
@@ -707,6 +1019,15 @@ namespace Civil3DCsharp
                 row.Cells["colPHex"].Value = p.HexCode;
                 row.Cells["colPKeywords"].Value = string.Join(", ", p.Keywords);
             }
+            UpdatePresetStats();
+        }
+
+        private void UpdatePresetStats()
+        {
+            if (lblPresetStats != null && !lblPresetStats.IsDisposed)
+            {
+                lblPresetStats.Text = $"📊 {_presets.Count} mẫu chuẩn";
+            }
         }
         #endregion
 
@@ -719,21 +1040,30 @@ namespace Civil3DCsharp
             if (doc == null) return;
             var db = doc.Database;
 
-            // 1. Quét số lượng 3D Solid và Body theo từng Layer
-            var solidBodyCounts = new Dictionary<string, (int solidCount, int bodyCount)>(StringComparer.OrdinalIgnoreCase);
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var mappings = PropertySetUtils.ScanSolidsAndBodies(tr);
-                foreach (var m in mappings)
+                // Đếm số lượng 3D Solid / Body theo Layer
+                var solidCountByLayer = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                try
                 {
-                    solidBodyCounts[m.LayerName] = (m.SolidCount, m.BodyCount);
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                    foreach (ObjectId entId in ms)
+                    {
+                        if (entId.ObjectClass.DxfName.Equals("3DSOLID", StringComparison.OrdinalIgnoreCase) ||
+                            entId.ObjectClass.DxfName.Equals("BODY", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
+                            if (ent != null)
+                            {
+                                string lay = ent.Layer;
+                                solidCountByLayer[lay] = solidCountByLayer.TryGetValue(lay, out int count) ? count + 1 : 1;
+                            }
+                        }
+                    }
                 }
-                tr.Commit();
-            }
+                catch { }
 
-            // 2. Duyệt qua tất cả Layer trong LayerTable của CAD
-            using (var tr = db.TransactionManager.StartTransaction())
-            {
                 var layTable = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
                 foreach (ObjectId layId in layTable)
                 {
@@ -752,19 +1082,14 @@ namespace Civil3DCsharp
                     }
                     catch { }
 
-                    int solidCount = 0;
-                    int bodyCount = 0;
-                    if (solidBodyCounts.TryGetValue(name, out var counts))
-                    {
-                        solidCount = counts.solidCount;
-                        bodyCount = counts.bodyCount;
-                    }
+                    int solidCount = solidCountByLayer.TryGetValue(name, out int sc) ? sc : 0;
+                    double? beDayExtracted = ExtractBeDay(name);
+                    string doChatExtracted = ExtractDoChat(name);
 
                     var rowModel = new LayerBimRowModel
                     {
                         LayerName = name,
                         SolidCount = solidCount,
-                        BodyCount = bodyCount,
                         CurrentColor = drawCol,
                         CurrentColorDesc = colDesc,
                         CurrentDescription = ltr.Description ?? "",
@@ -772,7 +1097,10 @@ namespace Civil3DCsharp
                         IsLocked = ltr.IsLocked,
                         IsFrozen = ltr.IsFrozen,
                         IsOff = ltr.IsOff,
-                        IsSelected = false
+                        IsSelected = solidCount > 0,
+                        DoChat = doChatExtracted,
+                        BeDay = beDayExtracted,
+                        HangMuc = _lastHangMuc
                     };
 
                     // Khôi phục từ bộ nhớ tạm (Persistent State) nếu có
@@ -781,6 +1109,9 @@ namespace Civil3DCsharp
                         rowModel.SelectedPresetCode = saved.PresetCode;
                         rowModel.CauKien = saved.CauKien;
                         rowModel.VatLieu = saved.VatLieu;
+                        if (!string.IsNullOrEmpty(saved.DoChat)) rowModel.DoChat = saved.DoChat;
+                        if (saved.BeDay.HasValue) rowModel.BeDay = saved.BeDay;
+                        if (!string.IsNullOrEmpty(saved.HangMuc)) rowModel.HangMuc = saved.HangMuc;
                         rowModel.NewR = saved.R;
                         rowModel.NewG = saved.G;
                         rowModel.NewB = saved.B;
@@ -793,8 +1124,11 @@ namespace Civil3DCsharp
             }
 
             _allLayerRows = _allLayerRows.OrderBy(x => x.LayerName).ToList();
+            PopulatePresetDropdowns();
+        }
 
-            // Cập nhật danh sách mẫu trong ComboBox cột Grid & thanh Batch
+        private void PopulatePresetDropdowns()
+        {
             var colPresetCombo = (DataGridViewComboBoxColumn)dgvLayers.Columns["colPreset"];
             colPresetCombo.Items.Clear();
             colPresetCombo.Items.Add("-- (Chưa gán mẫu) --");
@@ -804,12 +1138,48 @@ namespace Civil3DCsharp
             }
             colPresetCombo.Items.Add("🎨 [Tùy chỉnh] Tự chọn màu...");
 
+            string prevBatch = cboBatchPreset.SelectedItem?.ToString() ?? "";
             cboBatchPreset.Items.Clear();
             foreach (var p in _presets)
             {
                 cboBatchPreset.Items.Add(p.DisplayName);
             }
-            if (cboBatchPreset.Items.Count > 0) cboBatchPreset.SelectedIndex = 0;
+            if (!string.IsNullOrEmpty(prevBatch) && cboBatchPreset.Items.Contains(prevBatch))
+            {
+                cboBatchPreset.SelectedItem = prevBatch;
+            }
+            else if (cboBatchPreset.Items.Count > 0)
+            {
+                cboBatchPreset.SelectedIndex = 0;
+            }
+        }
+
+        /// <summary>
+        /// Đồng bộ danh sách mẫu màu sang Tab 1 (Layer Grid và Batch Assign)
+        /// </summary>
+        private void SyncPresetsToMainTab()
+        {
+            PopulatePresetDropdowns();
+
+            // Đồng bộ lại các model Layer đang dùng mẫu
+            foreach (var model in _allLayerRows)
+            {
+                if (!string.IsNullOrEmpty(model.SelectedPresetCode) && model.SelectedPresetCode != "CUSTOM")
+                {
+                    var matched = _presets.FirstOrDefault(p => p.Code == model.SelectedPresetCode);
+                    if (matched != null)
+                    {
+                        model.CauKien = matched.GroupName;
+                        model.VatLieu = matched.MaterialName;
+                        model.NewR = matched.R;
+                        model.NewG = matched.G;
+                        model.NewB = matched.B;
+                    }
+                }
+            }
+
+            FilterLayersGrid();
+            UpdatePresetStats();
         }
 
         private void PopulateLayersGrid()
@@ -826,7 +1196,8 @@ namespace Civil3DCsharp
                 ? _allLayerRows
                 : _allLayerRows.Where(x => x.LayerName.ToLower().Contains(keyword) ||
                                            x.CauKien.ToLower().Contains(keyword) ||
-                                           x.VatLieu.ToLower().Contains(keyword)).ToList();
+                                           x.VatLieu.ToLower().Contains(keyword) ||
+                                           x.HangMuc.ToLower().Contains(keyword)).ToList();
 
             foreach (var rowModel in filtered)
             {
@@ -837,7 +1208,6 @@ namespace Civil3DCsharp
                 row.Cells["colCheck"].Value = rowModel.IsSelected;
                 row.Cells["colLayerName"].Value = rowModel.LayerName;
                 row.Cells["colSolidCount"].Value = rowModel.SolidCount > 0 ? rowModel.SolidCount.ToString("N0") : "-";
-                row.Cells["colBodyCount"].Value = rowModel.BodyCount > 0 ? rowModel.BodyCount.ToString("N0") : "-";
 
                 // Set ComboBox display
                 string comboDisplay = "-- (Chưa gán mẫu) --";
@@ -857,6 +1227,9 @@ namespace Civil3DCsharp
 
                 row.Cells["colCauKien"].Value = rowModel.CauKien;
                 row.Cells["colVatLieu"].Value = rowModel.VatLieu;
+                row.Cells["colDoChat"].Value = rowModel.DoChat;
+                row.Cells["colBeDay"].Value = rowModel.BeDayText;
+                row.Cells["colHangMuc"].Value = rowModel.HangMuc;
                 row.Cells["colNewColorPreview"].Value = ""; // Paint
                 row.Cells["colNewRgb"].Value = rowModel.NewRgbText;
                 row.Cells["colCurrentColorPreview"].Value = ""; // Paint
@@ -869,11 +1242,11 @@ namespace Civil3DCsharp
         private void UpdateStats()
         {
             int totalLayers = _allLayerRows.Count;
-            int totalSolids = _allLayerRows.Sum(x => x.SolidCount);
-            int totalBodies = _allLayerRows.Sum(x => x.BodyCount);
             int selectedLayers = _allLayerRows.Count(x => x.IsSelected);
+            int totalSolids = _allLayerRows.Sum(x => x.SolidCount);
+            int selectedSolids = _allLayerRows.Where(x => x.IsSelected).Sum(x => x.SolidCount);
 
-            lblStats.Text = $"📊 {totalLayers} Layer ({selectedLayers} chọn) | Solid 3D: {totalSolids:N0} | Body: {totalBodies:N0} | Tổng 3D: {totalSolids + totalBodies:N0}";
+            lblStats.Text = $"📊 {totalLayers} Layer ({selectedLayers} chọn) | 🧊 {totalSolids} 3D Solid ({selectedSolids} chọn)";
         }
         #endregion
 
@@ -943,6 +1316,286 @@ namespace Civil3DCsharp
                 e.Handled = true;
             }
         }
+
+        private void DgvPresets_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string colName = dgvPresets.Columns[e.ColumnIndex].Name;
+
+            if (colName == "colPPickBtn" || colName == "colPColor")
+            {
+                PromptPresetColor(e.RowIndex);
+            }
+        }
+
+        private void DgvPresets_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string colName = dgvPresets.Columns[e.ColumnIndex].Name;
+
+            if (colName == "colPColor" || colName == "colPRgb" || colName == "colPHex")
+            {
+                PromptPresetColor(e.RowIndex);
+            }
+        }
+
+        private void PromptPresetColor(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= dgvPresets.Rows.Count) return;
+            var row = dgvPresets.Rows[rowIndex];
+            if (row.Tag is not BimStandardPreset preset) return;
+
+            using var cd = new ColorDialog
+            {
+                Color = preset.DrawingColor,
+                FullOpen = true
+            };
+
+            if (cd.ShowDialog(this) == DialogResult.OK)
+            {
+                preset.R = cd.Color.R;
+                preset.G = cd.Color.G;
+                preset.B = cd.Color.B;
+
+                row.Cells["colPRgb"].Value = preset.RgbText;
+                row.Cells["colPHex"].Value = preset.HexCode;
+                dgvPresets.InvalidateCell(row.Cells["colPColor"]);
+                AppendLog($"Đã đổi màu mẫu [{preset.Code}] {preset.MaterialName} -> RGB({preset.R},{preset.G},{preset.B}). Bấm '💾 Lưu & Cập Nhật Bảng Mẫu' để lưu lại.");
+            }
+        }
+
+        private void DgvPresets_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            var row = dgvPresets.Rows[e.RowIndex];
+            if (row.Tag is not BimStandardPreset preset) return;
+
+            string colName = dgvPresets.Columns[e.ColumnIndex].Name;
+            if (colName == "colPRgb")
+            {
+                string rgbStr = row.Cells["colPRgb"].Value?.ToString()?.Trim().Trim('(', ')') ?? "";
+                var parts = rgbStr.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 3 && byte.TryParse(parts[0], out byte r) && byte.TryParse(parts[1], out byte g) && byte.TryParse(parts[2], out byte b))
+                {
+                    preset.R = r;
+                    preset.G = g;
+                    preset.B = b;
+                    row.Cells["colPHex"].Value = preset.HexCode;
+                    dgvPresets.InvalidateCell(row.Cells["colPColor"]);
+                }
+            }
+            else if (colName == "colPHex")
+            {
+                string hexStr = row.Cells["colPHex"].Value?.ToString()?.Trim().TrimStart('#') ?? "";
+                if (hexStr.Length == 6)
+                {
+                    try
+                    {
+                        byte r = Convert.ToByte(hexStr.Substring(0, 2), 16);
+                        byte g = Convert.ToByte(hexStr.Substring(2, 2), 16);
+                        byte b = Convert.ToByte(hexStr.Substring(4, 2), 16);
+                        preset.R = r;
+                        preset.G = g;
+                        preset.B = b;
+                        row.Cells["colPRgb"].Value = preset.RgbText;
+                        dgvPresets.InvalidateCell(row.Cells["colPColor"]);
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        #region Tab 2 Toolbar Actions: Add, Color, Delete, Save, Reset, Import/Export Excel
+        private void BtnAddPreset_Click(object? sender, EventArgs e)
+        {
+            var newPreset = new BimStandardPreset
+            {
+                Code = (_presets.Count + 1).ToString(),
+                GroupName = "Hạng mục mới",
+                MaterialName = "Vật liệu mới",
+                R = 120,
+                G = 150,
+                B = 200,
+                Keywords = new[] { "MOI" }
+            };
+
+            _presets.Add(newPreset);
+            int rIdx = dgvPresets.Rows.Add();
+            var row = dgvPresets.Rows[rIdx];
+            row.Tag = newPreset;
+            row.Cells["colPCode"].Value = newPreset.Code;
+            row.Cells["colPGroup"].Value = newPreset.GroupName;
+            row.Cells["colPMaterial"].Value = newPreset.MaterialName;
+            row.Cells["colPColor"].Value = "";
+            row.Cells["colPRgb"].Value = newPreset.RgbText;
+            row.Cells["colPHex"].Value = newPreset.HexCode;
+            row.Cells["colPKeywords"].Value = string.Join(", ", newPreset.Keywords);
+
+            dgvPresets.ClearSelection();
+            row.Selected = true;
+            dgvPresets.FirstDisplayedScrollingRowIndex = rIdx;
+            UpdatePresetStats();
+
+            AppendLog("➕ Đã thêm dòng mẫu màu mới. Vui lòng sửa thông tin và bấm '💾 Lưu & Cập Nhật Bảng Mẫu'.");
+        }
+
+        private void BtnPickPresetColor_Click(object? sender, EventArgs e)
+        {
+            if (dgvPresets.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Vui lòng chọn 1 dòng mẫu màu trong bảng để chọn màu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            int rowIndex = dgvPresets.SelectedRows[0].Index;
+            PromptPresetColor(rowIndex);
+        }
+
+        private void BtnDeletePreset_Click(object? sender, EventArgs e)
+        {
+            if (dgvPresets.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Vui lòng chọn 1 dòng mẫu màu trong bảng để xóa!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var row = dgvPresets.SelectedRows[0];
+            if (row.Tag is not BimStandardPreset preset) return;
+
+            var dr = MessageBox.Show($"Bạn có chắc chắn muốn xóa mẫu [{preset.Code}] {preset.MaterialName} khỏi danh sách?", "Xác nhận xóa", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (dr == DialogResult.Yes)
+            {
+                _presets.Remove(preset);
+                dgvPresets.Rows.Remove(row);
+                UpdatePresetStats();
+                AppendLog($"🗑️ Đã xóa mẫu [{preset.Code}] {preset.MaterialName}. Bấm '💾 Lưu & Cập Nhật Bảng Mẫu' để lưu thay đổi.");
+            }
+        }
+
+        private void BtnSavePresets_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                SyncGridToPresetsList();
+                BimPresetManager.SavePresets(_presets);
+                SyncPresetsToMainTab();
+
+                AppendLog($"💾 Đã lưu thành công {_presets.Count} mẫu màu vào cấu hình JSON và đồng bộ sang danh sách Layer!");
+                MessageBox.Show($"Đã lưu thành công {_presets.Count} mẫu màu chuẩn BIM!\nToàn bộ danh sách lựa chọn và Layer ở Tab 1 đã được đồng bộ.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi lưu bảng mẫu màu: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog($"❌ Lỗi lưu bảng mẫu: {ex.Message}");
+            }
+        }
+
+        private void SyncGridToPresetsList()
+        {
+            var list = new List<BimStandardPreset>();
+            foreach (DataGridViewRow row in dgvPresets.Rows)
+            {
+                if (row.Tag is BimStandardPreset p)
+                {
+                    p.Code = row.Cells["colPCode"].Value?.ToString()?.Trim() ?? p.Code;
+                    p.GroupName = row.Cells["colPGroup"].Value?.ToString()?.Trim() ?? p.GroupName;
+                    p.MaterialName = row.Cells["colPMaterial"].Value?.ToString()?.Trim() ?? p.MaterialName;
+                    string kwStr = row.Cells["colPKeywords"].Value?.ToString() ?? "";
+                    p.Keywords = kwStr.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                      .Select(k => k.Trim())
+                                      .Where(k => !string.IsNullOrEmpty(k))
+                                      .ToArray();
+                    list.Add(p);
+                }
+            }
+            _presets = list;
+        }
+
+        private void BtnResetPresets_Click(object? sender, EventArgs e)
+        {
+            var dr = MessageBox.Show("Bạn có chắc chắn muốn khôi phục toàn bộ Bảng Mẫu Màu Chuẩn BIM về mặc định ban đầu (BEP T27)?\nCác chỉnh sửa tùy biến sẽ bị thay thế.", "Xác nhận khôi phục mặc định", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (dr == DialogResult.Yes)
+            {
+                _presets = BimPresetManager.ResetToDefaultPresets();
+                PopulatePresetReferenceGrid();
+                SyncPresetsToMainTab();
+                AppendLog("🔄 Đã khôi phục toàn bộ bảng mẫu màu chuẩn về mặc định ban đầu (BEP T27).");
+                MessageBox.Show("Đã khôi phục thành công bảng mẫu màu về mặc định ban đầu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void BtnImportPresetExcel_Click(object? sender, EventArgs e)
+        {
+            using var ofd = new OpenFileDialog
+            {
+                Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                Title = "Chọn file Excel chứa Bảng Mẫu Màu Chuẩn BIM",
+                InitialDirectory = !string.IsNullOrEmpty(_lastExcelPath) ? Path.GetDirectoryName(_lastExcelPath) : ""
+            };
+
+            if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                var imported = BimPresetManager.ImportPresetsFromExcel(ofd.FileName);
+                if (imported.Count > 0)
+                {
+                    _presets = imported;
+                    BimPresetManager.SavePresets(_presets);
+                    PopulatePresetReferenceGrid();
+                    SyncPresetsToMainTab();
+
+                    AppendLog($"📥 Đã nạp thành công {_presets.Count} mẫu màu từ file Excel: {Path.GetFileName(ofd.FileName)}");
+                    MessageBox.Show($"Đã nạp và cập nhật thành công {_presets.Count} mẫu màu từ file Excel!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi nhập bảng mẫu màu từ Excel: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog($"❌ Lỗi nhập Excel bảng mẫu: {ex.Message}");
+            }
+        }
+
+        private void BtnExportPresetExcel_Click(object? sender, EventArgs e)
+        {
+            if (_presets.Count == 0)
+            {
+                MessageBox.Show("Không có dữ liệu mẫu màu để xuất ra Excel!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var sfd = new SaveFileDialog
+            {
+                Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                Title = "Xuất Bảng Mẫu Màu Chuẩn BIM ra Excel",
+                FileName = $"BIM_Color_Presets_{DateTime.Now:yyyyMMdd_HHmm}.xlsx",
+                InitialDirectory = !string.IsNullOrEmpty(_lastExcelPath) ? Path.GetDirectoryName(_lastExcelPath) : ""
+            };
+
+            if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                SyncGridToPresetsList();
+                BimPresetManager.ExportPresetsToExcel(sfd.FileName, _presets);
+                AppendLog($"📤 Đã xuất thành công {_presets.Count} mẫu màu ra file Excel: {sfd.FileName}");
+
+                var dr = MessageBox.Show($"Xuất Excel bảng mẫu màu thành công:\n{sfd.FileName}\n\nBạn có muốn mở file ngay bây giờ không?", "Thành công", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                if (dr == DialogResult.Yes)
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = sfd.FileName,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi xuất bảng mẫu màu ra Excel: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog($"❌ Lỗi xuất Excel bảng mẫu: {ex.Message}");
+            }
+        }
+        #endregion
         #endregion
 
         #region Grid Events & Auto Inference
@@ -1010,6 +1663,28 @@ namespace Civil3DCsharp
             {
                 model.VatLieu = row.Cells["colVatLieu"].Value?.ToString() ?? "";
                 TryAutoInferColorFromNames(model, row);
+            }
+            else if (colName == "colDoChat")
+            {
+                model.DoChat = row.Cells["colDoChat"].Value?.ToString()?.Trim() ?? "";
+            }
+            else if (colName == "colBeDay")
+            {
+                string val = row.Cells["colBeDay"].Value?.ToString()?.Trim() ?? "";
+                if (double.TryParse(val.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double dVal) && dVal > 0)
+                {
+                    model.BeDay = dVal;
+                    row.Cells["colBeDay"].Value = model.BeDayText;
+                }
+                else
+                {
+                    model.BeDay = null;
+                    row.Cells["colBeDay"].Value = "";
+                }
+            }
+            else if (colName == "colHangMuc")
+            {
+                model.HangMuc = row.Cells["colHangMuc"].Value?.ToString()?.Trim() ?? "";
             }
         }
 
@@ -1112,8 +1787,8 @@ namespace Civil3DCsharp
             }
 
             FilterLayersGrid();
-            AppendLog($"⚡ Đã tự động nhận diện và gán mẫu Màu & Property Set cho {matchedCount}/{_allLayerRows.Count} Layer theo từ khóa.");
-            MessageBox.Show($"Đã tự động nhận diện và gán mẫu Màu & Property Set cho {matchedCount}/{_allLayerRows.Count} Layer!", "Tự động nhận diện", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            AppendLog($"⚡ Đã tự động nhận diện và gán mẫu màu cho {matchedCount}/{_allLayerRows.Count} Layer theo từ khóa.");
+            MessageBox.Show($"Đã tự động nhận diện và gán mẫu màu cho {matchedCount}/{_allLayerRows.Count} Layer!", "Tự động nhận diện", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private BimStandardPreset? FindBestMatchingPreset(string layerName)
@@ -1199,6 +1874,39 @@ namespace Civil3DCsharp
             AppendLog($"👉 Đã gán mẫu [{preset.MaterialName}] cho {selectedLayers.Count} Layer được chọn.");
         }
 
+        private void BtnApplyBatchBeDay_Click(object? sender, EventArgs e)
+        {
+            string text = txtBatchBeDay.Text.Trim().Replace(',', '.');
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double thickness) || thickness <= 0)
+            {
+                MessageBox.Show("Vui lòng nhập giá trị bề dày kết cấu hợp lệ (> 0 m), ví dụ: 0.05 hoặc 0.15!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtBatchBeDay.Focus();
+                return;
+            }
+
+            var selectedLayers = _allLayerRows.Where(x => x.IsSelected).ToList();
+            if (selectedLayers.Count == 0)
+            {
+                MessageBox.Show("Vui lòng tích chọn ít nhất 1 Layer trong bảng để gán bề dày kết cấu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            foreach (var model in selectedLayers)
+            {
+                model.BeDay = thickness;
+            }
+
+            foreach (DataGridViewRow row in dgvLayers.Rows)
+            {
+                if (row.Tag is LayerBimRowModel m && m.IsSelected)
+                {
+                    row.Cells["colBeDay"].Value = m.BeDayText;
+                }
+            }
+
+            AppendLog($"📏 Đã gán bề dày kết cấu h = {thickness:0.###} m cho {selectedLayers.Count} Layer được chọn.");
+        }
+
         private void BtnPickObject_Click(object? sender, EventArgs e)
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
@@ -1208,7 +1916,7 @@ namespace Civil3DCsharp
             string selectedLayerName = "";
             using (var interaction = ed.StartUserInteraction(this))
             {
-                var pOpt = new PromptEntityOptions("\nChọn đối tượng trên bản vẽ để tìm Layer: ");
+                var pOpt = new PromptEntityOptions("\nChọn đối tượng (3D Solid, Body,...) trên bản vẽ: ");
                 pOpt.SetRejectMessage("\nChỉ chọn đối tượng AutoCAD hợp lệ!");
                 pOpt.AddAllowedClass(typeof(Entity), true);
 
@@ -1223,6 +1931,41 @@ namespace Civil3DCsharp
                         if (ent != null)
                         {
                             selectedLayerName = ent.Layer;
+
+                            // Đọc thử các PropertySet hiện có trên đối tượng được chọn
+                            try
+                            {
+                                var propSetIds = PropertyDataServices.GetPropertySets(ent);
+                                if (propSetIds != null)
+                                {
+                                    foreach (ObjectId psId in propSetIds)
+                                    {
+                                        var ps = tr.GetObject(psId, OpenMode.ForRead) as PropertySet;
+                                        if (ps == null) continue;
+                                        var def = tr.GetObject(ps.PropertySetDefinition, OpenMode.ForRead) as PropertySetDefinition;
+                                        if (def == null) continue;
+
+                                        foreach (PropertyDefinition pDef in def.Definitions)
+                                        {
+                                            int pId = ps.PropertyNameToId(pDef.Name);
+                                            object? val = ps.GetAt(pId);
+                                            string strVal = val?.ToString()?.Trim() ?? "";
+                                            if (string.IsNullOrEmpty(strVal)) continue;
+
+                                            string norm = CapNhatMauVaPropertySetCmd.NormalizePropertyName(pDef.Name);
+                                            if (norm == "TENCONGTRINH" && string.IsNullOrEmpty(txtTenCongTrinh.Text.Trim()))
+                                                txtTenCongTrinh.Text = strVal;
+                                            else if (norm == "VITRI" && string.IsNullOrEmpty(txtViTri.Text.Trim()))
+                                                txtViTri.Text = strVal;
+                                            else if (norm == "NHOMCAUKIEN" && string.IsNullOrEmpty(txtNhomCauKien.Text.Trim()))
+                                                txtNhomCauKien.Text = strVal;
+                                            else if (norm == "HANGMUC" && string.IsNullOrEmpty(txtHangMuc.Text.Trim()))
+                                                txtHangMuc.Text = strVal;
+                                        }
+                                    }
+                                }
+                            }
+                            catch { }
                         }
                         tr.Commit();
                     }
@@ -1232,7 +1975,7 @@ namespace Civil3DCsharp
             if (!string.IsNullOrEmpty(selectedLayerName))
             {
                 txtSearch.Text = selectedLayerName;
-                AppendLog($"🎯 Đã tìm thấy Layer '{selectedLayerName}' từ đối tượng vừa pick trên bản vẽ.");
+                AppendLog($"🎯 Đã chọn đối tượng trên Layer '{selectedLayerName}', nạp thông tin dự án từ Property Set.");
             }
         }
 
@@ -1262,8 +2005,8 @@ namespace Civil3DCsharp
             using var sfd = new SaveFileDialog
             {
                 Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                Title = "Xuất cấu hình Màu & Property Set Layer ra Excel",
-                FileName = $"BIM_Layer_PropertySet_Mapping_{DateTime.Now:yyyyMMdd_HHmm}.xlsx",
+                Title = "Xuất cấu hình Màu Layer và BIM ra Excel",
+                FileName = $"BIM_Layer_Config_{DateTime.Now:yyyyMMdd_HHmm}.xlsx",
                 InitialDirectory = !string.IsNullOrEmpty(_lastExcelPath) ? Path.GetDirectoryName(_lastExcelPath) : ""
             };
 
@@ -1272,21 +2015,19 @@ namespace Civil3DCsharp
             try
             {
                 _lastExcelPath = sfd.FileName;
-                string propSetName = txtPropSetName.Text.Trim();
 
                 using var workbook = new XLWorkbook();
                 var ws = workbook.Worksheets.Add("BIM_Layer_Config");
 
-                // Tiêu đề cột
-                string[] headers = {
-                    "STT", "Tên Layer", "Cấu kiện", "Vật liệu", "Mã RGB", "Mã HEX",
-                    "Tên Property Set", "Solid 3D", "3D Body", "Tổng đối tượng", "Mã Mẫu BIM"
+                var headerList = new List<string>
+                {
+                    "STT", "Tên Layer", "Số Solid", "Cấu kiện", "Vật liệu", "Độ chặt", "Bề dày (m)", "Hạng mục", "Mã RGB", "Mã HEX", "Mã Mẫu BIM"
                 };
 
-                for (int c = 0; c < headers.Length; c++)
+                for (int c = 0; c < headerList.Count; c++)
                 {
                     var cell = ws.Cell(1, c + 1);
-                    cell.Value = headers[c];
+                    cell.Value = headerList[c];
                     cell.Style.Font.Bold = true;
                     cell.Style.Font.FontColor = XLColor.White;
                     cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1B365D");
@@ -1299,51 +2040,54 @@ namespace Civil3DCsharp
                 int stt = 1;
                 foreach (var item in _allLayerRows)
                 {
-                    ws.Cell(row, 1).SetValue(stt++);
+                    int col = 1;
+                    ws.Cell(row, col++).SetValue(stt++);
                     ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                    ws.Cell(row, 2).SetValue(item.LayerName);
+                    ws.Cell(row, col++).SetValue(item.LayerName);
                     ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-                    ws.Cell(row, 3).SetValue(item.CauKien ?? "");
-                    ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    ws.Cell(row, col++).SetValue(item.SolidCount);
+                    ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                    ws.Cell(row, 4).SetValue(item.VatLieu ?? "");
+                    ws.Cell(row, col++).SetValue(item.CauKien ?? "");
                     ws.Cell(row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-                    string rgbVal = item.NewColor.HasValue ? $"{item.NewR},{item.NewG},{item.NewB}" : "";
-                    ws.Cell(row, 5).SetValue(rgbVal);
-                    ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Cell(row, col++).SetValue(item.VatLieu ?? "");
+                    ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-                    ws.Cell(row, 6).SetValue(item.NewHexText);
+                    ws.Cell(row, col++).SetValue(item.DoChat ?? "");
                     ws.Cell(row, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                    ws.Cell(row, 7).SetValue(propSetName);
-                    ws.Cell(row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    ws.Cell(row, col++).SetValue(item.BeDay.HasValue ? item.BeDay.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "");
+                    ws.Cell(row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
 
-                    ws.Cell(row, 8).SetValue(item.SolidCount);
-                    ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    ws.Cell(row, col++).SetValue(item.HangMuc ?? "");
+                    ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-                    ws.Cell(row, 9).SetValue(item.BodyCount);
-                    ws.Cell(row, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    string rgbVal = item.NewColor.HasValue ? $"{item.NewR},{item.NewG},{item.NewB}" : "";
+                    ws.Cell(row, col).SetValue(rgbVal);
+                    ws.Cell(row, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    col++;
 
-                    ws.Cell(row, 10).SetValue(item.TotalCount);
-                    ws.Cell(row, 10).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-                    ws.Cell(row, 10).Style.Font.Bold = true;
+                    int hexCol = col;
+                    ws.Cell(row, col).SetValue(item.NewHexText);
+                    ws.Cell(row, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    col++;
 
-                    ws.Cell(row, 11).SetValue(item.SelectedPresetCode ?? "");
-                    ws.Cell(row, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Cell(row, col).SetValue(item.SelectedPresetCode ?? "");
+                    ws.Cell(row, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    col++;
 
                     // Tô màu nền ô HEX trực quan
                     if (item.NewColor.HasValue)
                     {
                         try
                         {
-                            ws.Cell(row, 6).Style.Fill.BackgroundColor = XLColor.FromArgb(item.NewR!.Value, item.NewG!.Value, item.NewB!.Value);
-                            // Nếu màu tối thì chữ trắng, màu sáng thì chữ đen
+                            ws.Cell(row, hexCol).Style.Fill.BackgroundColor = XLColor.FromArgb(item.NewR!.Value, item.NewG!.Value, item.NewB!.Value);
                             double lum = (0.299 * item.NewR.Value + 0.587 * item.NewG.Value + 0.114 * item.NewB.Value);
-                            ws.Cell(row, 6).Style.Font.FontColor = lum < 140 ? XLColor.White : XLColor.Black;
-                            ws.Cell(row, 6).Style.Font.Bold = true;
+                            ws.Cell(row, hexCol).Style.Font.FontColor = lum < 140 ? XLColor.White : XLColor.Black;
+                            ws.Cell(row, hexCol).Style.Font.Bold = true;
                         }
                         catch { }
                     }
@@ -1351,7 +2095,7 @@ namespace Civil3DCsharp
                     row++;
                 }
 
-                var range = ws.Range(1, 1, row - 1, headers.Length);
+                var range = ws.Range(1, 1, row - 1, headerList.Count);
                 range.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
                 range.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
                 ws.Columns().AdjustToContents(10, 45);
@@ -1381,11 +2125,11 @@ namespace Civil3DCsharp
             using var ofd = new OpenFileDialog
             {
                 Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                Title = "Chọn file Excel cấu hình Màu & Property Set",
+                Title = "Chọn file Excel cấu hình Màu Layer",
                 InitialDirectory = !string.IsNullOrEmpty(_lastExcelPath) ? Path.GetDirectoryName(_lastExcelPath) : ""
             };
 
-            if (ofd.ShowDialog() != DialogResult.OK) return;
+            if (ofd.ShowDialog(this) != DialogResult.OK) return;
 
             try
             {
@@ -1416,22 +2160,29 @@ namespace Civil3DCsharp
                 int colLayerIdx = -1;
                 int colCauKienIdx = -1;
                 int colVatLieuIdx = -1;
+                int colDoChatIdx = -1;
+                int colBeDayIdx = -1;
+                int colHangMucIdx = -1;
                 int colRgbIdx = -1;
                 int colPresetIdx = -1;
-                int colPropSetIdx = -1;
 
                 int maxHeaderScan = Math.Min(firstRow + 4, lastRow);
                 for (int r = firstRow; r <= maxHeaderScan; r++)
                 {
                     for (int c = firstCol; c <= lastCol; c++)
                     {
-                        string val = ws.Cell(r, c).GetString().Trim().ToLower();
+                        string headerText = ws.Cell(r, c).GetString().Trim();
+                        string val = headerText.ToLower();
+                        if (string.IsNullOrEmpty(val)) continue;
+
                         if (val.Contains("layer") || val == "tên layer") colLayerIdx = c;
-                        else if (val.Contains("cấu kiện") || val.Contains("cau kien") || val.Contains("hạng mục")) colCauKienIdx = c;
+                        else if (val.Contains("cấu kiện") || val.Contains("cau kien")) colCauKienIdx = c;
                         else if (val.Contains("vật liệu") || val.Contains("vat lieu")) colVatLieuIdx = c;
+                        else if (val.Contains("độ chặt") || val.Contains("do chat")) colDoChatIdx = c;
+                        else if (val.Contains("bề dày") || val.Contains("be day") || val.Contains("chiều dày")) colBeDayIdx = c;
+                        else if (val.Contains("hạng mục") || val.Contains("hang muc")) colHangMucIdx = c;
                         else if (val.Contains("rgb") || val.Contains("màu")) colRgbIdx = c;
                         else if (val.Contains("mẫu") || val.Contains("preset")) colPresetIdx = c;
-                        else if (val.Contains("property set") || val.Contains("propertyset")) colPropSetIdx = c;
                     }
 
                     if (colLayerIdx > 0 && (colCauKienIdx > 0 || colVatLieuIdx > 0))
@@ -1460,19 +2211,22 @@ namespace Civil3DCsharp
 
                     string cauKien = colCauKienIdx > 0 ? ws.Cell(r, colCauKienIdx).GetString().Trim() : "";
                     string vatLieu = colVatLieuIdx > 0 ? ws.Cell(r, colVatLieuIdx).GetString().Trim() : "";
+                    string doChat = colDoChatIdx > 0 ? ws.Cell(r, colDoChatIdx).GetString().Trim() : "";
+                    string beDayStr = colBeDayIdx > 0 ? ws.Cell(r, colBeDayIdx).GetString().Trim() : "";
+                    string hangMuc = colHangMucIdx > 0 ? ws.Cell(r, colHangMucIdx).GetString().Trim() : "";
                     string rgbStr = colRgbIdx > 0 ? ws.Cell(r, colRgbIdx).GetString().Trim() : "";
                     string presetCode = colPresetIdx > 0 ? ws.Cell(r, colPresetIdx).GetString().Trim() : "";
-                    string propSetName = colPropSetIdx > 0 ? ws.Cell(r, colPropSetIdx).GetString().Trim() : "";
-
-                    if (!string.IsNullOrEmpty(propSetName))
-                    {
-                        txtPropSetName.Text = propSetName;
-                    }
 
                     if (layerMap.TryGetValue(layerName, out var targetModel))
                     {
                         if (!string.IsNullOrEmpty(cauKien)) targetModel.CauKien = cauKien;
                         if (!string.IsNullOrEmpty(vatLieu)) targetModel.VatLieu = vatLieu;
+                        if (!string.IsNullOrEmpty(doChat)) targetModel.DoChat = doChat;
+                        if (!string.IsNullOrEmpty(hangMuc)) targetModel.HangMuc = hangMuc;
+                        if (!string.IsNullOrEmpty(beDayStr) && (double.TryParse(beDayStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bdv) || double.TryParse(beDayStr.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out bdv)))
+                        {
+                            targetModel.BeDay = bdv;
+                        }
 
                         // Tìm màu sắc:
                         // 1. Thử giải mã RGB từ file Excel
@@ -1538,19 +2292,12 @@ namespace Civil3DCsharp
                 return;
             }
 
-            string propSetName = txtPropSetName.Text.Trim();
             bool updateColor = chkUpdateColor.Checked;
-            bool updatePropSet = chkUpdatePropSet.Checked;
             bool updateDescription = chkUpdateDescription.Checked;
             bool applyByLayer = chkApplyByLayer.Checked;
             bool unlockLayers = chkUnlockLayers.Checked;
-
-            if (updatePropSet && string.IsNullOrEmpty(propSetName))
-            {
-                MessageBox.Show("Vui lòng nhập Tên Property Set!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtPropSetName.Focus();
-                return;
-            }
+            bool updatePropertySet = chkUpdatePropertySet.Checked;
+            bool onlyMissing = chkOnlyMissing.Checked;
 
             try
             {
@@ -1559,21 +2306,27 @@ namespace Civil3DCsharp
 
                 SaveCurrentSettings();
 
-                int result = CapNhatMauVaPropertySetCmd.ExecuteUpdateAll(
+                var result = CapNhatMauVaPropertySetCmd.ExecuteUpdateAll(
                     selectedRows,
-                    propSetName,
                     updateColor,
-                    updatePropSet,
                     updateDescription,
                     applyByLayer,
                     unlockLayers,
+                    updatePropertySet,
+                    onlyMissing,
+                    txtTenCongTrinh.Text.Trim(),
+                    txtViTri.Text.Trim(),
+                    txtNhomCauKien.Text.Trim(),
+                    txtHangMuc.Text.Trim(),
                     msg => AppendLog(msg)
                 );
 
                 LoadDataFromDrawing();
                 PopulateLayersGrid();
 
-                MessageBox.Show($"Đã hoàn tất cập nhật thành công cho {selectedRows.Count} Layer được chọn!\n(Đã cập nhật Property Set cho {result} đối tượng 3D Solid / Body).", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string psetMsg = updatePropertySet ? $", cập nhật {result.updatedSolids} đối tượng 3D Solid / Body" : "";
+                string byLayMsg = applyByLayer ? $", chuyển {result.byLayerCount} đối tượng về ByLayer" : "";
+                MessageBox.Show($"Đã hoàn tất cập nhật thành công cho {result.updatedLayers} Layer{psetMsg}{byLayMsg}!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -1617,6 +2370,12 @@ namespace Civil3DCsharp
 
         private void CapNhatMauVaPropertySetForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
+            try
+            {
+                SyncGridToPresetsList();
+                BimPresetManager.SavePresets(_presets);
+            }
+            catch { }
             SaveCurrentSettings();
         }
 
@@ -1625,13 +2384,16 @@ namespace Civil3DCsharp
             _savedLayerStates.Clear();
             foreach (var r in _allLayerRows)
             {
-                if (!string.IsNullOrEmpty(r.SelectedPresetCode) || !string.IsNullOrEmpty(r.CauKien) || !string.IsNullOrEmpty(r.VatLieu) || r.IsSelected)
+                if (!string.IsNullOrEmpty(r.SelectedPresetCode) || !string.IsNullOrEmpty(r.CauKien) || !string.IsNullOrEmpty(r.VatLieu) || r.IsSelected || !string.IsNullOrEmpty(r.DoChat) || r.BeDay.HasValue || !string.IsNullOrEmpty(r.HangMuc))
                 {
                     _savedLayerStates[r.LayerName] = new LayerBimSavedState
                     {
                         PresetCode = r.SelectedPresetCode,
                         CauKien = r.CauKien,
                         VatLieu = r.VatLieu,
+                        DoChat = r.DoChat,
+                        BeDay = r.BeDay,
+                        HangMuc = r.HangMuc,
                         R = r.NewR,
                         G = r.NewG,
                         B = r.NewB,
@@ -1640,24 +2402,32 @@ namespace Civil3DCsharp
                 }
             }
 
-            _lastPropertySetName = txtPropSetName.Text.Trim();
             _lastUpdateColor = chkUpdateColor.Checked;
-            _lastUpdatePropSet = chkUpdatePropSet.Checked;
             _lastUpdateDescription = chkUpdateDescription.Checked;
             _lastApplyByLayer = chkApplyByLayer.Checked;
             _lastUnlockLayers = chkUnlockLayers.Checked;
+            _lastUpdatePropertySet = chkUpdatePropertySet.Checked;
+            _lastOnlyMissing = chkOnlyMissing.Checked;
+            _lastTenCongTrinh = txtTenCongTrinh.Text;
+            _lastViTri = txtViTri.Text;
+            _lastNhomCauKien = txtNhomCauKien.Text;
+            _lastHangMuc = txtHangMuc.Text;
             _lastSelectedTab = tabControlMain.SelectedIndex;
             _lastFormSize = this.Size;
         }
 
         private void RestoreLastSettings()
         {
-            txtPropSetName.Text = !string.IsNullOrWhiteSpace(_lastPropertySetName) ? _lastPropertySetName : PropertySetUtils.DefaultPropertySetName;
             chkUpdateColor.Checked = _lastUpdateColor;
-            chkUpdatePropSet.Checked = _lastUpdatePropSet;
             chkUpdateDescription.Checked = _lastUpdateDescription;
             chkApplyByLayer.Checked = _lastApplyByLayer;
             chkUnlockLayers.Checked = _lastUnlockLayers;
+            chkUpdatePropertySet.Checked = _lastUpdatePropertySet;
+            chkOnlyMissing.Checked = _lastOnlyMissing;
+            txtTenCongTrinh.Text = _lastTenCongTrinh;
+            txtViTri.Text = _lastViTri;
+            txtNhomCauKien.Text = _lastNhomCauKien;
+            txtHangMuc.Text = _lastHangMuc;
 
             if (_lastSelectedTab >= 0 && _lastSelectedTab < tabControlMain.TabCount)
             {
@@ -1667,3 +2437,4 @@ namespace Civil3DCsharp
         #endregion
     }
 }
+

@@ -1,9 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
 using Autodesk.Civil.DatabaseServices;
 using MyFirstProject.Extensions;
 using WinFormsLabel = System.Windows.Forms.Label;
@@ -544,182 +546,186 @@ private void SaveLastUsedValues()
 
         // Pick from Model event handlers - Enhanced with better feedback
         private void BtnPickCorridor_Click(object? sender, EventArgs e)
-      {
+        {
             try
             {
-         this.Hide();
-                ObjectId pickedId = UserInput.GCorridorId("\nChọn corridor trên model: ");
-        this.Show();
+                ObjectId pickedId = ObjectId.Null;
+                using (var interaction = A.Ed.StartUserInteraction(this))
+                {
+                    pickedId = UserInput.GCorridorId("\nChọn corridor trên model: ");
+                }
 
-       if (pickedId != ObjectId.Null)
-         {
-           using (var tr = A.Db.TransactionManager.StartTransaction())
-   {
-       if (tr.GetObject(pickedId, OpenMode.ForRead) is Corridor corridor)
-  {
-           string name = corridor.Name ?? "Unnamed";
-       
-            // Add to dictionary if not exists
-   if (!_corridorDict.ContainsKey(name))
-         {
-        _corridorDict[name] = pickedId;
-    cmbCorridor.Items.Add(name);
- }
- else
-     {
-       // Update the ObjectId in case it changed
-  _corridorDict[name] = pickedId;
-         }
-  
-   // Select in combobox
-      cmbCorridor.SelectedItem = name;
-     
-          // Console feedback only - no MessageBox
-       A.Ed.WriteMessage($"\n✅ Đã chọn corridor: {name}");
-     }
-               tr.Commit();
-   }
-    }
-     }
-         catch (System.Exception ex)
-     {
-  this.Show();
-       A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
-     }
-   }
+                if (pickedId != ObjectId.Null)
+                {
+                    using (var tr = A.Db.TransactionManager.StartTransaction())
+                    {
+                        if (tr.GetObject(pickedId, OpenMode.ForRead) is Corridor corridor)
+                        {
+                            string name = corridor.Name ?? "Unnamed";
+                            
+                            // Add to dictionary if not exists
+                            if (!_corridorDict.ContainsKey(name))
+                            {
+                                _corridorDict[name] = pickedId;
+                                cmbCorridor.Items.Add(name);
+                            }
+                            else
+                            {
+                                // Update the ObjectId in case it changed
+                                _corridorDict[name] = pickedId;
+                            }
+                            
+                            // Select in combobox
+                            cmbCorridor.SelectedItem = name;
+                            
+                            // Console feedback only - no MessageBox
+                            A.Ed.WriteMessage($"\n✅ Đã chọn corridor: {name}");
+                        }
+                        tr.Commit();
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
+            }
+        }
 
         private void BtnPickAlignment1_Click(object? sender, EventArgs e)
         {
-   try
-     {
-    this.Hide();
-       ObjectId pickedId = UserInput.GAlignmentId("\nChọn Target Alignment 1 trên model: ");
-  this.Show();
+            try
+            {
+                ObjectId pickedId = ObjectId.Null;
+                using (var interaction = A.Ed.StartUserInteraction(this))
+                {
+                    pickedId = UserInput.GAlignmentId("\nChọn Target Alignment 1 trên model: ");
+                }
 
                 if (pickedId != ObjectId.Null)
-             {
-           using (var tr = A.Db.TransactionManager.StartTransaction())
-           {
-     if (tr.GetObject(pickedId, OpenMode.ForRead) is Alignment alignment)
-     {
-         string name = alignment.Name ?? "Unnamed";
- 
-       // Add to dictionary if not exists
-         if (!_alignmentDict.ContainsKey(name))
-      {
-   _alignmentDict[name] = pickedId;
-    cmbTargetAlignment1.Items.Add(name);
-       cmbTargetAlignment2.Items.Add(name);
- }
-       else
-   {
-                _alignmentDict[name] = pickedId;
-      }
-     
-         // Select in combobox
- cmbTargetAlignment1.SelectedItem = name;
-              
-     // Console feedback only - no MessageBox
-       A.Ed.WriteMessage($"\n✅ Đã chọn Target Alignment 1: {name}");
-   }
-      tr.Commit();
-            }
+                {
+                    using (var tr = A.Db.TransactionManager.StartTransaction())
+                    {
+                        if (tr.GetObject(pickedId, OpenMode.ForRead) is Alignment alignment)
+                        {
+                            string name = alignment.Name ?? "Unnamed";
+                            
+                            // Add to dictionary if not exists
+                            if (!_alignmentDict.ContainsKey(name))
+                            {
+                                _alignmentDict[name] = pickedId;
+                                cmbTargetAlignment1.Items.Add(name);
+                                cmbTargetAlignment2.Items.Add(name);
+                            }
+                            else
+                            {
+                                _alignmentDict[name] = pickedId;
+                            }
+                            
+                            // Select in combobox
+                            cmbTargetAlignment1.SelectedItem = name;
+                            
+                            // Console feedback only - no MessageBox
+                            A.Ed.WriteMessage($"\n✅ Đã chọn Target Alignment 1: {name}");
+                        }
+                        tr.Commit();
+                    }
                 }
-    }
-    catch (System.Exception ex)
-    {
-             this.Show();
-    A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
+            }
+            catch (System.Exception ex)
+            {
+                A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
             }
         }
 
         private void BtnPickAlignment2_Click(object? sender, EventArgs e)
         {
             try
-        {
-       this.Hide();
-              ObjectId pickedId = UserInput.GAlignmentId("\nChọn Target Alignment 2 trên model: ");
-      this.Show();
-
-  if (pickedId != ObjectId.Null)
- {
-        using (var tr = A.Db.TransactionManager.StartTransaction())
-  {
-        if (tr.GetObject(pickedId, OpenMode.ForRead) is Alignment alignment)
             {
-       string name = alignment.Name ?? "Unnamed";
-        
-            // Add to dictionary if not exists
-                   if (!_alignmentDict.ContainsKey(name))
-      {
-          _alignmentDict[name] = pickedId;
-   cmbTargetAlignment1.Items.Add(name);
-    cmbTargetAlignment2.Items.Add(name);
-           }
-           else
-        {
-       _alignmentDict[name] = pickedId;
-   }
-     
-       // Select in combobox
-          cmbTargetAlignment2.SelectedItem = name;
-           
-        // Console feedback only - no MessageBox
-           A.Ed.WriteMessage($"\n✅ Đã chọn Target Alignment 2: {name}");
-                   }
-               tr.Commit();
-      }
-    }
+                ObjectId pickedId = ObjectId.Null;
+                using (var interaction = A.Ed.StartUserInteraction(this))
+                {
+                    pickedId = UserInput.GAlignmentId("\nChọn Target Alignment 2 trên model: ");
+                }
+
+                if (pickedId != ObjectId.Null)
+                {
+                    using (var tr = A.Db.TransactionManager.StartTransaction())
+                    {
+                        if (tr.GetObject(pickedId, OpenMode.ForRead) is Alignment alignment)
+                        {
+                            string name = alignment.Name ?? "Unnamed";
+                            
+                            // Add to dictionary if not exists
+                            if (!_alignmentDict.ContainsKey(name))
+                            {
+                                _alignmentDict[name] = pickedId;
+                                cmbTargetAlignment1.Items.Add(name);
+                                cmbTargetAlignment2.Items.Add(name);
+                            }
+                            else
+                            {
+                                _alignmentDict[name] = pickedId;
+                            }
+                            
+                            // Select in combobox
+                            cmbTargetAlignment2.SelectedItem = name;
+                            
+                            // Console feedback only - no MessageBox
+                            A.Ed.WriteMessage($"\n✅ Đã chọn Target Alignment 2: {name}");
+                        }
+                        tr.Commit();
+                    }
+                }
             }
             catch (System.Exception ex)
             {
-     this.Show();
-      A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
+                A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
             }
-  }
+        }
 
         private void BtnPickAssembly_Click(object? sender, EventArgs e)
- {
-   try
-          {
-    this.Hide();
-         ObjectId pickedId = UserInput.GSelectionAnObject("\nChọn assembly trên model: ");
-  this.Show();
+        {
+            try
+            {
+                ObjectId pickedId = ObjectId.Null;
+                using (var interaction = A.Ed.StartUserInteraction(this))
+                {
+                    pickedId = UserInput.GSelectionAnObject("\nChọn assembly trên model: ");
+                }
 
                 if (pickedId != ObjectId.Null)
-   {
-           using (var tr = A.Db.TransactionManager.StartTransaction())
-       {
-  if (tr.GetObject(pickedId, OpenMode.ForRead) is Assembly assembly)
-   {
-      string name = assembly.Name ?? "Unnamed";
-    
-            // Add to dictionary if not exists
-    if (!_assemblyDict.ContainsKey(name))
-       {
- _assemblyDict[name] = pickedId;
-        cmbAssembly.Items.Add(name);
-         }
-         else
-      {
-          _assemblyDict[name] = pickedId;
-          }
-              
-     // Select in combobox
-   cmbAssembly.SelectedItem = name;
- 
-         // Console feedback only - no MessageBox
- A.Ed.WriteMessage($"\n✅ Đã chọn assembly: {name}");
-        }
-      tr.Commit();
-      }
-   }
-  }
-    catch (System.Exception ex)
+                {
+                    using (var tr = A.Db.TransactionManager.StartTransaction())
+                    {
+                        if (tr.GetObject(pickedId, OpenMode.ForRead) is Assembly assembly)
+                        {
+                            string name = assembly.Name ?? "Unnamed";
+                            
+                            // Add to dictionary if not exists
+                            if (!_assemblyDict.ContainsKey(name))
+                            {
+                                _assemblyDict[name] = pickedId;
+                                cmbAssembly.Items.Add(name);
+                            }
+                            else
+                            {
+                                _assemblyDict[name] = pickedId;
+                            }
+                            
+                            // Select in combobox
+                            cmbAssembly.SelectedItem = name;
+                            
+                            // Console feedback only - no MessageBox
+                            A.Ed.WriteMessage($"\n✅ Đã chọn assembly: {name}");
+                        }
+                        tr.Commit();
+                    }
+                }
+            }
+            catch (System.Exception ex)
             {
-       this.Show();
-        A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
-          }
+                A.Ed.WriteMessage($"\n❌ Lỗi: {ex.Message}");
+            }
         }
 
         private void BtnOK_Click(object? sender, EventArgs e)

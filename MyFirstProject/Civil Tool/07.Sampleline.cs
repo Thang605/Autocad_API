@@ -1,4 +1,4 @@
-﻿// (C) Copyright 2015 by  
+// (C) Copyright 2015 by  
 //
 using System;
 using System.Collections.Generic;
@@ -1526,71 +1526,9 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_PhatSinhCoc_TheoBang")]
-        public static void CTSPhatSinhCocTheoBang()
-        {
-            // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
-            try
-            {
-                UserInput UI = new();
-                UtilitiesCAD CAD = new();
-                UtilitiesC3D C3D = new();
-                //start here
-                ObjectId bangId = UserInput.GTable("Chọn bảng tọa độ cọc có lý trình:");
-                int soTenCoc = UserInput.GInt("Nhập số thứ tự cột chứa tên cọc trong bảng:");
-                int soLyTrinh = UserInput.GInt("Nhập số thứ tự cột chứa lý trình trong bảng:");
-                int soHangCoc = UserInput.GInt("Nhập số thứ tự hàng bắt đầu chứa cọc trong bảng:");
-                ObjectId alignmentId = UserInput.GAlignmentId("Chọn tim tuyến cần bổ sung cọc:");
+        // [GHI CHÚ]: Lệnh CTS_PhatSinhCoc_TheoBang đã được nâng cấp toàn diện và chuyển sang:
+        // Civil Tool/46.CTS_PhatSinhCoc_TheoBang.cs kèm Form PhatSinhCocTheoBangForm.cs
 
-                Alignment? alignment = tr.GetObject(alignmentId, OpenMode.ForWrite) as Alignment;
-                ATable? bang = tr.GetObject(bangId, OpenMode.ForRead) as ATable;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                if (alignment.GetSampleLineGroupIds().Count == 0)
-                {
-                    ObjectId slgId = SampleLineGroup.Create(alignment.Name, alignment.ObjectId);
-                }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
-
-                List<String> listTenCoc = [];
-                List<Double> listLyTrinh = [];
-                String tenCoc;
-                int soCocThem = 1;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                int soHang = bang.Rows.Count;
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
-                for (int i = soHangCoc - 1; i < soHang; i++)
-                {
-                    tenCoc = bang.Cells[i, soTenCoc - 1].GetTextString(FormatOption.IgnoreMtextFormat);
-                    listTenCoc.Add(tenCoc);
-                    //check duplicate element
-                    for (int j = 0; j < listTenCoc.Count - 1; j++)
-                    {
-                        if (tenCoc == listTenCoc[j].ToString())
-                        {
-                            listTenCoc[j] = tenCoc + soCocThem.ToString();
-                            soCocThem++;
-                        }
-                    }
-                    listLyTrinh.Add(Convert.ToDouble(bang.Cells[i, soLyTrinh - 1].GetTextString(FormatOption.IgnoreMtextFormat)));
-                }
-                listLyTrinh[listTenCoc.Count - 1] = listLyTrinh[listTenCoc.Count - 1] - 0.01;
-
-                for (int i = 0; i < listTenCoc.Count; i++)
-                {
-                    A.Ok(listTenCoc[i].ToString());
-                    A.Ok(listLyTrinh[i].ToString());
-                    ObjectId samplelineId = UtilitiesC3D.CreateSampleline(listTenCoc[i], alignment.GetSampleLineGroupIds()[0], alignment, listLyTrinh[i]);
-                }
-
-
-                tr.Commit();
-            }
-            catch (Autodesk.AutoCAD.Runtime.Exception e)
-            {
-                A.Ed.WriteMessage(e.Message);
-            }
-        }
 
         [CommandMethod("CTS_Copy_BeRong_sampleLine")]
         public static void CTSCopyBeRongSampleLine()

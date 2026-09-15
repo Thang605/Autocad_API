@@ -125,6 +125,7 @@ namespace MyFirstProject
             // Point
             dynamic subMenuPoint = menu.AddSubMenu(menu.Count + 1, "Point");
             AddHeader(subMenuPoint, "--- Tạo CogoPoint ---");
+            AddMenuItem(subMenuPoint, "Tạo CogoPoint Đa Nguồn (Text/Circle/Point/Table/Excel)", "CTPO_TaoCogoPoint_MultiSource ");
             AddMenuItem(subMenuPoint, "Tạo CogoPoint Từ Surface", "CTPO_TaoCogoPoint_CaoDo_FromSurface ");
             AddMenuItem(subMenuPoint, "Tạo CogoPoint Từ Elevation Spot", "CTPO_TaoCogoPoint_CaoDo_Elevationspot ");
             AddMenuItem(subMenuPoint, "Tạo CogoPoint Từ Text", "CTPO_CreateCogopointFromText ");
@@ -242,7 +243,7 @@ namespace MyFirstProject
             // Property Sets
             dynamic subMenuProp = menu.AddSubMenu(menu.Count + 1, "Property Sets");
             AddHeader(subMenuProp, "--- 3D Solid & Body ---");
-            AddMenuItem(subMenuProp, "Phối Hợp Màu & PropertySet Layer (BIM)", "AT_CapNhatMauVaPropertySet ");
+            AddMenuItem(subMenuProp, "Cập Nhật Màu & PropertySet BIM (3D Solid)", "AT_CapNhatMauVaPropertySet ");
             AddMenuItem(subMenuProp, "Cập Nhật PropertySet Theo Layer", "AT_Solid_Update_PropertySet ");
             AddMenuItem(subMenuProp, "Set PropertySet 3D Solid", "AT_Solid_Set_PropertySet ");
             AddMenuItem(subMenuProp, "Show 3D Solid Info", "AT_Solid_Show_Info ");
@@ -348,7 +349,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");
             AddMenuItem(subMenuOther, "Dim Đường Cong", "AT_DIM_DUONGCONG ");
             AddMenuItem(subMenuOther, "Cập Nhật Màu Layer (BIM EIR)", "AT_CapNhatMauLayer ");
-            AddMenuItem(subMenuOther, "Phối Hợp Màu & PropertySet (BIM)", "AT_CapNhatMauVaPropertySet ");
+            AddMenuItem(subMenuOther, "Cập Nhật Màu Layer Nâng Cao (Excel, Auto-Match)", "AT_CapNhatMauVaPropertySet ");
         }
 
         private static void AddMenuItem(dynamic menu, string label, string macro)
