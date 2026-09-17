@@ -197,6 +197,16 @@ namespace Civil3DCsharp
                         }
 
                         var polyline = tr.GetObject(polylineId, OpenMode.ForRead) as Polyline;
+                        if (polyline == null || polyline.NumberOfVertices < 2)
+                        {
+                            A.Ed.WriteMessage($"\n{WARNING_INDICATOR} Cần chọn Polyline có ít nhất hai đỉnh. Bỏ qua cặp {i + 1}.");
+                            continue;
+                        }
+                        if (pairs.Any(pair => pair.AlignmentId == turnAlignmentId))
+                        {
+                            A.Ed.WriteMessage($"\n{WARNING_INDICATOR} Alignment này đã được chọn. Bỏ qua cặp trùng.");
+                            continue;
+                        }
                         string polylineName = $"Polyline_{i + 1}";
                         A.Ed.WriteMessage($"\n✓ Polyline: {polylineName}");
 
@@ -352,7 +362,7 @@ namespace Civil3DCsharp
                         PromptResult pkr = A.Ed.GetKeywords(pko);
                         
                         if (pkr.Status == PromptStatus.Cancel || 
-                            (pkr.Status == PromptStatus.Keyword && pkr.StringResult == "No"))
+                            (pkr.StringResult == "No"))
                         {
                             // User wants to select a new surface
                             surfaceId = ObjectId.Null;
@@ -404,8 +414,10 @@ namespace Civil3DCsharp
             bool useFormConfig = true;
 
             // Get target alignments and profiles
-            ObjectId profileId_1 = objects.Alignment1.GetProfileIds().Count > 0 ? objects.Alignment1.GetProfileIds()[0] : ObjectId.Null;
-            ObjectId profileId_2 = objects.Alignment2.GetProfileIds().Count > 0 ? objects.Alignment2.GetProfileIds()[0] : ObjectId.Null;
+            var profiles1 = objects.Alignment1.GetProfileIds();
+            var profiles2 = objects.Alignment2.GetProfileIds();
+            ObjectId profileId_1 = profiles1.Count > 0 ? profiles1[0] : ObjectId.Null;
+            ObjectId profileId_2 = profiles2.Count > 0 ? profiles2[0] : ObjectId.Null;
 
             ObjectIdCollection sharedAlignmentTargets = new ObjectIdCollection { objects.Alignment1.Id, objects.Alignment2.Id };
             ObjectIdCollection sharedProfileTargets = new ObjectIdCollection();
@@ -423,6 +435,7 @@ namespace Civil3DCsharp
                 if (firstAlignment != null && firstPolyline != null && firstAlignment.GetProfileIds().Count > 0)
                 {
                     // Create a temporary baseline region to get subassembly targets
+                    Baseline? tempBaseline = null;
                     try
                     {
                         A.Ed.WriteMessage($"\n📋 Lấy thông tin subassembly targets từ assembly '{objects.AssemblyName}'...");
@@ -432,28 +445,18 @@ namespace Civil3DCsharp
                         Profile? profile = tr.GetObject(profileId, OpenMode.ForRead) as Profile;
 
                         string tempBaselineName = "TEMP_BL_" + Guid.NewGuid().ToString().Substring(0, 8);
-                        Baseline tempBaseline = objects.Corridor.Baselines.Add(tempBaselineName, firstAlignment.Id, profileId);
+                        tempBaseline = objects.Corridor.Baselines.Add(tempBaselineName, firstAlignment.Id, profileId);
 
                         // Get station range
-                        double[] station = new double[firstAlignment.Entities.Count];
-                        for (int i = 0; i < firstAlignment.Entities.Count; i++)
-                        {
-                            AlignmentEntity alignmentEntity = firstAlignment.Entities.GetEntityByOrder(i);
-                            station[i] = alignmentEntity.EntityType switch
-                            {
-                                AlignmentEntityType.Line => (alignmentEntity as AlignmentLine)?.Length ?? 0,
-                                AlignmentEntityType.Arc => (alignmentEntity as AlignmentArc)?.Length ?? 0,
-                                _ => 0
-                            };
-                        }
-                        double startStation = station[0];
-                        double endStation = station[0] + (station.Length > 1 ? station[1] : station[0]);
+                        var (startStation, endStation) = GetTurnRegionStations(firstAlignment);
 
                         string tempRegionName = "TEMP_RG_" + Guid.NewGuid().ToString().Substring(0, 8);
                         BaselineRegion tempRegion = tempBaseline.BaselineRegions.Add(tempRegionName, objects.AssemblyId, startStation, endStation);
 
                         // Get subassembly targets
                         SubassemblyTargetInfoCollection sampleTargets = tempRegion.GetTargets();
+                        string targetSignature = string.Join("|", Enumerable.Range(0, sampleTargets.Count)
+                            .Select(index => $"{sampleTargets[index].SubassemblyName}:{sampleTargets[index].TargetType}"));
 
                         A.Ed.WriteMessage($"\n✅ Tìm thấy {sampleTargets.Count} subassembly targets trong assembly.");
 
@@ -469,7 +472,9 @@ namespace Civil3DCsharp
                                 {
                                     // Check if we have saved target mapping from previous run
                                     bool useSavedMapping = false;
-                                    if (_savedTargetMapping != null && _savedTargetMapping.UseFormConfig && 
+                                    if (_savedTargetMapping != null && _savedTargetMapping.UseFormConfig &&
+                                        _savedTargetMapping.AssemblyId == objects.AssemblyId &&
+                                        _savedTargetMapping.TargetSignature == targetSignature &&
                                         _savedTargetMapping.SavedConnections != null && _savedTargetMapping.SavedConnections.Count > 0)
                                     {
                                         A.Ed.WriteMessage($"\n📋 Đã tìm thấy cấu hình target đã lưu ({_savedTargetMapping.SavedConnections.Count} targets)");
@@ -487,7 +492,7 @@ namespace Civil3DCsharp
                                         // Only open form if user explicitly says "No"
                                         // Otherwise (Enter, "Y", "Yes", or any other) use saved config
                                         if (pkr.Status == PromptStatus.Cancel ||
-                                            (pkr.Status == PromptStatus.Keyword && pkr.StringResult == "No"))
+                                            (pkr.StringResult == "No"))
                                         {
                                             A.Ed.WriteMessage("\n→ Mở form cấu hình target mới...");
                                         }
@@ -504,7 +509,7 @@ namespace Civil3DCsharp
                                     {
                                         A.Ed.WriteMessage("\n\n=== Mở form cấu hình Target (dùng chung cho tất cả corridors) ===");
 
-                                        var targetConfigForm = new SubassemblyTargetConfigForm(
+                                        using var targetConfigForm = new SubassemblyTargetConfigForm(
                                             sampleTargets,
                                             sharedAlignmentTargets,
                                             sharedProfileTargets,
@@ -520,8 +525,10 @@ namespace Civil3DCsharp
                                             // Store the target mapping configuration
                                             targetMapping = new TargetMappingConfiguration
                                             {
+                                                AssemblyId = objects.AssemblyId,
+                                                TargetSignature = targetSignature,
                                                 UseFormConfig = true,
-                                                TargetConnections = targetConfigForm.TargetConnections,
+                                                TargetConnections = null,
                                                 // Create SavedConnections (primitives only) for next run
                                                 SavedConnections = targetConfigForm.TargetConnections
                                                     .Select(tc => new SavedTargetConnection
@@ -568,9 +575,6 @@ namespace Civil3DCsharp
                             }
                         }
 
-                        // Clean up temporary baseline and region
-                        objects.Corridor.Baselines.Remove(tempBaseline);
-                        A.Ed.WriteMessage($"\n🗑️ Đã xóa temporary baseline.");
                     }
                     catch (System.Exception ex)
                     {
@@ -581,6 +585,11 @@ namespace Civil3DCsharp
                             UseFormConfig = false,
                             TargetConnections = null
                         };
+                    }
+                    finally
+                    {
+                        if (tempBaseline != null)
+                            objects.Corridor.Baselines.Remove(tempBaseline);
                     }
                 }
             }
@@ -642,13 +651,18 @@ namespace Civil3DCsharp
                 {
                     A.Ed.WriteMessage("\n\n--- Rebuild Corridor ---");
                     // Upgrade corridor to write mode before rebuild
-                    objects.Corridor.UpgradeOpen();
+                    if (!objects.Corridor.IsWriteEnabled)
+                        objects.Corridor.UpgradeOpen();
                     objects.Corridor.Rebuild();
                     A.Ed.WriteMessage($"\n{SUCCESS_INDICATOR} Đã rebuild corridor thành công.");
                 }
                 catch (System.Exception rebuildEx)
                 {
-                    A.Ed.WriteMessage($"\n{WARNING_INDICATOR} Lỗi khi rebuild corridor: {rebuildEx.Message}");
+                    return new ExecutionResult
+                    {
+                        Success = false,
+                        Message = $"Rebuild corridor thất bại; hủy các thay đổi của lệnh: {rebuildEx.Message}"
+                    };
                 }
             }
 
@@ -759,6 +773,26 @@ namespace Civil3DCsharp
 
         // ========== MOVED METHODS FROM UtilitiesC3D ==========
 
+        private static (double Start, double End) GetTurnRegionStations(Alignment alignment)
+        {
+            if (alignment.Entities.Count == 0)
+                throw new InvalidOperationException($"Alignment '{alignment.Name}' không có hình học.");
+
+            // Preserve the original convention: the second entity is the turn.
+            // A single-entity alignment uses that entity's complete station range.
+            var entity = alignment.Entities.GetEntityByOrder(alignment.Entities.Count > 1 ? 1 : 0);
+            var range = entity switch
+            {
+                AlignmentLine line => (Start: line.StartStation, End: line.EndStation),
+                AlignmentArc arc => (Start: arc.StartStation, End: arc.EndStation),
+                AlignmentSpiral spiral => (Start: spiral.StartStation, End: spiral.EndStation),
+                _ => throw new InvalidOperationException($"Chưa hỗ trợ đoạn rẽ kiểu {entity.EntityType}.")
+            };
+            if (!double.IsFinite(range.Start) || !double.IsFinite(range.End) || range.End <= range.Start)
+                throw new InvalidOperationException($"Phạm vi lý trình không hợp lệ: {alignment.Name}.");
+            return range;
+        }
+
         public static void TaoCooridorDuongDoThiWithSharedConfig(
             Alignment alignment,
             Corridor corridor,
@@ -777,28 +811,18 @@ namespace Civil3DCsharp
                 Corridor corridorWrite = tr.GetObject(corridor.Id, OpenMode.ForWrite) as Corridor ?? corridor;
 
                 //get station from alignment
-                double[] station = new double[alignment.Entities.Count];
-                for (int i = 0; i < alignment.Entities.Count; i++)
-                {
-                    AlignmentEntity alignmentEntity = alignment.Entities.GetEntityByOrder(i);
-                    station[i] = alignmentEntity.EntityType switch
-                    {
-                        AlignmentEntityType.Line => (alignmentEntity as AlignmentLine)?.Length ?? 0,
-                        AlignmentEntityType.Arc => (alignmentEntity as AlignmentArc)?.Length ?? 0,
-                        _ => 0
-                    };
-                }
-                double startStation = station[0];
-                double endStation = station[0] + (station.Length > 1 ? station[1] : station[0]);
+                var (startStation, endStation) = GetTurnRegionStations(alignment);
 
                 // set start and end point for corridor region
-                if (alignment.GetProfileIds().Count == 0)
+                var profileIds = alignment.GetProfileIds();
+                if (profileIds.Count == 0)
                 {
-                    A.Ed.WriteMessage($"\nLỗi: Alignment '{alignment.Name}' không có profile. Vui lòng tạo profile trước khi tạo corridor.");
-                    return;
+                    throw new InvalidOperationException($"Alignment '{alignment.Name}' không có profile.");
                 }
-                ObjectId profileId = alignment.GetProfileIds()[0];
+                ObjectId profileId = profileIds[0];
                 Profile? profile = tr.GetObject(profileId, OpenMode.ForRead) as Profile;
+                if (profile == null || startStation < profile.StartingStation || endStation > profile.EndingStation)
+                    throw new InvalidOperationException($"Profile không phủ hết đoạn rẽ của alignment '{alignment.Name}'.");
 
                 //check baseline exist
                 string baselineName = "BL-" + alignment.Name + "-" + profile?.Name;
@@ -871,7 +895,7 @@ namespace Civil3DCsharp
                 for (int i = 0; i < finalTargetCollection.Count; i++)
                 {
                     var targetInfo = finalTargetCollection[i];
-                    if (targetInfo.TargetIds.Count >= 2)
+                    if (targetInfo.TargetIds.Count > 0)
                     {
                         configuredTargets++;
                     }
@@ -884,11 +908,13 @@ namespace Civil3DCsharp
             {
                 A.Ed.WriteMessage($"\nLỗi AutoCAD: {e.Message}");
                 tr.Abort();
+                throw;
             }
             catch (System.Exception generalEx)
             {
                 A.Ed.WriteMessage($"\nLỗi: {generalEx.Message}");
                 tr.Abort();
+                throw;
             }
         }
 
@@ -1261,10 +1287,9 @@ namespace Civil3DCsharp
                         }
                         else if (appropriateTargets.Count == 1)
                         {
-                            // Duplicate single target
+                            // Keep a single target without duplicate IDs
                             newTargetIds.Add(appropriateTargets[0]);
-                            newTargetIds.Add(appropriateTargets[0]);
-                            A.Ed.WriteMessage($"  Created collection with 1 {targetDescription} target (duplicated)");
+                            A.Ed.WriteMessage($"  Created collection with 1 {targetDescription} target");
                         }
                         else
                         {
@@ -1299,7 +1324,7 @@ namespace Civil3DCsharp
                     catch (System.Exception targetException)
                     {
                         A.Ed.WriteMessage($"  ❌ Target {i}: Lỗi - {targetException.Message}");
-                        skippedTargets++;
+                        throw;
                     }
                 }
 
@@ -1321,13 +1346,13 @@ namespace Civil3DCsharp
                 catch (System.Exception setTargetsException)
                 {
                     A.Ed.WriteMessage($"\n❌ SetTargets() thất bại: {setTargetsException.Message}");
-                    A.Ed.WriteMessage($"\nℹ️ Tiếp tục không có target assignments (corridor vẫn được tạo)");
+                    throw;
                 }
             }
             catch (System.Exception generalException)
             {
                 A.Ed.WriteMessage($"\nLỗi tổng quát trong cấu hình target: {generalException.Message}");
-                A.Ed.WriteMessage($"\nℹ️ Tiếp tục không có target assignments (corridor vẫn được tạo)");
+                throw;
             }
         }
 
@@ -1362,8 +1387,7 @@ namespace Civil3DCsharp
                     {
                         if (savedConn.SubassemblyIndex < 0 || savedConn.SubassemblyIndex >= targetInfoCollection.Count)
                         {
-                            A.Ed.WriteMessage($"\n⚠️ Target index {savedConn.SubassemblyIndex} ngoài phạm vi.");
-                            continue;
+                            throw new InvalidOperationException($"Target index {savedConn.SubassemblyIndex} ngoài phạm vi.");
                         }
 
                         var targetInfo = targetInfoCollection[savedConn.SubassemblyIndex];
@@ -1407,14 +1431,15 @@ namespace Civil3DCsharp
                         else if (selectedTargets.Count == 1)
                         {
                             newTargetIds.Add(selectedTargets[0]);
-                            newTargetIds.Add(selectedTargets[0]); // Duplicate
+                            // A single target is valid; do not duplicate its ObjectId.
                         }
 
                         // Assign NEW collection
                         targetInfo.TargetIds = newTargetIds;
 
                         // Set target option
-                        targetInfo.TargetToOption = (SubassemblyTargetToOption)savedConn.TargetOption;
+                        if (newTargetIds.Count > 1)
+                            targetInfo.TargetToOption = (SubassemblyTargetToOption)savedConn.TargetOption;
                         A.Ed.WriteMessage($"\n  - Tùy chọn: {(SubassemblyTargetToOption)savedConn.TargetOption}");
                         A.Ed.WriteMessage($"\n  - TargetIds count: {targetInfo.TargetIds.Count}");
 
@@ -1423,6 +1448,7 @@ namespace Civil3DCsharp
                     catch (System.Exception ex)
                     {
                         A.Ed.WriteMessage($"\n  ❌ Lỗi khi áp dụng target {savedConn.SubassemblyIndex}: {ex.Message}");
+                        throw;
                     }
                 }
 
@@ -1518,7 +1544,7 @@ namespace Civil3DCsharp
                         else if (selectedTargets.Count == 1)
                         {
                             newTargetIds.Add(selectedTargets[0]);
-                            newTargetIds.Add(selectedTargets[0]); // Duplicate
+                            // A single target is valid; do not duplicate its ObjectId.
                         }
 
                         // Assign NEW collection
@@ -1605,6 +1631,8 @@ namespace Civil3DCsharp
 
         public class TargetMappingConfiguration
         {
+            public ObjectId AssemblyId { get; set; } = ObjectId.Null;
+            public string TargetSignature { get; set; } = "";
             public bool UseFormConfig { get; set; }
             public List<TargetConnection>? TargetConnections { get; set; }
             
