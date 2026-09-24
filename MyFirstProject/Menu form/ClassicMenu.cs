@@ -85,6 +85,9 @@ namespace MyFirstProject
             AddMenuItem(subMenuAlignment, "Gắn Nhãn Đầu Cuối Tỷ Lệ", "CTA_GanNhan_DauCuoiTyten ");
             AddHeader(subMenuAlignment, "--- Điều chỉnh bán kính ---");
             AddMenuItem(subMenuAlignment, "Điều Chỉnh Bán Kính Connected", "CTA_DieuChinhBanKinh_ConnectedAlignment ");
+            AddHeader(subMenuAlignment, "--- Kiểm tra tiêu chuẩn & Tầm nhìn ---");
+            AddMenuItem(subMenuAlignment, "Kiểm Tra Tim Tuyến", "CTA_KiemTraTimTuyen ");
+            AddMenuItem(subMenuAlignment, "Kiểm Tra Tầm Nhìn (Sight Distance)", "CTA_KiemTraTamNhin ");
 
             // Corridor
             dynamic subMenuCorridor = menu.AddSubMenu(menu.Count + 1, "Corridor");
@@ -100,6 +103,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuCorridor, "Phân Chia Corridor Theo Profile", "CTC_PhanChia_Corridor_TheoProfile ");
             AddMenuItem(subMenuCorridor, "Nhân Bản Corridor (Copy)", "CTC_NhanBan_Corridor ");
             AddMenuItem(subMenuCorridor, "Bật/Tắt & Chia Nhỏ Region Theo Polyline", "CTC_BatTat_CorridorRegion_Polyline ");
+            AddMenuItem(subMenuCorridor, "Xóa Các Region Đang Bị Tắt", "CTC_Xoa_Region_BiTat ");
             AddHeader(subMenuCorridor, "--- Corridor Surface ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Surface", "CTSV_TaoCorridorSurface ");
             AddHeader(subMenuCorridor, "--- Xuất 3D Solid / Body ---");
@@ -165,6 +169,7 @@ namespace MyFirstProject
             // Sampleline
             dynamic subMenuSample = menu.AddSubMenu(menu.Count + 1, "Sampleline");
             AddHeader(subMenuSample, "--- Đổi tên cọc ---");
+            AddMenuItem(subMenuSample, "Đổi Tên Cọc Theo Quy Tắc (Form)", "CTS_DoiTenCoc_QuyTac ");
             AddMenuItem(subMenuSample, "Đổi Tên Cọc", "CTS_DoiTenCoc ");
             AddMenuItem(subMenuSample, "Đổi Tên Cọc Km", "CTS_DoiTenCoc3 ");
             AddMenuItem(subMenuSample, "Đổi Tên Cọc Theo Đoạn", "CTS_DoiTenCoc2 ");
@@ -297,6 +302,8 @@ namespace MyFirstProject
             AddMenuItem(subMenu3D, "Text To Solid", "AT_TextToSolid ");
             AddMenuItem(subMenu3D, "Text To Solid (Step 2)", "AT_TextToSolid_Step2 ");
             AddMenuItem(subMenu3D, "Polys To Solid", "AT_PolysToSolid ");
+            AddMenuItem(subMenu3D, "Cut 3DSolid/Body Vào Clipboard", "CUTSB ");
+            AddMenuItem(subMenu3D, "Cắt 3D Solid Theo Polyline Mặt Bằng", "CLIP_SOLID ");
 
             // Block
             dynamic subMenuBlock = menu.AddSubMenu(menu.Count + 1, "Block");
@@ -318,6 +325,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuViewport, "Xoay VP Hiện Hành (2 Điểm)", "AT_Xoay_ViewPortHienHanh_Theo2Diem ");
             AddMenuItem(subMenuViewport, "Xoay VP Hiện Hành (Góc)", "AT_Xoay_ViewPortHienHanh_TheoGoc ");
             AddMenuItem(subMenuViewport, "Reset Góc Xoay VP", "AT_Xoay_ViewPortHienHanh_Reset ");
+            AddMenuItem(subMenuViewport, "Tắt VP Freeze Layer Theo Đối Tượng", "AT_VPFREEZE ");
 
             // Layout
             dynamic subMenuLayout = menu.AddSubMenu(menu.Count + 1, "Layout");
@@ -344,6 +352,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Tạo Outline", "AT_TaoOutline ");
             AddMenuItem(subMenuOther, "Xóa Đối Tượng Cùng Layer", "AT_XoaDoiTuong_CungLayer ");
             AddMenuItem(subMenuOther, "Xóa 3DSolid/Body", "AT_XoaDoiTuong_3DSolid_Body ");
+            AddMenuItem(subMenuOther, "Cut 3DSolid/Body Vào Clipboard", "CUTSB ");
             AddMenuItem(subMenuOther, "Offset 2 Bên", "AT_Offset_2Ben ");
             AddMenuItem(subMenuOther, "Annotative Scale Current Only", "AT_annotive_scale_currentOnly ");
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");

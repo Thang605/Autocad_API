@@ -225,6 +225,7 @@ namespace Civil3DCsharp
 
         private List<BimStandardPreset> _presets = new();
         private List<LayerBimRowModel> _allLayerRows = new();
+        private bool _isUpdatingGrid = false;
 
         public CapNhatMauVaPropertySetForm()
         {
@@ -477,6 +478,9 @@ namespace Civil3DCsharp
                 Location = new Point(855, 18),
                 Checked = _lastApplyByLayer
             };
+
+            var optToolTip = new ToolTip();
+            optToolTip.SetToolTip(chkApplyByLayer, "Chuyển màu đối tượng về ByLayer, xóa Render Material, Transparency và làm sạch màu từng mặt (Face Color) của các khối 3D Solid.");
 
             chkUnlockLayers = new CheckBox
             {
@@ -1189,54 +1193,62 @@ namespace Civil3DCsharp
 
         private void FilterLayersGrid()
         {
-            dgvLayers.Rows.Clear();
-            string keyword = txtSearch.Text.Trim().ToLower();
-
-            var filtered = string.IsNullOrEmpty(keyword)
-                ? _allLayerRows
-                : _allLayerRows.Where(x => x.LayerName.ToLower().Contains(keyword) ||
-                                           x.CauKien.ToLower().Contains(keyword) ||
-                                           x.VatLieu.ToLower().Contains(keyword) ||
-                                           x.HangMuc.ToLower().Contains(keyword)).ToList();
-
-            foreach (var rowModel in filtered)
+            _isUpdatingGrid = true;
+            try
             {
-                int rIdx = dgvLayers.Rows.Add();
-                var row = dgvLayers.Rows[rIdx];
-                row.Tag = rowModel;
+                dgvLayers.Rows.Clear();
+                string keyword = txtSearch.Text.Trim().ToLower();
 
-                row.Cells["colCheck"].Value = rowModel.IsSelected;
-                row.Cells["colLayerName"].Value = rowModel.LayerName;
-                row.Cells["colSolidCount"].Value = rowModel.SolidCount > 0 ? rowModel.SolidCount.ToString("N0") : "-";
+                var filtered = string.IsNullOrEmpty(keyword)
+                    ? _allLayerRows
+                    : _allLayerRows.Where(x => x.LayerName.ToLower().Contains(keyword) ||
+                                               x.CauKien.ToLower().Contains(keyword) ||
+                                               x.VatLieu.ToLower().Contains(keyword) ||
+                                               x.HangMuc.ToLower().Contains(keyword)).ToList();
 
-                // Set ComboBox display
-                string comboDisplay = "-- (Chưa gán mẫu) --";
-                if (!string.IsNullOrEmpty(rowModel.SelectedPresetCode))
+                foreach (var rowModel in filtered)
                 {
-                    var preset = _presets.FirstOrDefault(p => p.Code == rowModel.SelectedPresetCode);
-                    if (preset != null)
+                    int rIdx = dgvLayers.Rows.Add();
+                    var row = dgvLayers.Rows[rIdx];
+                    row.Tag = rowModel;
+
+                    row.Cells["colCheck"].Value = rowModel.IsSelected;
+                    row.Cells["colLayerName"].Value = rowModel.LayerName;
+                    row.Cells["colSolidCount"].Value = rowModel.SolidCount > 0 ? rowModel.SolidCount.ToString("N0") : "-";
+
+                    // Set ComboBox display
+                    string comboDisplay = "-- (Chưa gán mẫu) --";
+                    if (!string.IsNullOrEmpty(rowModel.SelectedPresetCode))
                     {
-                        comboDisplay = preset.DisplayName;
+                        var preset = _presets.FirstOrDefault(p => p.Code == rowModel.SelectedPresetCode);
+                        if (preset != null)
+                        {
+                            comboDisplay = preset.DisplayName;
+                        }
+                        else if (rowModel.SelectedPresetCode == "CUSTOM")
+                        {
+                            comboDisplay = "🎨 [Tùy chỉnh] Tự chọn màu...";
+                        }
                     }
-                    else if (rowModel.SelectedPresetCode == "CUSTOM")
-                    {
-                        comboDisplay = "🎨 [Tùy chỉnh] Tự chọn màu...";
-                    }
+                    row.Cells["colPreset"].Value = comboDisplay;
+
+                    row.Cells["colCauKien"].Value = rowModel.CauKien ?? "";
+                    row.Cells["colVatLieu"].Value = rowModel.VatLieu ?? "";
+                    row.Cells["colDoChat"].Value = rowModel.DoChat ?? "";
+                    row.Cells["colBeDay"].Value = rowModel.BeDayText;
+                    row.Cells["colHangMuc"].Value = rowModel.HangMuc ?? "";
+                    row.Cells["colNewColorPreview"].Value = ""; // Paint
+                    row.Cells["colNewRgb"].Value = rowModel.NewRgbText;
+                    row.Cells["colCurrentColorPreview"].Value = ""; // Paint
+                    row.Cells["colCurrentDesc"].Value = rowModel.CurrentDescription ?? "";
                 }
-                row.Cells["colPreset"].Value = comboDisplay;
 
-                row.Cells["colCauKien"].Value = rowModel.CauKien;
-                row.Cells["colVatLieu"].Value = rowModel.VatLieu;
-                row.Cells["colDoChat"].Value = rowModel.DoChat;
-                row.Cells["colBeDay"].Value = rowModel.BeDayText;
-                row.Cells["colHangMuc"].Value = rowModel.HangMuc;
-                row.Cells["colNewColorPreview"].Value = ""; // Paint
-                row.Cells["colNewRgb"].Value = rowModel.NewRgbText;
-                row.Cells["colCurrentColorPreview"].Value = ""; // Paint
-                row.Cells["colCurrentDesc"].Value = rowModel.CurrentDescription;
+                UpdateStats();
             }
-
-            UpdateStats();
+            finally
+            {
+                _isUpdatingGrid = false;
+            }
         }
 
         private void UpdateStats()
@@ -1601,7 +1613,7 @@ namespace Civil3DCsharp
         #region Grid Events & Auto Inference
         private void DgvLayers_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_isUpdatingGrid || e.RowIndex < 0 || e.ColumnIndex < 0) return;
             var row = dgvLayers.Rows[e.RowIndex];
             var model = row.Tag as LayerBimRowModel;
             if (model == null) return;
@@ -1619,12 +1631,10 @@ namespace Civil3DCsharp
                 if (selectedText.StartsWith("--"))
                 {
                     model.SelectedPresetCode = "";
-                    model.CauKien = "";
-                    model.VatLieu = "";
+                    // BẢO TOÀN Cấu kiện và Vật liệu (người dùng tự nhập hoặc import từ Excel)
                     model.NewR = null;
                     model.NewG = null;
                     model.NewB = null;
-                    model.IsSelected = false;
                 }
                 else if (selectedText.Contains("[Tùy chỉnh]"))
                 {
@@ -1646,12 +1656,20 @@ namespace Civil3DCsharp
                     }
                 }
 
-                // Cập nhật giao diện dòng
-                row.Cells["colCheck"].Value = model.IsSelected;
-                row.Cells["colCauKien"].Value = model.CauKien;
-                row.Cells["colVatLieu"].Value = model.VatLieu;
-                row.Cells["colNewRgb"].Value = model.NewRgbText;
-                dgvLayers.InvalidateCell(row.Cells["colNewColorPreview"]);
+                // Cập nhật giao diện dòng an toàn
+                try
+                {
+                    _isUpdatingGrid = true;
+                    row.Cells["colCheck"].Value = model.IsSelected;
+                    row.Cells["colCauKien"].Value = model.CauKien;
+                    row.Cells["colVatLieu"].Value = model.VatLieu;
+                    row.Cells["colNewRgb"].Value = model.NewRgbText;
+                    dgvLayers.InvalidateCell(row.Cells["colNewColorPreview"]);
+                }
+                finally
+                {
+                    _isUpdatingGrid = false;
+                }
                 UpdateStats();
             }
             else if (colName == "colCauKien")
@@ -1674,12 +1692,28 @@ namespace Civil3DCsharp
                 if (double.TryParse(val.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double dVal) && dVal > 0)
                 {
                     model.BeDay = dVal;
-                    row.Cells["colBeDay"].Value = model.BeDayText;
+                    try
+                    {
+                        _isUpdatingGrid = true;
+                        row.Cells["colBeDay"].Value = model.BeDayText;
+                    }
+                    finally
+                    {
+                        _isUpdatingGrid = false;
+                    }
                 }
                 else
                 {
                     model.BeDay = null;
-                    row.Cells["colBeDay"].Value = "";
+                    try
+                    {
+                        _isUpdatingGrid = true;
+                        row.Cells["colBeDay"].Value = "";
+                    }
+                    finally
+                    {
+                        _isUpdatingGrid = false;
+                    }
                 }
             }
             else if (colName == "colHangMuc")
@@ -2125,7 +2159,7 @@ namespace Civil3DCsharp
             using var ofd = new OpenFileDialog
             {
                 Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-                Title = "Chọn file Excel cấu hình Màu Layer",
+                Title = "Chọn file Excel cấu hình Màu Layer và BIM",
                 InitialDirectory = !string.IsNullOrEmpty(_lastExcelPath) ? Path.GetDirectoryName(_lastExcelPath) : ""
             };
 
@@ -2155,7 +2189,7 @@ namespace Civil3DCsharp
                 int firstCol = rangeUsed.FirstColumn().ColumnNumber();
                 int lastCol = rangeUsed.LastColumn().ColumnNumber();
 
-                // Xác định các cột dựa theo tên tiêu đề
+                // Xác định các cột dựa theo tên tiêu đề (chuẩn hóa không dấu, chống lỗi font/NFD/NFC)
                 int headerRow = firstRow;
                 int colLayerIdx = -1;
                 int colCauKienIdx = -1;
@@ -2172,17 +2206,17 @@ namespace Civil3DCsharp
                     for (int c = firstCol; c <= lastCol; c++)
                     {
                         string headerText = ws.Cell(r, c).GetString().Trim();
-                        string val = headerText.ToLower();
-                        if (string.IsNullOrEmpty(val)) continue;
+                        string normH = NormalizeString(headerText);
+                        if (string.IsNullOrEmpty(normH)) continue;
 
-                        if (val.Contains("layer") || val == "tên layer") colLayerIdx = c;
-                        else if (val.Contains("cấu kiện") || val.Contains("cau kien")) colCauKienIdx = c;
-                        else if (val.Contains("vật liệu") || val.Contains("vat lieu")) colVatLieuIdx = c;
-                        else if (val.Contains("độ chặt") || val.Contains("do chat")) colDoChatIdx = c;
-                        else if (val.Contains("bề dày") || val.Contains("be day") || val.Contains("chiều dày")) colBeDayIdx = c;
-                        else if (val.Contains("hạng mục") || val.Contains("hang muc")) colHangMucIdx = c;
-                        else if (val.Contains("rgb") || val.Contains("màu")) colRgbIdx = c;
-                        else if (val.Contains("mẫu") || val.Contains("preset")) colPresetIdx = c;
+                        if (normH.Contains("LAYER")) colLayerIdx = c;
+                        else if (normH.Contains("CAUKIEN") || normH.Contains("COMPONENT")) colCauKienIdx = c;
+                        else if (normH.Contains("VATLIEU") || normH.Contains("MATERIAL")) colVatLieuIdx = c;
+                        else if (normH.Contains("DOCHAT")) colDoChatIdx = c;
+                        else if (normH.Contains("BEDAY") || normH.Contains("CHIEUDAY") || normH.Contains("THICKNESS")) colBeDayIdx = c;
+                        else if (normH.Contains("HANGMUC") || normH.Contains("CATEGORY")) colHangMucIdx = c;
+                        else if (normH.Contains("RGB") || (normH.Contains("MAU") && !normH.Contains("MAUBIM") && !normH.Contains("MAMAU") && !normH.Contains("PRESET"))) colRgbIdx = c;
+                        else if (normH.Contains("PRESET") || normH.Contains("MAUBIM") || normH.Contains("MAMAU")) colPresetIdx = c;
                     }
 
                     if (colLayerIdx > 0 && (colCauKienIdx > 0 || colVatLieuIdx > 0))
@@ -2192,17 +2226,22 @@ namespace Civil3DCsharp
                     }
                 }
 
+                // Fallback theo thứ tự cột chuẩn khi xuất ra từ Tool:
+                // 1: STT, 2: Tên Layer, 3: Số Solid, 4: Cấu kiện, 5: Vật liệu, 6: Độ chặt, 7: Bề dày (m), 8: Hạng mục, 9: Mã RGB, 10: Mã HEX, 11: Mã Mẫu BIM
                 if (colLayerIdx <= 0)
                 {
-                    // Fallback
                     colLayerIdx = Math.Min(firstCol + 1, lastCol);
-                    colCauKienIdx = Math.Min(firstCol + 2, lastCol);
-                    colVatLieuIdx = Math.Min(firstCol + 3, lastCol);
-                    colRgbIdx = Math.Min(firstCol + 4, lastCol);
+                    colCauKienIdx = Math.Min(firstCol + 3, lastCol);
+                    colVatLieuIdx = Math.Min(firstCol + 4, lastCol);
+                    colDoChatIdx = Math.Min(firstCol + 5, lastCol);
+                    colBeDayIdx = Math.Min(firstCol + 6, lastCol);
+                    colHangMucIdx = Math.Min(firstCol + 7, lastCol);
+                    colRgbIdx = Math.Min(firstCol + 8, lastCol);
+                    colPresetIdx = Math.Min(firstCol + 10, lastCol);
                 }
 
                 int importedCount = 0;
-                var layerMap = _allLayerRows.ToDictionary(x => x.LayerName, x => x, StringComparer.OrdinalIgnoreCase);
+                var layerMap = _allLayerRows.ToDictionary(x => x.LayerName.Trim(), x => x, StringComparer.OrdinalIgnoreCase);
 
                 for (int r = headerRow + 1; r <= lastRow; r++)
                 {
@@ -2228,8 +2267,7 @@ namespace Civil3DCsharp
                             targetModel.BeDay = bdv;
                         }
 
-                        // Tìm màu sắc:
-                        // 1. Thử giải mã RGB từ file Excel
+                        // Tìm màu sắc theo mã RGB (bỏ qua HEX):
                         bool parsedColor = false;
                         if (!string.IsNullOrEmpty(rgbStr))
                         {
@@ -2244,7 +2282,7 @@ namespace Civil3DCsharp
                             }
                         }
 
-                        // 2. Nếu chưa có màu, tìm theo presetCode hoặc theo Vật liệu / Cấu kiện
+                        // Nếu chưa có màu, tìm theo presetCode hoặc theo Vật liệu / Cấu kiện
                         if (!parsedColor)
                         {
                             BimStandardPreset? p = null;
@@ -2255,6 +2293,10 @@ namespace Civil3DCsharp
                             if (p == null && !string.IsNullOrEmpty(vatLieu))
                             {
                                 p = _presets.FirstOrDefault(x => NormalizeString(x.MaterialName) == NormalizeString(vatLieu));
+                            }
+                            if (p == null && !string.IsNullOrEmpty(vatLieu))
+                            {
+                                p = _presets.FirstOrDefault(x => x.Keywords.Any(kw => NormalizeString(vatLieu).Contains(NormalizeString(kw))));
                             }
                             if (p != null)
                             {

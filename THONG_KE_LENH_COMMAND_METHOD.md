@@ -220,6 +220,7 @@
 | 24 | `CTS_DoiTenCoc_H` | Doi ten coc H |
 | 25 | `CTS_DoiTenCoc_TheoThuTu` | Doi ten coc theo thu tu |
 | 26 | `CTS_DoiTenCoc_fromCogoPoint` | Doi ten coc tu CogoPoint |
+| 27 | `CTS_DoiTenCoc_QuyTac` (hoặc `CTS_DTCQ`) | Đổi tên cọc theo quy tắc chuẩn CTS_PHATSINHCOC (Form UI) |
 | 27 | `CTS_DichCoc_TinhTien` | Dich coc tinh tien |
 | 28 | `CTS_DichCoc_TinhTien_20` | Dich coc tinh tien 20m |
 | 29 | `CTS_DichCoc_TinhTien40` | Dich coc tinh tien 40m |

@@ -4,5 +4,6 @@ obj/
 *.dwl
 *.dwl2
 *.log
-last_dll.txt
-last_reload.lsp
+last_dll*.txt
+last_reload*.lsp
+output/

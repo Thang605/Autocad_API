@@ -584,10 +584,54 @@ namespace Civil3DCsharp
                             var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
                             if (ent != null && updatedLayerNames.Contains(ent.Layer))
                             {
+                                bool modified = false;
+
+                                // 1. Reset màu Entity về ByLayer
                                 if (ent.Color.ColorMethod != ColorMethod.ByLayer)
                                 {
                                     ent.UpgradeOpen();
                                     ent.Color = Color.FromColorIndex(ColorMethod.ByLayer, 256);
+                                    modified = true;
+                                }
+
+                                // 2. Reset Vật liệu (Material) về ByLayer để không bị đè màu render
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(ent.Material) && !string.Equals(ent.Material, "ByLayer", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        ent.UpgradeOpen();
+                                        ent.Material = "ByLayer";
+                                        modified = true;
+                                    }
+                                }
+                                catch { }
+
+                                // 3. Reset Độ trong suốt (Transparency) về ByLayer
+                                try
+                                {
+                                    if (!ent.Transparency.IsByLayer)
+                                    {
+                                        ent.UpgradeOpen();
+                                        ent.Transparency = new Transparency(TransparencyMethod.ByLayer);
+                                        modified = true;
+                                    }
+                                }
+                                catch { }
+
+                                // 4. Làm sạch màu từng mặt (Face Color) cho 3D Solid
+                                if (ent is Solid3d solid)
+                                {
+                                    try
+                                    {
+                                        solid.UpgradeOpen();
+                                        solid.CleanBody();
+                                        modified = true;
+                                    }
+                                    catch { }
+                                }
+
+                                if (modified)
+                                {
                                     byLayerCount++;
                                 }
                             }
@@ -596,7 +640,7 @@ namespace Civil3DCsharp
 
                     if (byLayerCount > 0)
                     {
-                        log($"  ✨ Đã chuyển màu {byLayerCount} đối tượng về ByLayer.");
+                        log($"  ✨ Đã chuyển {byLayerCount} đối tượng về ByLayer (làm sạch Material, Transparency và màu mặt Face Color của 3D Solid).");
                     }
                 }
 
