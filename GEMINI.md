@@ -63,3 +63,26 @@
 - Remote: `https://github.com/Thang605/Autocad_API.git`, branch `master`.
 - Commit message bằng tiếng Việt không dấu, prefix theo conventional commits (`fix:`, `feat:`, `refactor:`...).
 - Chỉ commit các file source code đã sửa, **KHÔNG** commit output build (`C:\CadBuild\`), file tạm (`last_dll.txt`, `last_reload.lsp`).
+
+---
+
+## 7. 🏷️ QUY TẮC ĐẶT TÊN LỆNH (COMMAND METHOD NAMING CONVENTION) - BẮT BUỘC
+- **Chỉ dùng duy nhất 1 tên lệnh** cho mỗi phương thức `[CommandMethod("...")]`. Tuyệt đối không khai báo nhiều alias/tên phụ thừa thãi.
+- **Cấu trúc đặt tên lệnh chuẩn**:
+  - Tiền tố theo nhóm lệnh:
+    - `AT_`: AutoCAD Tool chung
+    - `CT_`: Civil 3D Tool chung
+    - `CTA_`: Civil 3D Alignment (Tuyến tim)
+    - `CTC_`: Civil 3D Corridor (Hành lang tuyến)
+    - `CTP_`: Civil 3D Profile (Trắc dọc)
+    - `CTS_`: Civil 3D Section (Trắc ngang) / Cọc
+    - `CTT_`: Civil 3D TIN Surface (Bề mặt)
+  - **Mỗi từ phân tách bằng dấu gạch dưới `_`**, viết hoa chữ cái đầu mỗi từ (`Prefix_Word_Word_Word`).
+  - **Ví dụ chuẩn mẫu**:
+    - `AT_Cut_Solid_Body_To_Clipboard`
+    - `AT_Cap_Nhat_Mau_Va_Property_Set`
+    - `AT_Clip_3d_Solid`
+    - `AT_Tat_VP_Freeze_Layer`
+    - `CTA_Kiem_Tra_Tam_Nhin`
+    - `CTC_Xoa_Region_Bi_Tat`
+    - `CTS_Doi_Ten_Coc_Quy_Tac`

@@ -107,7 +107,7 @@ namespace MyFirstProject
             AddHeader(subMenuCorridor, "--- Corridor Surface ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Surface", "CTSV_TaoCorridorSurface ");
             AddHeader(subMenuCorridor, "--- Xuất 3D Solid / Body ---");
-            AddMenuItem(subMenuCorridor, "Xuất Solid & Body Ra File Khác", "CTC_XuatSolidCorridor ");
+            AddMenuItem(subMenuCorridor, "Xuất Solid Từ Corridor", "CTC_Xuat_Solid_Tu_Corridor ");
 
             // Parcel
             dynamic subMenuParcel = menu.AddSubMenu(menu.Count + 1, "Parcel");
@@ -165,6 +165,11 @@ namespace MyFirstProject
             dynamic subMenuSurface = menu.AddSubMenu(menu.Count + 1, "Surface");
             AddMenuItem(subMenuSurface, "Cao Độ Mặt Phẳng Tại CogoPoint", "CTSU_CaoDoMatPhang_TaiCogopoint ");
             AddMenuItem(subMenuSurface, "Tạo Spot Elevation Tại Tim", "CTS_TaoSpotElevation_OnSurface_TaiTim ");
+
+            // Feature Line
+            dynamic subMenuFeatureLine = menu.AddSubMenu(menu.Count + 1, "Feature Line");
+            AddMenuItem(subMenuFeatureLine, "Tạo Mặt Phẳng Từ Feature Line", "CTT_Tao_Mat_Phang_Tu_Featureline ");
+            AddMenuItem(subMenuFeatureLine, "Tạo 3D Solid Từ Feature Line", "CT_Tao_3d_Solid_Tu_Feature_Line ");
 
             // Sampleline
             dynamic subMenuSample = menu.AddSubMenu(menu.Count + 1, "Sampleline");
@@ -248,7 +253,7 @@ namespace MyFirstProject
             // Property Sets
             dynamic subMenuProp = menu.AddSubMenu(menu.Count + 1, "Property Sets");
             AddHeader(subMenuProp, "--- 3D Solid & Body ---");
-            AddMenuItem(subMenuProp, "Cập Nhật Màu & PropertySet BIM (3D Solid)", "AT_CapNhatMauVaPropertySet ");
+            AddMenuItem(subMenuProp, "Cập Nhật Màu & PropertySet BIM (3D Solid)", "AT_Cap_Nhat_Mau_Va_Property_Set ");
             AddMenuItem(subMenuProp, "Cập Nhật PropertySet Theo Layer", "AT_Solid_Update_PropertySet ");
             AddMenuItem(subMenuProp, "Set PropertySet 3D Solid", "AT_Solid_Set_PropertySet ");
             AddMenuItem(subMenuProp, "Show 3D Solid Info", "AT_Solid_Show_Info ");
@@ -292,6 +297,7 @@ namespace MyFirstProject
 
             // In ấn
             dynamic subMenuPrint = menu.AddSubMenu(menu.Count + 1, "In ấn");
+            AddMenuItem(subMenuPrint, "In Bản Vẽ PDF (DWG To PDF)", "AT_In_Ban_Ve_Pdf ");
             AddMenuItem(subMenuPrint, "In Model Hàng Loạt", "AT_InModel_HangLoat ");
             AddMenuItem(subMenuPrint, "In Bản Vẽ Theo Block", "AT_InBanVe_TheoBlock ");
 
@@ -303,7 +309,7 @@ namespace MyFirstProject
             AddMenuItem(subMenu3D, "Text To Solid (Step 2)", "AT_TextToSolid_Step2 ");
             AddMenuItem(subMenu3D, "Polys To Solid", "AT_PolysToSolid ");
             AddMenuItem(subMenu3D, "Cut 3DSolid/Body Vào Clipboard", "CUTSB ");
-            AddMenuItem(subMenu3D, "Cắt 3D Solid Theo Polyline Mặt Bằng", "CLIP_SOLID ");
+            AddMenuItem(subMenu3D, "Cắt 3D Solid Theo Polyline Mặt Bằng", "AT_Clip_3d_Solid ");
 
             // Block
             dynamic subMenuBlock = menu.AddSubMenu(menu.Count + 1, "Block");
@@ -358,7 +364,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuOther, "Explode Text", "AT_TXTEXP ");
             AddMenuItem(subMenuOther, "Dim Đường Cong", "AT_DIM_DUONGCONG ");
             AddMenuItem(subMenuOther, "Cập Nhật Màu Layer (BIM EIR)", "AT_CapNhatMauLayer ");
-            AddMenuItem(subMenuOther, "Cập Nhật Màu Layer Nâng Cao (Excel, Auto-Match)", "AT_CapNhatMauVaPropertySet ");
+            AddMenuItem(subMenuOther, "Cập Nhật Màu Layer Nâng Cao (Excel, Auto-Match)", "AT_Cap_Nhat_Mau_Va_Property_Set ");
         }
 
         private static void AddMenuItem(dynamic menu, string label, string macro)

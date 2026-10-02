@@ -20,15 +20,11 @@ namespace Civil3DCsharp
 {
     /// <summary>
     /// Class chứa lệnh cắt 3D Solid theo Polyline khép kín trên mặt bằng
-    /// Các lệnh: CLIP_SOLID, CLIPSOLID, CLIP3DSOLID, CSOLID, AT_Clip3dSolid
+    /// Lệnh: AT_Clip_3d_Solid
     /// </summary>
     public class AT_Clip3dSolidCmd
     {
-        [CommandMethod("CLIP_SOLID")]
-        [CommandMethod("CLIPSOLID")]
-        [CommandMethod("CLIP3DSOLID")]
-        [CommandMethod("CSOLID")]
-        [CommandMethod("AT_Clip3dSolid")]
+        [CommandMethod("AT_Clip_3d_Solid")]
         public static void Clip3dSolid()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -38,7 +34,7 @@ namespace Civil3DCsharp
             Editor ed = doc.Editor;
 
             ed.WriteMessage("\n═══════════════════════════════════════════════════════════════");
-            ed.WriteMessage("\n  CLIP_SOLID - CẮT 3D SOLID THEO POLYLINE KHÉP KÍN MẶT BẰNG");
+            ed.WriteMessage("\n  AT_Clip_3d_Solid - CẮT 3D SOLID THEO POLYLINE KHÉP KÍN MẶT BẰNG");
             ed.WriteMessage("\n═══════════════════════════════════════════════════════════════\n");
 
             using (Clip3dSolidForm form = new Clip3dSolidForm())
@@ -66,24 +62,7 @@ namespace Civil3DCsharp
                 {
                     try
                     {
-                        // 1. Kiểm tra đối tượng ranh giới
-                        Entity boundaryEnt = tr.GetObject(form.BoundaryId, OpenMode.ForRead) as Entity;
-                        if (boundaryEnt == null)
-                        {
-                            ed.WriteMessage("\n[Lỗi] Không thể mở đối tượng ranh giới.");
-                            return;
-                        }
-
-                        // 2. Tạo Region từ đường ranh giới
-                        Region region = CreateRegionFromEntity(boundaryEnt, tr, ed);
-                        if (region == null)
-                        {
-                            ed.WriteMessage("\n[Lỗi] Không thể tạo Region từ đường ranh giới được chọn.");
-                            ed.WriteMessage("\n👉 Vui lòng kiểm tra lại: Đường Polyline có thể bị tự cắt nhau (giao cắt chính nó dạng số 8) hoặc có các đoạn gấp khúc trùng lặp.");
-                            return;
-                        }
-
-                        // 3. Thu thập các khối Solid3d hợp lệ và tính toán Z min/max
+                        // 1. Thu thập các khối Solid3d hợp lệ và tính toán Z min/max
                         List<Solid3d> targetSolids = new List<Solid3d>();
                         double minZ = double.MaxValue;
                         double maxZ = double.MinValue;
@@ -113,7 +92,6 @@ namespace Civil3DCsharp
                         if (targetSolids.Count == 0)
                         {
                             ed.WriteMessage("\n[Lỗi] Không có khối 3D Solid hợp lệ nào để cắt.");
-                            region.Dispose();
                             return;
                         }
 
@@ -123,37 +101,50 @@ namespace Civil3DCsharp
                             maxZ = 100.0;
                         }
 
-                        // 4. Tính toán chiều cao đùn & tạo khối dao cắt (baseCutter)
+                        // 2. Tính toán chiều cao đùn & tạo danh sách khối dao cắt (baseCutters)
                         double buffer = form.BufferHeight > 0.001 ? form.BufferHeight : 1.0;
                         double targetMinZ = minZ - buffer;
                         double targetMaxZ = maxZ + buffer;
                         double extrusionHeight = targetMaxZ - targetMinZ;
                         if (extrusionHeight < 0.1) extrusionHeight = 10.0;
 
-                        Solid3d baseCutter = new Solid3d();
-                        baseCutter.RecordHistory = false;
+                        List<Solid3d> baseCutters = new List<Solid3d>();
 
-                        try
+                        foreach (ObjectId bId in form.SelectedBoundaryIds)
                         {
-                            baseCutter.Extrude(region, extrusionHeight, 0.0);
+                            if (bId.IsNull || !bId.IsValid || bId.IsErased) continue;
+                            Entity boundaryEnt = tr.GetObject(bId, OpenMode.ForRead) as Entity;
+                            if (boundaryEnt == null) continue;
+
+                            Region region = CreateRegionFromEntity(boundaryEnt, tr, ed);
+                            if (region != null)
+                            {
+                                try
+                                {
+                                    Solid3d cutter = new Solid3d();
+                                    cutter.RecordHistory = false;
+                                    cutter.Extrude(region, extrusionHeight, 0.0);
+                                    cutter.TransformBy(Matrix3d.Displacement(new Vector3d(0, 0, targetMinZ)));
+                                    baseCutters.Add(cutter);
+                                }
+                                catch (Exception ex)
+                                {
+                                    ed.WriteMessage($"\n[Lỗi khi tạo khối đùn dao cắt]: {ex.Message}");
+                                }
+                                finally
+                                {
+                                    region.Dispose();
+                                }
+                            }
                         }
-                        catch (Exception ex)
+
+                        if (baseCutters.Count == 0)
                         {
-                            ed.WriteMessage($"\n[Lỗi khi tạo khối đùn dao cắt]: {ex.Message}");
-                            region.Dispose();
-                            baseCutter.Dispose();
+                            ed.WriteMessage("\n[Lỗi] Không thể tạo khối dao cắt từ bất kỳ ranh giới Polyline nào được chọn.");
                             return;
                         }
-                        region.Dispose();
 
-                        // Định vị khối cắt theo phương Z sao cho đáy của nó nằm tại targetMinZ
-                        try
-                        {
-                            baseCutter.TransformBy(Matrix3d.Displacement(new Vector3d(0, 0, targetMinZ)));
-                        }
-                        catch { }
-
-                        // 5. Chuẩn bị Layer nếu người dùng yêu cầu
+                        // 3. Chuẩn bị Layer nếu người dùng yêu cầu
                         if (form.AssignLayer)
                         {
                             if (form.ClipMode == ClipSolidMode.KeepInside || form.ClipMode == ClipSolidMode.SplitBoth)
@@ -166,11 +157,13 @@ namespace Civil3DCsharp
                             }
                         }
 
-                        // 6. Thực hiện phép toán Boolean cho từng Solid
+                        // 4. Thực hiện phép toán Boolean cho từng Solid
                         int totalProcessed = 0;
                         int createdInsideCount = 0;
                         int createdOutsideCount = 0;
                         int erasedOriginalCount = 0;
+                        int completelyInsideErasedCount = 0;
+                        int unaffectedCount = 0;
                         int failedCount = 0;
 
                         foreach (Solid3d originalSolid in targetSolids)
@@ -189,144 +182,200 @@ namespace Civil3DCsharp
 
                             if (form.ClipMode == ClipSolidMode.KeepInside)
                             {
-                                Solid3d insideClone = (Solid3d)originalSolid.Clone();
-                                insideClone.RecordHistory = false;
-
-                                Solid3d cutterClone = (Solid3d)baseCutter.Clone();
-                                cutterClone.RecordHistory = false;
-
-                                // BẮT BUỘC: Cả 2 Solid phải được thêm vào Database trước khi gọi BooleanOperation
-                                targetSpace.AppendEntity(insideClone);
-                                tr.AddNewlyCreatedDBObject(insideClone, true);
-
-                                targetSpace.AppendEntity(cutterClone);
-                                tr.AddNewlyCreatedDBObject(cutterClone, true);
-
-                                try
+                                foreach (Solid3d baseCutter in baseCutters)
                                 {
-                                    insideClone.BooleanOperation(BooleanOperationType.BoolIntersect, cutterClone);
-                                    if (IsValidSolid(insideClone))
+                                    Solid3d insideClone = (Solid3d)originalSolid.Clone();
+                                    insideClone.RecordHistory = false;
+
+                                    Solid3d cutterClone = (Solid3d)baseCutter.Clone();
+                                    cutterClone.RecordHistory = false;
+
+                                    targetSpace.AppendEntity(insideClone);
+                                    tr.AddNewlyCreatedDBObject(insideClone, true);
+
+                                    targetSpace.AppendEntity(cutterClone);
+                                    tr.AddNewlyCreatedDBObject(cutterClone, true);
+
+                                    try
                                     {
-                                        if (form.AssignLayer) insideClone.Layer = form.LayerInside;
-                                        createdInsideCount++;
-                                        anyCreated = true;
+                                        insideClone.BooleanOperation(BooleanOperationType.BoolIntersect, cutterClone);
+                                        if (IsValidSolid(insideClone))
+                                        {
+                                            if (form.AssignLayer) insideClone.Layer = form.LayerInside;
+                                            createdInsideCount++;
+                                            anyCreated = true;
+                                        }
+                                        else
+                                        {
+                                            insideClone.Erase(true);
+                                        }
                                     }
-                                    else
+                                    catch
                                     {
-                                        insideClone.Erase(true);
-                                        failedCount++;
+                                        if (!insideClone.IsErased) insideClone.Erase(true);
+                                        if (!cutterClone.IsErased) cutterClone.Erase(true);
                                     }
                                 }
-                                catch
+                                if (!anyCreated)
                                 {
-                                    if (!insideClone.IsErased) insideClone.Erase(true);
-                                    if (!cutterClone.IsErased) cutterClone.Erase(true);
-                                    failedCount++;
+                                    unaffectedCount++;
                                 }
                             }
                             else if (form.ClipMode == ClipSolidMode.KeepOutside)
                             {
+                                double origVolume = 0.0;
+                                try { origVolume = originalSolid.MassProperties.Volume; } catch { }
+
                                 Solid3d outsideClone = (Solid3d)originalSolid.Clone();
                                 outsideClone.RecordHistory = false;
-
-                                Solid3d cutterClone = (Solid3d)baseCutter.Clone();
-                                cutterClone.RecordHistory = false;
 
                                 targetSpace.AppendEntity(outsideClone);
                                 tr.AddNewlyCreatedDBObject(outsideClone, true);
 
-                                targetSpace.AppendEntity(cutterClone);
-                                tr.AddNewlyCreatedDBObject(cutterClone, true);
+                                bool isCompletelyInside = false;
 
-                                try
+                                foreach (Solid3d baseCutter in baseCutters)
                                 {
-                                    outsideClone.BooleanOperation(BooleanOperationType.BoolSubtract, cutterClone);
-                                    if (IsValidSolid(outsideClone))
+                                    if (!IsValidSolid(outsideClone)) break;
+
+                                    Solid3d cutterClone = (Solid3d)baseCutter.Clone();
+                                    cutterClone.RecordHistory = false;
+
+                                    targetSpace.AppendEntity(cutterClone);
+                                    tr.AddNewlyCreatedDBObject(cutterClone, true);
+
+                                    try
+                                    {
+                                        outsideClone.BooleanOperation(BooleanOperationType.BoolSubtract, cutterClone);
+                                    }
+                                    catch
+                                    {
+                                        if (!cutterClone.IsErased) cutterClone.Erase(true);
+                                    }
+                                }
+
+                                if (IsValidSolid(outsideClone))
+                                {
+                                    double remainingVol = 0.0;
+                                    try { remainingVol = outsideClone.MassProperties.Volume; } catch { }
+
+                                    // Nếu thể tích còn lại gần bằng 0 -> solid bị cutter trừ sạch hoàn toàn
+                                    if (origVolume > 1e-6 && remainingVol <= 1e-6)
+                                    {
+                                        isCompletelyInside = true;
+                                        outsideClone.Erase(true);
+                                    }
+                                    // Nếu thể tích không đổi so với ban đầu -> solid này nằm hoàn toàn ở ngoài ranh giới
+                                    else if (origVolume > 1e-6 && Math.Abs(remainingVol - origVolume) < 1e-5)
+                                    {
+                                        outsideClone.Erase(true);
+                                        unaffectedCount++;
+                                    }
+                                    else
                                     {
                                         if (form.AssignLayer) outsideClone.Layer = form.LayerOutside;
                                         createdOutsideCount++;
                                         anyCreated = true;
                                     }
-                                    else
+                                }
+                                else
+                                {
+                                    outsideClone.Erase(true);
+                                    // Phép Subtract làm solid biến mất -> kiểm tra xem có phải nằm trọn bên trong ranh giới
+                                    isCompletelyInside = CheckIfSolidIntersectsCutters(originalSolid, baseCutters, targetSpace, tr);
+                                    if (!isCompletelyInside)
                                     {
-                                        outsideClone.Erase(true);
-                                        failedCount++;
+                                        unaffectedCount++;
                                     }
                                 }
-                                catch
+
+                                // Nếu solid nằm trọn bên trong ranh giới và người dùng chọn xóa đối tượng gốc
+                                if (isCompletelyInside)
                                 {
-                                    if (!outsideClone.IsErased) outsideClone.Erase(true);
-                                    if (!cutterClone.IsErased) cutterClone.Erase(true);
-                                    failedCount++;
+                                    if (form.DeleteOriginal && !originalSolid.IsErased)
+                                    {
+                                        originalSolid.UpgradeOpen();
+                                        originalSolid.Erase(true);
+                                        erasedOriginalCount++;
+                                        completelyInsideErasedCount++;
+                                    }
                                 }
                             }
                             else // SplitBoth
                             {
-                                // 1. Phần bên trong (Intersect)
-                                Solid3d insideClone = (Solid3d)originalSolid.Clone();
-                                insideClone.RecordHistory = false;
-                                Solid3d cutterIn = (Solid3d)baseCutter.Clone();
-                                cutterIn.RecordHistory = false;
-
-                                targetSpace.AppendEntity(insideClone);
-                                tr.AddNewlyCreatedDBObject(insideClone, true);
-                                targetSpace.AppendEntity(cutterIn);
-                                tr.AddNewlyCreatedDBObject(cutterIn, true);
-
-                                try
+                                // 1. Các phần bên trong (Intersect với từng cutter)
+                                foreach (Solid3d baseCutter in baseCutters)
                                 {
-                                    insideClone.BooleanOperation(BooleanOperationType.BoolIntersect, cutterIn);
-                                    if (IsValidSolid(insideClone))
+                                    Solid3d insideClone = (Solid3d)originalSolid.Clone();
+                                    insideClone.RecordHistory = false;
+                                    Solid3d cutterIn = (Solid3d)baseCutter.Clone();
+                                    cutterIn.RecordHistory = false;
+
+                                    targetSpace.AppendEntity(insideClone);
+                                    tr.AddNewlyCreatedDBObject(insideClone, true);
+                                    targetSpace.AppendEntity(cutterIn);
+                                    tr.AddNewlyCreatedDBObject(cutterIn, true);
+
+                                    try
                                     {
-                                        if (form.AssignLayer) insideClone.Layer = form.LayerInside;
-                                        createdInsideCount++;
-                                        anyCreated = true;
+                                        insideClone.BooleanOperation(BooleanOperationType.BoolIntersect, cutterIn);
+                                        if (IsValidSolid(insideClone))
+                                        {
+                                            if (form.AssignLayer) insideClone.Layer = form.LayerInside;
+                                            createdInsideCount++;
+                                            anyCreated = true;
+                                        }
+                                        else
+                                        {
+                                            insideClone.Erase(true);
+                                        }
                                     }
-                                    else
+                                    catch
                                     {
-                                        insideClone.Erase(true);
+                                        if (!insideClone.IsErased) insideClone.Erase(true);
+                                        if (!cutterIn.IsErased) cutterIn.Erase(true);
                                     }
                                 }
-                                catch
-                                {
-                                    if (!insideClone.IsErased) insideClone.Erase(true);
-                                    if (!cutterIn.IsErased) cutterIn.Erase(true);
-                                }
 
-                                // 2. Phần bên ngoài (Subtract)
+                                // 2. Phần bên ngoài (Subtract tuần tự tất cả cutters)
                                 Solid3d outsideClone = (Solid3d)originalSolid.Clone();
                                 outsideClone.RecordHistory = false;
-                                Solid3d cutterOut = (Solid3d)baseCutter.Clone();
-                                cutterOut.RecordHistory = false;
-
                                 targetSpace.AppendEntity(outsideClone);
                                 tr.AddNewlyCreatedDBObject(outsideClone, true);
-                                targetSpace.AppendEntity(cutterOut);
-                                tr.AddNewlyCreatedDBObject(cutterOut, true);
 
-                                try
+                                foreach (Solid3d baseCutter in baseCutters)
                                 {
-                                    outsideClone.BooleanOperation(BooleanOperationType.BoolSubtract, cutterOut);
-                                    if (IsValidSolid(outsideClone))
+                                    if (!IsValidSolid(outsideClone)) break;
+
+                                    Solid3d cutterOut = (Solid3d)baseCutter.Clone();
+                                    cutterOut.RecordHistory = false;
+                                    targetSpace.AppendEntity(cutterOut);
+                                    tr.AddNewlyCreatedDBObject(cutterOut, true);
+
+                                    try
                                     {
-                                        if (form.AssignLayer) outsideClone.Layer = form.LayerOutside;
-                                        createdOutsideCount++;
-                                        anyCreated = true;
+                                        outsideClone.BooleanOperation(BooleanOperationType.BoolSubtract, cutterOut);
                                     }
-                                    else
+                                    catch
                                     {
-                                        outsideClone.Erase(true);
+                                        if (!cutterOut.IsErased) cutterOut.Erase(true);
                                     }
                                 }
-                                catch
+
+                                if (IsValidSolid(outsideClone))
                                 {
-                                    if (!outsideClone.IsErased) outsideClone.Erase(true);
-                                    if (!cutterOut.IsErased) cutterOut.Erase(true);
+                                    if (form.AssignLayer) outsideClone.Layer = form.LayerOutside;
+                                    createdOutsideCount++;
+                                    anyCreated = true;
+                                }
+                                else
+                                {
+                                    outsideClone.Erase(true);
                                 }
                             }
 
                             // Xóa đối tượng gốc nếu được yêu cầu và đã tạo ra kết quả
-                            if (anyCreated && form.DeleteOriginal)
+                            if (!originalSolid.IsErased && anyCreated && form.DeleteOriginal)
                             {
                                 originalSolid.UpgradeOpen();
                                 originalSolid.Erase(true);
@@ -334,21 +383,29 @@ namespace Civil3DCsharp
                             }
                         }
 
-                        baseCutter.Dispose();
+                        foreach (Solid3d cutter in baseCutters)
+                        {
+                            cutter.Dispose();
+                        }
                         tr.Commit();
 
-                        // 7. Báo cáo thống kê chi tiết
+                        // 5. Báo cáo thống kê chi tiết
                         ed.WriteMessage("\n=======================================================");
-                        ed.WriteMessage("\n🎉 HOÀN THÀNH CẮT 3D SOLID THEO POLYLINE MẶT BẰNG!");
-                        ed.WriteMessage($"\n  • Tổng 3D Solid xử lý:          {totalProcessed}");
+                        ed.WriteMessage("\n🎉 HOÀN THÀNH CẮT / XÓA 3D SOLID THEO POLYLINE MẶT BẰNG!");
+                        ed.WriteMessage($"\n  • Số đường ranh giới Polyline áp dụng:    {baseCutters.Count}");
+                        ed.WriteMessage($"\n  • Tổng 3D Solid xử lý:                    {totalProcessed}");
                         if (createdInsideCount > 0)
-                            ed.WriteMessage($"\n  • Số khối tạo ra bên trong:    {createdInsideCount}" + (form.AssignLayer ? $" (Layer: {form.LayerInside})" : ""));
+                            ed.WriteMessage($"\n  • Số khối tạo ra bên trong:              {createdInsideCount}" + (form.AssignLayer ? $" (Layer: {form.LayerInside})" : ""));
                         if (createdOutsideCount > 0)
-                            ed.WriteMessage($"\n  • Số khối tạo ra bên ngoài:    {createdOutsideCount}" + (form.AssignLayer ? $" (Layer: {form.LayerOutside})" : ""));
+                            ed.WriteMessage($"\n  • Số khối cắt còn lại bên ngoài:          {createdOutsideCount}" + (form.AssignLayer ? $" (Layer: {form.LayerOutside})" : ""));
+                        if (completelyInsideErasedCount > 0)
+                            ed.WriteMessage($"\n  • Số 3D Solid nằm trọn bên trong đã xóa:  {completelyInsideErasedCount}");
                         if (erasedOriginalCount > 0)
-                            ed.WriteMessage($"\n  • Số 3D Solid gốc đã xóa:      {erasedOriginalCount}");
+                            ed.WriteMessage($"\n  • Tổng số 3D Solid gốc đã xóa:           {erasedOriginalCount}");
+                        if (unaffectedCount > 0)
+                            ed.WriteMessage($"\n  • Số 3D Solid ngoài ranh giới (giữ nguyên): {unaffectedCount}");
                         if (failedCount > 0)
-                            ed.WriteMessage($"\n  • Số đối tượng không cắt được: {failedCount} (do không giao cắt ranh giới)");
+                            ed.WriteMessage($"\n  • Số đối tượng lỗi kỹ thuật:              {failedCount}");
                         ed.WriteMessage("\n=======================================================\n");
                     }
                     catch (Exception ex)
@@ -633,6 +690,65 @@ namespace Civil3DCsharp
                 if (mp.Volume > 1e-7) return true;
             }
             catch { }
+            return false;
+        }
+
+        private static bool CheckIfSolidIntersectsCutter(Solid3d solid, Solid3d cutter, BlockTableRecord space, Transaction tr, out double intersectVolume)
+        {
+            intersectVolume = 0.0;
+            Solid3d testInside = null;
+            Solid3d testCutter = null;
+            try
+            {
+                testInside = (Solid3d)solid.Clone();
+                testInside.RecordHistory = false;
+                testCutter = (Solid3d)cutter.Clone();
+                testCutter.RecordHistory = false;
+
+                space.AppendEntity(testInside);
+                tr.AddNewlyCreatedDBObject(testInside, true);
+
+                space.AppendEntity(testCutter);
+                tr.AddNewlyCreatedDBObject(testCutter, true);
+
+                testInside.BooleanOperation(BooleanOperationType.BoolIntersect, testCutter);
+                if (IsValidSolid(testInside))
+                {
+                    try
+                    {
+                        intersectVolume = testInside.MassProperties.Volume;
+                    }
+                    catch { }
+                    return intersectVolume > 1e-6;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (testInside != null && !testInside.IsDisposed && !testInside.IsErased)
+                {
+                    try { testInside.Erase(true); } catch { }
+                }
+                if (testCutter != null && !testCutter.IsDisposed && !testCutter.IsErased)
+                {
+                    try { testCutter.Erase(true); } catch { }
+                }
+            }
+            return false;
+        }
+
+        private static bool CheckIfSolidIntersectsCutters(Solid3d solid, List<Solid3d> cutters, BlockTableRecord space, Transaction tr)
+        {
+            foreach (Solid3d cutter in cutters)
+            {
+                if (CheckIfSolidIntersectsCutter(solid, cutter, space, tr, out double intersectVolume) && intersectVolume > 1e-6)
+                {
+                    return true;
+                }
+            }
             return false;
         }
 

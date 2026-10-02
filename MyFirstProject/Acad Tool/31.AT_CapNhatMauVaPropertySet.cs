@@ -26,17 +26,11 @@ namespace Civil3DCsharp
 {
     /// <summary>
     /// Lệnh Cập Nhật Màu Layer và Thuộc tính Property Set cho 3D Solid theo Chuẩn BIM / EIR (BEP T27)
-    /// Lệnh: AT_CapNhatMauVaPropertySet / T_CAPNHATMAUVAPROPERTYSET / T_CAPNHATMAU / CAPNHATMAUVAPROPERTYSET / CNMPS / AT_MauVaPropertySet / AT_LayerBimStandard
+    /// Lệnh: AT_Cap_Nhat_Mau_Va_Property_Set
     /// </summary>
     public class CapNhatMauVaPropertySetCmd
     {
-        [CommandMethod("AT_CapNhatMauVaPropertySet")]
-        [CommandMethod("T_CAPNHATMAUVAPROPERTYSET")]
-        [CommandMethod("T_CAPNHATMAU")]
-        [CommandMethod("CAPNHATMAUVAPROPERTYSET")]
-        [CommandMethod("CNMPS")]
-        [CommandMethod("AT_MauVaPropertySet")]
-        [CommandMethod("AT_LayerBimStandard")]
+        [CommandMethod("AT_Cap_Nhat_Mau_Va_Property_Set")]
         public void CapNhatMauVaPropertySetCommand()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

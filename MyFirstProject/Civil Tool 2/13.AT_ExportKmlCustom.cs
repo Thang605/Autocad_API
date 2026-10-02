@@ -298,7 +298,7 @@ namespace Civil3DCsharp
 
                 // 2. Cho người dùng chọn các đối tượng cần xuất
                 PromptSelectionOptions selOpts = new PromptSelectionOptions();
-                selOpts.MessageForAdding = "\nChọn các đối tượng (Curve, Polyline, CogoPoint, Block, XRef, Text, MText, Civil 3D Label) để xuất sang Google Earth KML: ";
+                selOpts.MessageForAdding = "\nChọn các đối tượng (Curve, Polyline, Hatch, CogoPoint, Block, XRef, Text, MText, Civil 3D Label) để xuất sang Google Earth KML: ";
                 PromptSelectionResult selRes = ed.GetSelection(selOpts);
 
                 if (selRes.Status != PromptStatus.OK || selRes.Value == null)
@@ -341,222 +341,35 @@ namespace Civil3DCsharp
                     tr.Commit();
                 }
 
-                // Thực hiện sinh trước nét vẽ chữ và nhãn Civil 3D (ở ngoài transaction chính)
+                // Thực hiện sinh trước nét vẽ chữ và trích xuất nhãn Civil 3D (ở ngoài transaction chính)
                 Dictionary<ObjectId, List<List<Point3d>>> textOutlinesCache = new Dictionary<ObjectId, List<List<Point3d>>>();
                 Dictionary<ObjectId, string> labelTextsCache = new Dictionary<ObjectId, string>();
+                Dictionary<ObjectId, Point3d> labelLocationsCache = new Dictionary<ObjectId, Point3d>();
+                Dictionary<ObjectId, List<List<Point3d>>> labelLeadersCache = new Dictionary<ObjectId, List<List<Point3d>>>();
                 Dictionary<ObjectId, string> blockColorCache = new Dictionary<ObjectId, string>();
 
                 if (textIdsToProcess.Count > 0)
                 {
-                    ed.WriteMessage($"\nĐang tiền xử lý {textIdsToProcess.Count} đối tượng chữ/nhãn Civil 3D để xuất nét vẽ...");
+                    ed.WriteMessage($"\nĐang tiền xử lý {textIdsToProcess.Count} đối tượng chữ/nhãn Civil 3D để xuất...");
                     foreach (ObjectId textId in textIdsToProcess)
                     {
                         bool isLabel = false;
                         using (Transaction tempTr = db.TransactionManager.StartTransaction())
                         {
                             DBObject obj = tempTr.GetObject(textId, OpenMode.ForRead);
-                            if (obj is Autodesk.Civil.DatabaseServices.Label)
+                            if (obj is Autodesk.Civil.DatabaseServices.Label civLabel)
                             {
                                 isLabel = true;
+                                ProcessCivilLabel(civLabel, tempTr, out string labelText, out Point3d labelLoc, out Point3d anchorLoc, out List<List<Point3d>> leaderGeom);
+                                labelTextsCache[textId] = labelText;
+                                labelLocationsCache[textId] = labelLoc;
+                                labelLeadersCache[textId] = leaderGeom;
+                                ed.WriteMessage($"\n  [Civil 3D Label] '{labelText}' ({leaderGeom.Count} đoạn nét leader)");
                             }
                             tempTr.Commit();
                         }
 
-                        if (isLabel)
-                        {
-                            List<List<Point3d>> labelOutlines = new List<List<Point3d>>();
-                            List<ObjectId> tempTextIds = new List<ObjectId>();
-                            System.Text.StringBuilder textAccumulator = new System.Text.StringBuilder();
-                            List<ObjectId> allTempLabelIds = new List<ObjectId>();
-
-                            try
-                            {
-                                // Nổ Label database-resident: giống cách nổ BlockReference
-                                List<ObjectId> currentLevelIds = new List<ObjectId> { textId };
-                                int maxDepth = 5;
-                                for (int depth = 0; depth < maxDepth; depth++)
-                                {
-                                    List<ObjectId> nextLevelIds = new List<ObjectId>();
-                                    bool hasMoreToExplode = false;
-
-                                    foreach (ObjectId currentId in currentLevelIds)
-                                    {
-                                        using (Transaction tempTr = db.TransactionManager.StartTransaction())
-                                        {
-                                            AcadEntity currentEnt = tempTr.GetObject(currentId, OpenMode.ForRead) as AcadEntity;
-                                            if (currentEnt == null)
-                                            {
-                                                tempTr.Commit();
-                                                continue;
-                                            }
-
-                                            // Chỉ nổ Label hoặc BlockReference, giữ nguyên primitive khác
-                                            bool canExplode = (currentEnt is Autodesk.Civil.DatabaseServices.Label) || (currentEnt is BlockReference);
-                                            if (!canExplode)
-                                            {
-                                                nextLevelIds.Add(currentId);
-                                                tempTr.Commit();
-                                                continue;
-                                            }
-
-                                            DBObjectCollection subCol = new DBObjectCollection();
-                                            bool explodeOk = false;
-                                            try
-                                            {
-                                                currentEnt.Explode(subCol);
-                                                explodeOk = true;
-                                            }
-                                            catch (System.Exception ex)
-                                            {
-                                                ed.WriteMessage($"\n[Cảnh báo] Lỗi nổ Label cấp {depth + 1}: {ex.Message}");
-                                            }
-
-                                            if (explodeOk && subCol.Count > 0)
-                                            {
-                                                BlockTableRecord btr = (BlockTableRecord)tempTr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                                                foreach (DBObject subObj in subCol)
-                                                {
-                                                    if (subObj is AcadEntity subEnt)
-                                                    {
-                                                        btr.AppendEntity(subEnt);
-                                                        tempTr.AddNewlyCreatedDBObject(subEnt, true);
-                                                        nextLevelIds.Add(subEnt.ObjectId);
-                                                        allTempLabelIds.Add(subEnt.ObjectId);
-                                                        if (subEnt is BlockReference || subEnt is Autodesk.Civil.DatabaseServices.Label)
-                                                        {
-                                                            hasMoreToExplode = true;
-                                                        }
-                                                    }
-                                                    else
-                                                    {
-                                                        subObj.Dispose();
-                                                    }
-                                                }
-                                            }
-                                            else
-                                            {
-                                                nextLevelIds.Add(currentId);
-                                            }
-
-                                            tempTr.Commit();
-                                        }
-                                    }
-
-                                    currentLevelIds = nextLevelIds;
-                                    if (!hasMoreToExplode) break;
-                                }
-
-                                // Thu thập primitives cuối cùng
-                                using (Transaction tempTr = db.TransactionManager.StartTransaction())
-                                {
-                                    foreach (ObjectId primId in currentLevelIds)
-                                    {
-                                        if (primId == textId) continue;
-
-                                        AcadEntity primEnt = null;
-                                        try { primEnt = tempTr.GetObject(primId, OpenMode.ForRead) as AcadEntity; }
-                                        catch { continue; }
-                                        if (primEnt == null) continue;
-
-                                        // Label check trước Curve (vì Label kế thừa Curve)
-                                        if (primEnt is Autodesk.Civil.DatabaseServices.Label)
-                                        {
-                                            // Label con không nổ được, bỏ qua
-                                            continue;
-                                        }
-                                        else if (primEnt is DBText dbT)
-                                        {
-                                            string txt = dbT.TextString;
-                                            if (!string.IsNullOrWhiteSpace(txt))
-                                            {
-                                                textAccumulator.Append(txt + " ");
-                                                tempTextIds.Add(primId);
-                                            }
-                                        }
-                                        else if (primEnt is MText mT)
-                                        {
-                                            string txt = mT.Text;
-                                            if (!string.IsNullOrWhiteSpace(txt))
-                                            {
-                                                textAccumulator.Append(txt + " ");
-                                                try { mT.UpgradeOpen(); mT.BackgroundFill = false; mT.DowngradeOpen(); } catch {}
-                                                tempTextIds.Add(primId);
-                                            }
-                                        }
-                                        else if (primEnt is Leader leader)
-                                        {
-                                            List<Point3d> pts = new List<Point3d>();
-                                            int count = leader.NumVertices;
-                                            for (int i = 0; i < count; i++) pts.Add(leader.VertexAt(i));
-                                            if (pts.Count > 0) labelOutlines.Add(pts);
-                                        }
-                                        else if (primEnt is MLeader mLeader)
-                                        {
-                                            foreach (int ldrIdx in mLeader.GetLeaderIndexes())
-                                            {
-                                                foreach (int lineIdx in mLeader.GetLeaderLineIndexes(ldrIdx))
-                                                {
-                                                    List<Point3d> pts = GetMLeaderVertices(mLeader, lineIdx);
-                                                    if (pts.Count > 0) labelOutlines.Add(pts);
-                                                }
-                                            }
-                                        }
-                                        else if (primEnt is Curve curve)
-                                        {
-                                            List<Point3d> pts = GetPointsFromCurve(curve, tempTr);
-                                            if (pts.Count > 0) labelOutlines.Add(pts);
-                                        }
-                                    }
-                                    tempTr.Commit();
-                                }
-
-                                // Sinh nét vẽ từ text database-resident
-                                if (tempTextIds.Count > 0)
-                                {
-                                    ed.WriteMessage($"\n  Label: sinh nét vẽ cho {tempTextIds.Count} đối tượng text...");
-                                }
-
-                                foreach (ObjectId tempTextId in tempTextIds)
-                                {
-                                    List<Curve> outlines = GetTextOutlines(doc, tempTextId);
-                                    using (Transaction tempTr = db.TransactionManager.StartTransaction())
-                                    {
-                                        foreach (Curve textCurve in outlines)
-                                        {
-                                            List<Point3d> points = GetPointsFromCurve(textCurve, tempTr);
-                                            if (points.Count > 0) labelOutlines.Add(points);
-                                            textCurve.Dispose();
-                                        }
-                                        tempTr.Commit();
-                                    }
-                                }
-
-                                textOutlinesCache[textId] = labelOutlines;
-                                labelTextsCache[textId] = textAccumulator.ToString().Trim();
-                            }
-                            catch (System.Exception ex)
-                            {
-                                ed.WriteMessage($"\n[Cảnh báo] Lỗi xử lý Label: {ex.Message}");
-                            }
-                            finally
-                            {
-                                // Xóa entity tạm (trừ text đã xóa ở trên qua GetTextOutlines)
-                                using (Transaction tempTr = db.TransactionManager.StartTransaction())
-                                {
-                                    foreach (ObjectId tempId in allTempLabelIds)
-                                    {
-                                        try
-                                        {
-                                            AcadEntity tempEnt = tempTr.GetObject(tempId, OpenMode.ForWrite) as AcadEntity;
-                                            if (tempEnt != null && !tempEnt.IsErased) tempEnt.Erase();
-                                        }
-                                        catch {}
-                                    }
-                                    tempTr.Commit();
-                                }
-                            }
-                        }
-                        else
+                        if (!isLabel)
                         {
                             List<Curve> outlines = GetTextOutlines(doc, textId);
                             List<List<Point3d>> cachedPoints = new List<List<Point3d>>();
@@ -713,6 +526,19 @@ namespace Civil3DCsharp
                                     {
                                         string entColor = GetKmlColorString(primEnt, tempTr);
                                         if (entColor != "ffffffff") resolvedColor = entColor;
+                                    }
+                                }
+                                else if (primEnt is Hatch hatch)
+                                {
+                                    List<List<Point3d>> hLoops = GetPointsFromHatch(hatch);
+                                    if (hLoops != null && hLoops.Count > 0)
+                                    {
+                                        blockGeometry.AddRange(hLoops);
+                                        if (resolvedColor == null || resolvedColor == "ffffffff")
+                                        {
+                                            string entColor = GetKmlColorString(primEnt, tempTr);
+                                            if (entColor != "ffffffff") resolvedColor = entColor;
+                                        }
                                     }
                                 }
                                 else if (primEnt is Leader leader)
@@ -906,7 +732,34 @@ namespace Civil3DCsharp
                                 {
                                     labelText = $"Label_{civLabel.Handle}";
                                 }
-                                ExportTextAsVector(cachedPoints, labelText, colorHexLabel, ns, documentNode, transform, geoFactory, ref successLines, ref failed, textWidth);
+
+                                Point3d labelLoc = Point3d.Origin;
+                                if (!labelLocationsCache.TryGetValue(civLabel.ObjectId, out labelLoc))
+                                {
+                                    try { labelLoc = civLabel.LabelLocation; }
+                                    catch
+                                    {
+                                        try { labelLoc = civLabel.GeometricExtents.MinPoint; } catch { }
+                                    }
+                                }
+
+                                labelLeadersCache.TryGetValue(civLabel.ObjectId, out List<List<Point3d>> leaderGeom);
+
+                                ExportCivilLabel(
+                                    civLabel,
+                                    labelText,
+                                    labelLoc,
+                                    leaderGeom,
+                                    cachedPoints,
+                                    colorHexLabel,
+                                    ns,
+                                    documentNode,
+                                    transform,
+                                    geoFactory,
+                                    ref successLines,
+                                    ref successPoints,
+                                    ref failed,
+                                    textWidth);
                             }
                             // Xử lý riêng cho Alignment (Civil 3D Alignment không kế thừa từ Curve)
                             else if (ent is Alignment alignment)
@@ -1016,6 +869,17 @@ namespace Civil3DCsharp
                                     failed++;
                                 }
                             }
+                            // Xử lý đối tượng Hatch (Mặt cắt / Vùng tô)
+                            else if (ent is Hatch hatch)
+                            {
+                                string colorHexHatch = GetKmlColorString(hatch, tr);
+                                string hatchName = $"{hatch.PatternName}_{hatch.Handle}";
+                                if (string.IsNullOrEmpty(hatch.PatternName))
+                                {
+                                    hatchName = $"Hatch_{hatch.Handle}";
+                                }
+                                ExportHatch(hatch, hatchName, colorHexHatch, ns, documentNode, transform, geoFactory, ref successLines, ref failed, standardWidth);
+                            }
                             // Xử lý đối tượng Leader
                             else if (ent is Leader leader)
                             {
@@ -1046,7 +910,7 @@ namespace Civil3DCsharp
                             {
                                 string colorHexText = overrideTextColor ? customTextColorHex : GetKmlColorString(dbText, tr);
                                 textOutlinesCache.TryGetValue(dbText.ObjectId, out List<List<Point3d>> cachedPoints);
-                                ExportTextAsVector(cachedPoints, dbText.TextString, colorHexText, ns, documentNode, transform, geoFactory, ref successLines, ref failed, textWidth);
+                                ExportTextAsVector(cachedPoints, dbText.TextString, colorHexText, ns, documentNode, transform, geoFactory, ref successLines, ref failed, textWidth, fallbackPoint: dbText.Position);
                             }
                             // Xử lý MText
                             else if (ent is MText mText)
@@ -1057,8 +921,9 @@ namespace Civil3DCsharp
                                 {
                                     txtStr = mText.Contents;
                                 }
+                                string cleanTxt = StripMTextFormatting(txtStr);
                                 textOutlinesCache.TryGetValue(mText.ObjectId, out List<List<Point3d>> cachedPoints);
-                                ExportTextAsVector(cachedPoints, txtStr, colorHexText, ns, documentNode, transform, geoFactory, ref successLines, ref failed, textWidth);
+                                ExportTextAsVector(cachedPoints, cleanTxt, colorHexText, ns, documentNode, transform, geoFactory, ref successLines, ref failed, textWidth, fallbackPoint: mText.Location);
                             }
                             // Xử lý BlockReference (Bao gồm cả Block/XRef lồng nhau)
                             else if (ent is BlockReference blockRef)

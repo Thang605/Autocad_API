@@ -29,8 +29,9 @@ namespace MyFirstProject.Acad_Tool
     {
         #region Persistent State (Ghi nhớ lựa chọn)
         private static List<ObjectId> _lastSolidIds = new List<ObjectId>();
+        private static List<ObjectId> _lastBoundaryIds = new List<ObjectId>();
         private static ObjectId _lastBoundaryId = ObjectId.Null;
-        private static ClipSolidMode _lastMode = ClipSolidMode.KeepInside;
+        private static ClipSolidMode _lastMode = ClipSolidMode.KeepOutside;
         private static bool _lastDeleteOriginal = true;
         private static bool _lastAssignLayer = false;
         private static string _lastLayerInside = "SOLID_INSIDE";
@@ -41,8 +42,9 @@ namespace MyFirstProject.Acad_Tool
 
         #region Public Properties
         public List<ObjectId> SelectedSolidIds { get; private set; } = new List<ObjectId>();
-        public ObjectId BoundaryId { get; private set; } = ObjectId.Null;
-        public ClipSolidMode ClipMode { get; private set; } = ClipSolidMode.KeepInside;
+        public List<ObjectId> SelectedBoundaryIds { get; private set; } = new List<ObjectId>();
+        public ObjectId BoundaryId => SelectedBoundaryIds.Count > 0 ? SelectedBoundaryIds[0] : ObjectId.Null;
+        public ClipSolidMode ClipMode { get; private set; } = ClipSolidMode.KeepOutside;
         public bool DeleteOriginal { get; private set; } = true;
         public bool AssignLayer { get; private set; } = false;
         public string LayerInside { get; private set; } = "SOLID_INSIDE";
@@ -90,7 +92,7 @@ namespace MyFirstProject.Acad_Tool
 
         private void InitializeComponent()
         {
-            this.Text = "✂️ Cắt / Clip 3D Solid Theo Polyline Mặt Bằng";
+            this.Text = "Cắt / Clip 3D Solid Theo Polyline Mặt Bằng";
             this.Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point);
             this.Size = _lastFormSize.Width > 0 ? _lastFormSize : new Size(580, 680);
             this.MinimumSize = new Size(540, 640);
@@ -114,7 +116,7 @@ namespace MyFirstProject.Acad_Tool
 
             btnPickSolids = new Button
             {
-                Text = "🎯 Chọn 3D Solid trên CAD",
+                Text = "Chọn 3D Solid trên CAD",
                 Location = new Point(14, 25),
                 Size = new Size(220, 32),
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
@@ -124,7 +126,7 @@ namespace MyFirstProject.Acad_Tool
 
             btnSelectAllSolids = new Button
             {
-                Text = "🌐 Chọn tất cả 3D Solid",
+                Text = "Chọn tất cả 3D Solid",
                 Location = new Point(244, 25),
                 Size = new Size(180, 32),
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
@@ -148,7 +150,7 @@ namespace MyFirstProject.Acad_Tool
             // 2. GroupBox Ranh giới Polyline
             grpBoundary = new GroupBox
             {
-                Text = " 2. Ranh giới cắt (Polyline khép kín mặt bằng) ",
+                Text = " 2. Ranh giới cắt (Một hoặc nhiều Polyline khép kín) ",
                 Location = new Point(margin, grpSolids.Bottom + 10),
                 Size = new Size(clientWidth - margin * 2, 95),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -157,7 +159,7 @@ namespace MyFirstProject.Acad_Tool
 
             btnPickBoundary = new Button
             {
-                Text = "📐 Chọn Polyline khép kín trên CAD",
+                Text = "Chọn các Polyline khép kín trên CAD",
                 Location = new Point(14, 25),
                 Size = new Size(260, 32),
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
@@ -192,17 +194,17 @@ namespace MyFirstProject.Acad_Tool
                 Text = "Giữ phần BÊN TRONG ranh giới (Intersect - Khuôn cắt)",
                 Location = new Point(18, 25),
                 AutoSize = true,
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
-                Checked = true
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular)
             };
             radInside.CheckedChanged += (s, e) => UpdateLayerUiState();
 
             radOutside = new RadioButton
             {
-                Text = "Giữ phần BÊN NGOÀI ranh giới (Subtract - Đục lỗ / Khoét rỗng)",
+                Text = "Giữ phần BÊN NGOÀI ranh giới (Subtract - Xóa / Khoét bỏ phần bên trong)",
                 Location = new Point(18, 52),
                 AutoSize = true,
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular)
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+                Checked = true
             };
             radOutside.CheckedChanged += (s, e) => UpdateLayerUiState();
 
@@ -219,10 +221,10 @@ namespace MyFirstProject.Acad_Tool
             grpMode.Controls.Add(radOutside);
             grpMode.Controls.Add(radSplit);
 
-            // 4. GroupBox Tùy chọn & Layer
+            // 4. GroupBox Tùy chọn && Layer
             grpOptions = new GroupBox
             {
-                Text = " 4. Tùy chọn nâng cao & Layer ",
+                Text = " 4. Tùy chọn nâng cao && Layer ",
                 Location = new Point(margin, grpMode.Bottom + 10),
                 Size = new Size(clientWidth - margin * 2, 160),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -329,7 +331,7 @@ namespace MyFirstProject.Acad_Tool
 
             btnExecute = new Button
             {
-                Text = "✂️ THỰC HIỆN CẮT",
+                Text = "THỰC HIỆN CẮT",
                 Location = new Point(clientWidth - margin - 290, lblProgress.Bottom + 8),
                 Size = new Size(170, 36),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
@@ -449,60 +451,83 @@ namespace MyFirstProject.Acad_Tool
 
             using (EditorUserInteraction ui = ed.StartUserInteraction(this))
             {
-                PromptEntityOptions peo = new PromptEntityOptions("\nChọn Polyline khép kín (hoặc Circle) làm ranh giới cắt trên mặt bằng: ");
-                peo.SetRejectMessage("\nChỉ chọn Polyline hoặc Circle khép kín!");
-                peo.AddAllowedClass(typeof(Polyline), true);
-                peo.AddAllowedClass(typeof(Polyline2d), true);
-                peo.AddAllowedClass(typeof(Polyline3d), true);
-                peo.AddAllowedClass(typeof(Circle), true);
-
-                PromptEntityResult per = ed.GetEntity(peo);
-                if (per.Status == PromptStatus.OK)
+                PromptSelectionOptions pso = new PromptSelectionOptions
                 {
+                    MessageForAdding = "\nQuét chọn một hoặc nhiều Polyline / Circle / Region khép kín làm ranh giới: "
+                };
+
+                TypedValue[] tvs = new TypedValue[]
+                {
+                    new TypedValue((int)DxfCode.Operator, "<or"),
+                    new TypedValue((int)DxfCode.Start, "LWPOLYLINE"),
+                    new TypedValue((int)DxfCode.Start, "POLYLINE"),
+                    new TypedValue((int)DxfCode.Start, "CIRCLE"),
+                    new TypedValue((int)DxfCode.Start, "ELLIPSE"),
+                    new TypedValue((int)DxfCode.Start, "REGION"),
+                    new TypedValue((int)DxfCode.Operator, "or>")
+                };
+                SelectionFilter filter = new SelectionFilter(tvs);
+
+                PromptSelectionResult psr = ed.GetSelection(pso, filter);
+                if (psr.Status == PromptStatus.OK && psr.Value != null && psr.Value.Count > 0)
+                {
+                    SelectedBoundaryIds.Clear();
+                    int unclosedCount = 0;
+
                     using (Transaction tr = db.TransactionManager.StartTransaction())
                     {
-                        Entity ent = tr.GetObject(per.ObjectId, OpenMode.ForRead) as Entity;
-                        if (ent != null)
+                        foreach (SelectedObject so in psr.Value)
                         {
-                            bool isClosed = false;
-                            double area = 0.0;
-                            double length = 0.0;
+                            if (so == null || so.ObjectId.IsNull) continue;
 
+                            Entity ent = tr.GetObject(so.ObjectId, OpenMode.ForRead) as Entity;
+                            if (ent == null) continue;
+
+                            bool isClosed = false;
                             if (ent is Polyline pl)
                             {
                                 isClosed = pl.Closed || pl.StartPoint.DistanceTo(pl.EndPoint) < 1e-4;
-                                area = pl.Area;
-                                length = pl.Length;
                             }
                             else if (ent is Polyline2d p2d)
                             {
                                 isClosed = p2d.Closed;
-                                try { area = p2d.Area; length = p2d.Length; } catch { }
                             }
                             else if (ent is Polyline3d p3d)
                             {
                                 isClosed = p3d.Closed;
-                                try { length = p3d.Length; } catch { }
                             }
-                            else if (ent is Circle c)
+                            else if (ent is Circle || ent is Autodesk.AutoCAD.DatabaseServices.Region)
                             {
                                 isClosed = true;
-                                area = c.Area;
-                                length = c.Circumference;
                             }
-
-                            if (!isClosed)
+                            else if (ent is Ellipse el)
                             {
-                                MessageBox.Show(this, "Đường ranh giới được chọn không khép kín!\nVui lòng chọn một Polyline khép kín.",
-                                    "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                                return;
+                                isClosed = el.Closed;
                             }
 
-                            BoundaryId = per.ObjectId;
-                            lblBoundaryStatus.Text = $"Đã chọn: {ent.GetType().Name} khép kín (Layer: {ent.Layer}, Dài: {length:F2}m, Diện tích: {area:F2}m²)";
-                            lblBoundaryStatus.ForeColor = Color.DarkGreen;
+                            if (isClosed)
+                            {
+                                if (!SelectedBoundaryIds.Contains(so.ObjectId))
+                                    SelectedBoundaryIds.Add(so.ObjectId);
+                            }
+                            else
+                            {
+                                unclosedCount++;
+                            }
                         }
                         tr.Commit();
+                    }
+
+                    if (SelectedBoundaryIds.Count > 0)
+                    {
+                        lblBoundaryStatus.Text = $"Đã chọn: {SelectedBoundaryIds.Count} đường ranh giới khép kín." +
+                            (unclosedCount > 0 ? $" (Bỏ qua {unclosedCount} đối tượng hở)" : "");
+                        lblBoundaryStatus.ForeColor = Color.DarkGreen;
+                    }
+                    else
+                    {
+                        lblBoundaryStatus.Text = "Không có đường khép kín nào hợp lệ được chọn.";
+                        lblBoundaryStatus.ForeColor = Color.Red;
                     }
                 }
             }
@@ -534,9 +559,9 @@ namespace MyFirstProject.Acad_Tool
                 return;
             }
 
-            if (BoundaryId.IsNull || !BoundaryId.IsValid || BoundaryId.IsErased)
+            if (SelectedBoundaryIds == null || SelectedBoundaryIds.Count == 0)
             {
-                MessageBox.Show(this, "Vui lòng chọn một Polyline khép kín làm ranh giới cắt!",
+                MessageBox.Show(this, "Vui lòng chọn ít nhất một Polyline khép kín làm ranh giới cắt!",
                     "Chưa chọn ranh giới", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -598,16 +623,27 @@ namespace MyFirstProject.Acad_Tool
                         }
                         UpdateSolidStatusLabel();
 
-                        // Kiểm tra boundary
-                        if (!_lastBoundaryId.IsNull && _lastBoundaryId.IsValid && !_lastBoundaryId.IsErased)
+                        // Kiểm tra boundaries
+                        SelectedBoundaryIds.Clear();
+                        if (_lastBoundaryIds != null && _lastBoundaryIds.Count > 0)
                         {
-                            Entity ent = tr.GetObject(_lastBoundaryId, OpenMode.ForRead) as Entity;
-                            if (ent != null)
+                            foreach (ObjectId bId in _lastBoundaryIds)
                             {
-                                BoundaryId = _lastBoundaryId;
-                                lblBoundaryStatus.Text = $"Đã nạp lại ranh giới trước: {ent.GetType().Name} (Layer: {ent.Layer})";
-                                lblBoundaryStatus.ForeColor = Color.DarkGreen;
+                                if (!bId.IsNull && bId.IsValid && !bId.IsErased)
+                                {
+                                    SelectedBoundaryIds.Add(bId);
+                                }
                             }
+                        }
+                        else if (!_lastBoundaryId.IsNull && _lastBoundaryId.IsValid && !_lastBoundaryId.IsErased)
+                        {
+                            SelectedBoundaryIds.Add(_lastBoundaryId);
+                        }
+
+                        if (SelectedBoundaryIds.Count > 0)
+                        {
+                            lblBoundaryStatus.Text = $"Đã nạp lại {SelectedBoundaryIds.Count} đường ranh giới trước.";
+                            lblBoundaryStatus.ForeColor = Color.DarkGreen;
                         }
                         tr.Commit();
                     }
@@ -621,6 +657,7 @@ namespace MyFirstProject.Acad_Tool
             try
             {
                 _lastSolidIds = new List<ObjectId>(SelectedSolidIds);
+                _lastBoundaryIds = new List<ObjectId>(SelectedBoundaryIds);
                 _lastBoundaryId = BoundaryId;
                 if (radInside.Checked) _lastMode = ClipSolidMode.KeepInside;
                 else if (radOutside.Checked) _lastMode = ClipSolidMode.KeepOutside;
