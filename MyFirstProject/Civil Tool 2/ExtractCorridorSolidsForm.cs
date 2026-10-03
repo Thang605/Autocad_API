@@ -48,7 +48,7 @@ namespace MyFirstProject.Civil_Tool_2
         private static HashSet<string> _lastSelectedShapeCodes = new(StringComparer.OrdinalIgnoreCase);
         private static HashSet<string> _lastSelectedLinkCodes = new(StringComparer.OrdinalIgnoreCase);
 
-        private static bool _lastAttachXData = true;
+        private static bool _lastAttachXData = false;
 
         private static string _lastFilePath = string.Empty;
         private static string _lastExportFolder = string.Empty;
@@ -117,7 +117,7 @@ namespace MyFirstProject.Civil_Tool_2
         private CheckBox chkAttachXData = null!;
 
         // Step 3: Output Options (Khớp ảnh gốc Civil 3D)
-        private TableLayoutPanel tblDestPath = null!;
+        private Panel pnlDestPath = null!;
         private ComboBox cmbObjectType = null!;
         private RadioButton radInsertCurrent = null!;
         private RadioButton radAddExisting = null!;
@@ -202,75 +202,100 @@ namespace MyFirstProject.Civil_Tool_2
                 Dock = DockStyle.Bottom,
                 Height = 54,
                 BackColor = Color.FromArgb(240, 240, 244),
-                Padding = new Padding(15, 8, 15, 10)
+                Padding = new Padding(12, 0, 12, 0)
             };
 
-            lblStatus = new WinFormsLabel
+            var pnlRightButtons = new FlowLayoutPanel
             {
-                Text = "Sẵn sàng",
-                Location = new Point(15, 14),
-                Size = new Size(340, 26),
-                ForeColor = Color.DarkSlateGray,
-                Font = new WinFormsFont("Segoe UI", 8.5F, FontStyle.Italic),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Dock = DockStyle.Right,
+                FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Height = 44,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 10, 0, 0)
             };
 
             btnPrevious = new Button
             {
                 Text = "< Previous",
-                Location = new Point(365, 10),
-                Size = new Size(82, 32),
-                Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Size = new Size(85, 32),
+                Margin = new Padding(0, 0, 6, 0),
+                Cursor = Cursors.Hand
             };
             btnPrevious.Click += (s, e) => SwitchStep(lstSteps.SelectedIndex - 1);
 
             btnNext = new Button
             {
                 Text = "Next >",
-                Location = new Point(453, 10),
-                Size = new Size(82, 32),
-                Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Size = new Size(85, 32),
+                Margin = new Padding(0, 0, 6, 0),
+                Cursor = Cursors.Hand
             };
             btnNext.Click += (s, e) => SwitchStep(lstSteps.SelectedIndex + 1);
 
             btnExtract = new Button
             {
                 Text = "Extract Solids",
-                Location = new Point(542, 9),
-                Size = new Size(120, 34),
+                Size = new Size(130, 32),
+                Margin = new Padding(0, 0, 6, 0),
                 BackColor = Color.FromArgb(0, 120, 215),
                 ForeColor = Color.White,
                 Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Bold),
                 Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                FlatStyle = FlatStyle.Flat
             };
+            btnExtract.FlatAppearance.BorderSize = 0;
             btnExtract.Click += BtnExtract_Click;
 
             btnCancel = new Button
             {
                 Text = "Cancel",
-                Location = new Point(668, 10),
-                Size = new Size(72, 32),
+                Size = new Size(75, 32),
+                Margin = new Padding(0, 0, 6, 0),
                 DialogResult = DialogResult.Cancel,
-                Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Cursor = Cursors.Hand
             };
+
+            var btnResetDefaults = new Button
+            {
+                Text = "Mặc định",
+                Size = new Size(75, 32),
+                Margin = new Padding(0, 0, 6, 0),
+                Cursor = Cursors.Hand
+            };
+            btnResetDefaults.Click += (s, e) => ResetToDefaults();
 
             btnHelp = new Button
             {
                 Text = "Help",
-                Location = new Point(746, 10),
                 Size = new Size(65, 32),
-                Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Margin = new Padding(0, 0, 0, 0),
+                Cursor = Cursors.Hand
             };
             btnHelp.Click += (s, e) => ShowHelpDialog();
 
-            pnlBottom.Controls.AddRange(new Control[] {
-                lblStatus, btnPrevious, btnNext, btnExtract, btnCancel, btnHelp
-            });
+            pnlRightButtons.Controls.Add(btnPrevious);
+            pnlRightButtons.Controls.Add(btnNext);
+            pnlRightButtons.Controls.Add(btnExtract);
+            pnlRightButtons.Controls.Add(btnResetDefaults);
+            pnlRightButtons.Controls.Add(btnCancel);
+            pnlRightButtons.Controls.Add(btnHelp);
+
+            lblStatus = new WinFormsLabel
+            {
+                Text = "Sẵn sàng",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.DarkSlateGray,
+                Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Italic)
+            };
+
+            pnlBottom.Controls.Add(lblStatus);
+            pnlBottom.Controls.Add(pnlRightButtons);
+            pnlRightButtons.BringToFront();
+            lblStatus.SendToBack();
 
             // ═══════════════════════════════════════════════════════════════
             //  MAIN CONTENT CONTAINER
@@ -293,10 +318,19 @@ namespace MyFirstProject.Civil_Tool_2
             this.Controls.Add(pnlMainContainer);
             this.Controls.Add(pnlSidebar);
             this.Controls.Add(pnlBottom);
+            pnlBottom.SendToBack();
+            pnlSidebar.SendToBack();
+            pnlMainContainer.BringToFront();
 
             this.AcceptButton = btnExtract;
             this.CancelButton = btnCancel;
-            this.FormClosing += (s, e) => SaveCurrentSettings();
+            this.FormClosing += (s, e) =>
+            {
+                if (FormAccepted)
+                {
+                    SaveCurrentSettings();
+                }
+            };
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -357,6 +391,31 @@ namespace MyFirstProject.Civil_Tool_2
                 Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Bold)
             };
 
+            var pnlStep1Path = new Panel
+            {
+                Location = new Point(80, 75),
+                Size = new Size(527, 28),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+
+            btnStep1Browse = new Button
+            {
+                Text = "📂 Chọn file...",
+                Dock = DockStyle.Right,
+                Width = 95,
+                Font = new WinFormsFont("Segoe UI", 9F),
+                Cursor = Cursors.Hand,
+                BackColor = Color.FromArgb(235, 238, 245),
+                FlatStyle = FlatStyle.Standard
+            };
+            btnStep1Browse.Click += BtnBrowse_Click;
+
+            var pnlStep1TextWrapper = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(0, 0, 8, 0)
+            };
+
             txtStep1FilePath = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -371,37 +430,15 @@ namespace MyFirstProject.Civil_Tool_2
                 ValidateForm();
             };
 
-            btnStep1Browse = new Button
-            {
-                Text = "...",
-                Dock = DockStyle.Fill,
-                Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                BackColor = Color.FromArgb(240, 240, 245),
-                FlatStyle = FlatStyle.Standard
-            };
-            btnStep1Browse.Click += BtnBrowse_Click;
-
-            // TableLayoutPanel tự động quản lý: cột 1 fill, cột 2 cố định 36px cho nút [...]
-            var tblStep1Path = new TableLayoutPanel
-            {
-                Location = new Point(80, 75),
-                Size = new Size(527, 28),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                ColumnCount = 2,
-                RowCount = 1,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-            tblStep1Path.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tblStep1Path.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36F));
-            tblStep1Path.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tblStep1Path.Controls.Add(txtStep1FilePath, 0, 0);
-            tblStep1Path.Controls.Add(btnStep1Browse, 1, 0);
+            pnlStep1TextWrapper.Controls.Add(txtStep1FilePath);
+            pnlStep1Path.Controls.Add(pnlStep1TextWrapper);
+            pnlStep1Path.Controls.Add(btnStep1Browse);
+            btnStep1Browse.BringToFront();
+            pnlStep1TextWrapper.SendToBack();
 
             grpCorridor.Controls.AddRange(new Control[] {
                 lblSel, cmbCorridor, btnPickCorridor, lblCorridorInfo,
-                lblQuickFile, tblStep1Path
+                lblQuickFile, pnlStep1Path
             });
 
             var grpCodes = new GroupBox
@@ -527,7 +564,7 @@ namespace MyFirstProject.Civil_Tool_2
                 Text = "Đính kèm metadata (Corridor Name, Shape/Link Code, Baseline, Region) vào XData của Solid",
                 Location = new Point(15, 30),
                 Size = new Size(585, 36),
-                Checked = true,
+                Checked = false,
                 Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Bold)
             };
 
@@ -615,7 +652,31 @@ namespace MyFirstProject.Civil_Tool_2
             };
             radAddNew.CheckedChanged += (s, e) => UpdateDestinationState();
 
-            // TableLayoutPanel tự động quản lý: cột 1 fill, cột 2 cố định 36px cho nút [...]
+            pnlDestPath = new Panel
+            {
+                Location = new Point(32, 98),
+                Size = new Size(575, 28),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+
+            btnBrowse = new Button
+            {
+                Text = "📂 Chọn file...",
+                Dock = DockStyle.Right,
+                Width = 95,
+                Font = new WinFormsFont("Segoe UI", 9F),
+                Cursor = Cursors.Hand,
+                BackColor = Color.FromArgb(235, 238, 245),
+                FlatStyle = FlatStyle.Standard
+            };
+            btnBrowse.Click += BtnBrowse_Click;
+
+            var pnlDestTextWrapper = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(0, 0, 8, 0)
+            };
+
             txtFilePath = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -630,32 +691,11 @@ namespace MyFirstProject.Civil_Tool_2
                 ValidateForm();
             };
 
-            btnBrowse = new Button
-            {
-                Text = "...",
-                Dock = DockStyle.Fill,
-                Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                BackColor = Color.FromArgb(240, 240, 245),
-                FlatStyle = FlatStyle.Standard
-            };
-            btnBrowse.Click += BtnBrowse_Click;
-
-            tblDestPath = new TableLayoutPanel
-            {
-                Location = new Point(32, 98),
-                Size = new Size(575, 28),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                ColumnCount = 2,
-                RowCount = 1,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-            tblDestPath.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tblDestPath.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36F));
-            tblDestPath.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            tblDestPath.Controls.Add(txtFilePath, 0, 0);
-            tblDestPath.Controls.Add(btnBrowse, 1, 0);
+            pnlDestTextWrapper.Controls.Add(txtFilePath);
+            pnlDestPath.Controls.Add(pnlDestTextWrapper);
+            pnlDestPath.Controls.Add(btnBrowse);
+            btnBrowse.BringToFront();
+            pnlDestTextWrapper.SendToBack();
 
             // Dynamic link to corridor (hiển thị chuẩn theo ảnh Civil 3D)
             chkDynamicLink = new CheckBox
@@ -693,7 +733,7 @@ namespace MyFirstProject.Civil_Tool_2
 
             grpDestination.Controls.AddRange(new Control[] {
                 radInsertCurrent, radAddExisting, radAddNew,
-                tblDestPath,
+                pnlDestPath,
                 chkDynamicLink,
                 chkOverwrite, chkOpenAfterExport, chkOpenFolderAfterExport
             });
@@ -773,7 +813,7 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 radAddExisting.Location = new Point(15, 48);
                 radAddNew.Location = new Point(15, 72);
-                tblDestPath.Visible = false;
+                pnlDestPath.Visible = false;
                 chkDynamicLink.Location = new Point(15, 104);
                 chkOverwrite.Location = new Point(15, 134);
                 chkOpenAfterExport.Location = new Point(205, 134);
@@ -792,8 +832,8 @@ namespace MyFirstProject.Civil_Tool_2
             else if (radAddExisting.Checked)
             {
                 radAddExisting.Location = new Point(15, 48);
-                tblDestPath.Location = new Point(32, 74);
-                tblDestPath.Visible = true;
+                pnlDestPath.Location = new Point(32, 74);
+                pnlDestPath.Visible = true;
                 radAddNew.Location = new Point(15, 106);
                 chkDynamicLink.Location = new Point(15, 136);
                 chkOverwrite.Location = new Point(15, 166);
@@ -816,8 +856,8 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 radAddExisting.Location = new Point(15, 48);
                 radAddNew.Location = new Point(15, 72);
-                tblDestPath.Location = new Point(32, 98);
-                tblDestPath.Visible = true;
+                pnlDestPath.Location = new Point(32, 98);
+                pnlDestPath.Visible = true;
                 chkDynamicLink.Location = new Point(15, 130);
                 chkOverwrite.Location = new Point(15, 160);
                 chkOpenAfterExport.Location = new Point(205, 160);
@@ -1330,6 +1370,7 @@ namespace MyFirstProject.Civil_Tool_2
             radSelectedCodes.Checked = _lastFilterCodes;
             radAllCodes.Checked = !_lastFilterCodes;
 
+            // Mặc định KHÔNG chọn dấu tick v cho metadata XData
             chkAttachXData.Checked = _lastAttachXData;
             chkDynamicLink.Checked = _lastDynamicLink;
 
@@ -1357,6 +1398,44 @@ namespace MyFirstProject.Civil_Tool_2
 
             // Luôn mở tab đầu tiên: Codes to Extract khi khởi chạy Form
             SwitchStep(0);
+        }
+
+        public void ResetToDefaults()
+        {
+            _lastExportShapes = true;
+            _lastExportLinks = true;
+            _lastFilterCodes = false;
+            _lastAttachXData = false;
+            _lastObjectType = OutputObjectType.SolidsBasedOnCorridorSampling;
+            _lastDestination = OutputDestination.AddToNewDrawing;
+            _lastOverwrite = true;
+            _lastOpenAfterExport = false;
+            _lastOpenFolderAfterExport = false;
+            _lastDynamicLink = false;
+
+            chkExportShapes.Checked = true;
+            chkExportLinks.Checked = true;
+            radAllCodes.Checked = true;
+            radSelectedCodes.Checked = false;
+
+            chkAttachXData.Checked = false;
+            chkDynamicLink.Checked = false;
+
+            cmbObjectType.SelectedIndex = 0;
+            radAddNew.Checked = true;
+            radInsertCurrent.Checked = false;
+            radAddExisting.Checked = false;
+
+            chkOverwrite.Checked = true;
+            chkOpenAfterExport.Checked = false;
+            chkOpenFolderAfterExport.Checked = false;
+
+            UpdateDestinationState();
+            UpdateCodeFilterState();
+            ValidateForm();
+
+            lblStatus.Text = "✓ Đã khôi phục toàn bộ thiết lập về mặc định chuẩn.";
+            lblStatus.ForeColor = Color.DarkGreen;
         }
     }
 

@@ -238,6 +238,7 @@ namespace MyFirstProject.Extensions
             try
             {
                 Database db = A.Db;
+                ObjectId bimFormatId = Civil3DCsharp.CapNhatMauVaPropertySetCmd.EnsureBimPropertyDataFormat(tr, db);
                 DictionaryPropertySetDefinitions propSetDefs = new(db);
 
                 var defsToApply = (customDefs != null && customDefs.Count > 0)
@@ -280,7 +281,14 @@ namespace MyFirstProject.Extensions
                             var currentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                             for (int i = 0; i < existingDef.Definitions.Count; i++)
                             {
-                                currentNames.Add(existingDef.Definitions[i].Name);
+                                var propDef = existingDef.Definitions[i];
+                                currentNames.Add(propDef.Name);
+
+                                // Cập nhật FormatId cho các thuộc tính số thực đã có
+                                if (propDef.DataType == Autodesk.Aec.PropertyData.DataType.Real && !bimFormatId.IsNull)
+                                {
+                                    try { propDef.FormatId = bimFormatId; } catch { }
+                                }
                             }
 
                             // 3. Cập nhật thuộc tính đã có và bổ sung các thuộc tính mới
@@ -289,13 +297,18 @@ namespace MyFirstProject.Extensions
                                 if (!currentNames.Contains(item.Name))
                                 {
                                     object defData = ConvertDefaultData(item.DataType, item.DefaultValue);
-                                    existingDef.Definitions.Add(new PropertyDefinition
+                                    var propDef = new PropertyDefinition
                                     {
                                         Name = item.Name,
                                         Description = item.Description ?? "",
                                         DataType = item.DataType,
                                         DefaultData = defData
-                                    });
+                                    };
+                                    if (item.DataType == Autodesk.Aec.PropertyData.DataType.Real && !bimFormatId.IsNull)
+                                    {
+                                        propDef.FormatId = bimFormatId;
+                                    }
+                                    existingDef.Definitions.Add(propDef);
                                     currentNames.Add(item.Name);
                                 }
                             }
@@ -314,13 +327,18 @@ namespace MyFirstProject.Extensions
                 foreach (var item in defsToApply)
                 {
                     object defData = ConvertDefaultData(item.DataType, item.DefaultValue);
-                    propSetDef.Definitions.Add(new PropertyDefinition
+                    var propDef = new PropertyDefinition
                     {
                         Name = item.Name,
                         Description = item.Description ?? "",
                         DataType = item.DataType,
                         DefaultData = defData
-                    });
+                    };
+                    if (item.DataType == Autodesk.Aec.PropertyData.DataType.Real && !bimFormatId.IsNull)
+                    {
+                        propDef.FormatId = bimFormatId;
+                    }
+                    propSetDef.Definitions.Add(propDef);
                 }
 
                 // Thiết lập Applies To (cả 3D Solid và Body)

@@ -3,23 +3,28 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using ClosedXML.Excel;
 
+using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Colors;
 using Autodesk.Aec.PropertyData.DatabaseServices;
+using CivSurface = Autodesk.Civil.DatabaseServices.Surface;
+using AcadSurface = Autodesk.AutoCAD.DatabaseServices.Surface;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Color = Autodesk.AutoCAD.Colors.Color;
 using DrawingColor = System.Drawing.Color;
 using DrawingFont = System.Drawing.Font;
 using WinFormsLabel = System.Windows.Forms.Label;
 using WinFormsPoint = System.Drawing.Point;
+using Exception = System.Exception;
 
 namespace Civil3DCsharp
 {
@@ -31,12 +36,14 @@ namespace Civil3DCsharp
         public bool IsSelected { get; set; } = false;
         public string LayerName { get; set; } = "";
 
-        public int SolidCount { get; set; } = 0;              // Số lượng 3D Solid / Body thuộc layer này
+        public int SolidCount { get; set; } = 0;              // Số lượng 3D Solid thuộc layer này
+        public int SurfaceCount { get; set; } = 0;            // Số lượng Surface (bao gồm Body sẽ chuyển thành Surface) thuộc layer này
+        public int TotalEntityCount => SolidCount + SurfaceCount;
         public string SelectedPresetCode { get; set; } = ""; // Mã mẫu (hoặc "CUSTOM" / "")
         public string CauKien { get; set; } = "";             // Hạng mục / Cấu kiện (dùng cho Layer Description & Property Set "Tên cấu kiện")
         public string VatLieu { get; set; } = "";             // Vật liệu (dùng cho Layer Description & Property Set "Loại vật liệu")
         public string DoChat { get; set; } = "";              // Độ chặt (Property Set "Độ chặt", VD: K95, K98)
-        public double? BeDay { get; set; }                    // Bề dày m (Property Set "Bề dày", VD: 0.05, 0.15)
+        public double? BeDay { get; set; } = 0.0;             // Bề dày m (Property Set "Bề dày", VD: 0.05, 0.15)
         public string HangMuc { get; set; } = "Đường giao thông"; // Hạng mục công trình (Property Set "Hạng mục")
 
         public byte? NewR { get; set; }
@@ -54,7 +61,7 @@ namespace Civil3DCsharp
         public DrawingColor? NewColor => (NewR.HasValue && NewG.HasValue && NewB.HasValue) ? DrawingColor.FromArgb(NewR.Value, NewG.Value, NewB.Value) : (DrawingColor?)null;
         public string NewRgbText => (NewR.HasValue && NewG.HasValue && NewB.HasValue) ? $"({NewR.Value}, {NewG.Value}, {NewB.Value})" : "---";
         public string NewHexText => (NewR.HasValue && NewG.HasValue && NewB.HasValue) ? $"#{NewR.Value:X2}{NewG.Value:X2}{NewB.Value:X2}" : "---";
-        public string BeDayText => BeDay.HasValue ? BeDay.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "";
+        public string BeDayText => BeDay.HasValue ? BeDay.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "0";
     }
 
     /// <summary>
@@ -88,7 +95,7 @@ namespace Civil3DCsharp
         private static bool _lastApplyByLayer = true;
         private static bool _lastUnlockLayers = true;
         private static bool _lastUpdatePropertySet = true;
-        private static bool _lastOnlyMissing = true;
+        private static bool _lastOnlyMissing = false;
         private static string _lastTenCongTrinh = "";
         private static string _lastViTri = "";
         private static string _lastNhomCauKien = "Hạ tầng kỹ thuật";
@@ -97,7 +104,153 @@ namespace Civil3DCsharp
         private static int _lastSelectedTab = 0;
         #endregion
 
-        #region Smart Extractors: Độ chặt & Bề dày từ Tên Layer
+        #region Smart Extractors: Cú pháp Tên Layer (Cấu kiện_Vật liệu_Bề dày), Độ chặt & Bề dày
+        public class LayerBimInfo
+        {
+            public string CauKien { get; set; } = "";
+            public string VatLieu { get; set; } = "";
+            public double BeDay { get; set; } = 0.0;
+            public bool HasThicknessDeclared { get; set; } = false;
+        }
+
+        /// <summary>
+        /// Thử phân tích chuỗi text thành số đo Bề dày kết cấu (đơn vị mét)
+        /// Hỗ trợ định dạng số thực: 0.25, 0.25m, 0,25, 0.05 m, h=0.15, d=0.2, v.v.
+        /// </summary>
+        public static bool TryParseThickness(string text, out double thickness)
+        {
+            thickness = 0.0;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            string s = text.Trim();
+            // Bỏ tiền tố h=, d=, t= nếu có
+            if (s.StartsWith("h=", StringComparison.OrdinalIgnoreCase) ||
+                s.StartsWith("d=", StringComparison.OrdinalIgnoreCase) ||
+                s.StartsWith("t=", StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(2).Trim();
+            }
+            else if (s.StartsWith("h", StringComparison.OrdinalIgnoreCase) && s.Length > 1 && (char.IsDigit(s[1]) || s[1] == '.' || s[1] == ','))
+            {
+                s = s.Substring(1).Trim();
+            }
+
+            // Đơn vị m
+            if (s.EndsWith("m", StringComparison.OrdinalIgnoreCase) && !s.EndsWith("mm", StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(0, s.Length - 1).Trim();
+            }
+
+            bool isCm = false;
+            bool isMm = false;
+            if (s.EndsWith("cm", StringComparison.OrdinalIgnoreCase))
+            {
+                isCm = true;
+                s = s.Substring(0, s.Length - 2).Trim();
+            }
+            else if (s.EndsWith("mm", StringComparison.OrdinalIgnoreCase))
+            {
+                isMm = true;
+                s = s.Substring(0, s.Length - 2).Trim();
+            }
+
+            s = s.Replace(',', '.');
+
+            if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+            {
+                if (isCm) val /= 100.0;
+                else if (isMm) val /= 1000.0;
+
+                thickness = Math.Round(val, 3);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Phân tích tên Layer theo cú pháp chuẩn: [Tên cấu kiện]_[Tên vật liệu]_[Bề dày đơn vị m]
+        /// - Thể tích lấy từ thông tin hình học đối tượng.
+        /// - Diện tích = Khối lượng (thể tích) / Bề dày (khi bề dày > 0).
+        /// - Khi bề dày không được khai báo trong tên layer: đặt bề dày = 0, diện tích lấy từ thông tin hình học của đối tượng.
+        /// </summary>
+        public static LayerBimInfo ParseLayerName(string layerName)
+        {
+            var result = new LayerBimInfo();
+            if (string.IsNullOrWhiteSpace(layerName)) return result;
+
+            string trimmed = layerName.Trim();
+            string[] parts = trimmed.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length >= 3)
+            {
+                // Kiểm tra phần cuối cùng có phải là bề dày không
+                if (TryParseThickness(parts[parts.Length - 1], out double thk))
+                {
+                    result.BeDay = thk;
+                    result.HasThicknessDeclared = thk > 0.00001;
+                    result.VatLieu = parts[parts.Length - 2].Trim();
+                    if (parts.Length == 3)
+                    {
+                        result.CauKien = parts[0].Trim();
+                    }
+                    else
+                    {
+                        result.CauKien = string.Join("_", parts.Take(parts.Length - 2)).Trim();
+                    }
+                    return result;
+                }
+            }
+
+            if (parts.Length == 2)
+            {
+                // Có 2 phần: kiểm tra xem phần 2 có phải là số bề dày không (vd: CấuKien_0.05)
+                if (TryParseThickness(parts[1], out double thk2))
+                {
+                    result.CauKien = parts[0].Trim();
+                    result.VatLieu = parts[0].Trim();
+                    result.BeDay = thk2;
+                    result.HasThicknessDeclared = thk2 > 0.00001;
+                    return result;
+                }
+                else
+                {
+                    // Cú pháp: Cấu kiện_Vật liệu (không khai báo bề dày -> bề dày = 0)
+                    result.CauKien = parts[0].Trim();
+                    result.VatLieu = parts[1].Trim();
+                    result.BeDay = 0.0;
+                    result.HasThicknessDeclared = false;
+                    return result;
+                }
+            }
+
+            if (parts.Length > 2)
+            {
+                // Nhiều phần nhưng phần cuối không phải là số: Cấu kiện là các phần đầu, Vật liệu là phần cuối, Bề dày = 0
+                result.VatLieu = parts[parts.Length - 1].Trim();
+                result.CauKien = string.Join("_", parts.Take(parts.Length - 1)).Trim();
+                result.BeDay = 0.0;
+                result.HasThicknessDeclared = false;
+                return result;
+            }
+
+            // Chỉ có 1 phần (không có dấu '_')
+            result.CauKien = trimmed;
+            result.VatLieu = trimmed;
+            result.BeDay = 0.0;
+            result.HasThicknessDeclared = false;
+
+            // Fallback: nếu tên layer có chứa từ khóa bề dày khác (vd: ..._day 5cm...)
+            double? fallbackThk = ExtractLegacyBeDayRegex(trimmed);
+            if (fallbackThk.HasValue && fallbackThk.Value > 0.00001)
+            {
+                result.BeDay = fallbackThk.Value;
+                result.HasThicknessDeclared = true;
+            }
+
+            return result;
+        }
+
         public static string ExtractDoChat(string layerName)
         {
             if (string.IsNullOrEmpty(layerName)) return "";
@@ -112,8 +265,20 @@ namespace Civil3DCsharp
         {
             if (string.IsNullOrEmpty(layerName)) return null;
 
-            // Pattern 1: có từ khóa day, chieu day, h=, d=, t=
-            var m = Regex.Match(layerName, @"(?:d[aà]y|chieu\s*d[aà]y|thickness|[_\s-]h\s*=|d\s*=|t\s*=)[_\s-]*(\d+(?:[.,]\d+)?)\s*(cm|mm|m)?", RegexOptions.IgnoreCase);
+            // 1. Thử phân tích theo cú pháp chuẩn trước
+            var parsed = ParseLayerName(layerName);
+            if (parsed.HasThicknessDeclared) return parsed.BeDay;
+
+            // 2. Fallback sang regex truyền thống
+            return ExtractLegacyBeDayRegex(layerName);
+        }
+
+        private static double? ExtractLegacyBeDayRegex(string layerName)
+        {
+            if (string.IsNullOrEmpty(layerName)) return null;
+
+            // Pattern 1: có từ khóa day, chieu day, thickness, h=, d=, t= (hỗ trợ cả dạng .03 hoặc 0.03)
+            var m = Regex.Match(layerName, @"(?:d[aà]y|chieu\s*d[aà]y|thickness|[_\s-]h\s*=|d\s*=|t\s*=)[_\s-]*(\d+(?:[.,]\d+)?|[.,]\d+)\s*(cm|mm|m)?", RegexOptions.IgnoreCase);
             if (m.Success)
             {
                 if (double.TryParse(m.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
@@ -127,8 +292,24 @@ namespace Civil3DCsharp
                 }
             }
 
-            // Pattern 2: số liền kề đơn vị cm hoặc mm (vd: 5cm, 15cm, 20cm, 50mm)
-            var m2 = Regex.Match(layerName, @"[_\s-](\d+(?:[.,]\d+)?)\s*(cm|mm)\b", RegexOptions.IgnoreCase);
+            // Pattern 2: Kích thước dạng AxBxH hoặc AxH (vd: 40x40x3cm, 300x300x50mm, 40*40*3)
+            var mDim = Regex.Match(layerName, @"\d+\s*(?:x|\*)\s*(?:\d+\s*(?:x|\*)\s*)?(\d+(?:[.,]\d+)?|[.,]\d+)\s*(cm|mm|m)?\b", RegexOptions.IgnoreCase);
+            if (mDim.Success)
+            {
+                if (double.TryParse(mDim.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                {
+                    string unit = mDim.Groups[2].Value.ToLowerInvariant();
+                    if (unit == "cm") return Math.Round(val / 100.0, 3);
+                    if (unit == "mm") return Math.Round(val / 1000.0, 3);
+                    if (unit == "m") return Math.Round(val, 3);
+                    if (val >= 10.0) return Math.Round(val / 1000.0, 3);
+                    if (val >= 1.0) return Math.Round(val / 100.0, 3);
+                    return Math.Round(val, 3);
+                }
+            }
+
+            // Pattern 3: số liền kề đơn vị cm hoặc mm (vd: 5cm, 15cm, 20cm, 50mm, 0.05m)
+            var m2 = Regex.Match(layerName, @"(?:[_\s-]|x|\*|^)(\d+(?:[.,]\d+)?|[.,]\d+)\s*(cm|mm|m)\b", RegexOptions.IgnoreCase);
             if (m2.Success)
             {
                 if (double.TryParse(m2.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
@@ -136,6 +317,7 @@ namespace Civil3DCsharp
                     string unit = m2.Groups[2].Value.ToLowerInvariant();
                     if (unit == "cm") return Math.Round(val / 100.0, 3);
                     if (unit == "mm") return Math.Round(val / 1000.0, 3);
+                    if (unit == "m") return Math.Round(val, 3);
                 }
             }
 
@@ -246,7 +428,7 @@ namespace Civil3DCsharp
             var subFont = new DrawingFont("Segoe UI", 8.25F, FontStyle.Regular);
 
             this.SuspendLayout();
-            this.Text = "Cập Nhật Màu & Property Set Cho 3D Solid (Chuẩn BIM / EIR)";
+            this.Text = "Cập Nhật Màu & Property Set Cho 3D Solid / Surface (Chuẩn BIM / EIR)";
             this.Size = _lastFormSize;
             this.MinimumSize = new Size(1080, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -264,7 +446,7 @@ namespace Civil3DCsharp
 
             lblHeaderTitle = new Label
             {
-                Text = "🎨 CẬP NHẬT MÀU & PROPERTY SET CHO 3D SOLID (CHUẨN BIM / EIR)",
+                Text = "🎨 CẬP NHẬT MÀU & PROPERTY SET CHO 3D SOLID & SURFACE (CHUẨN BIM / EIR)",
                 Font = titleFont,
                 ForeColor = DrawingColor.White,
                 AutoSize = true,
@@ -273,7 +455,7 @@ namespace Civil3DCsharp
 
             lblHeaderSub = new Label
             {
-                Text = "Tự động nhận diện màu sắc, cấu kiện, vật liệu, độ chặt, bề dày. Tính toán Diện tích (S=V/h) & Khối lượng Property Set cho 3D Solid.",
+                Text = "Tự động nhận diện màu sắc, cấu kiện, vật liệu, độ chặt, bề dày. Tính toán Diện tích & Khối lượng Property Set cho 3D Solid & Surface.",
                 Font = subFont,
                 ForeColor = DrawingColor.FromArgb(200, 220, 245),
                 AutoSize = true,
@@ -291,7 +473,7 @@ namespace Civil3DCsharp
                 Padding = new Point(14, 6)
             };
 
-            tabMainCoordination = new TabPage { Text = "🎨 Cập Nhật Màu & Property Set (3D Solid)", BackColor = DrawingColor.White };
+            tabMainCoordination = new TabPage { Text = "🎨 Cập Nhật Màu & Property Set (Solid & Surface)", BackColor = DrawingColor.White };
             tabPresetReference = new TabPage { Text = "📚 Bảng Tra Cứu & Quản Lý Mẫu Màu (BIM / EIR)", BackColor = DrawingColor.White };
 
             tabControlMain.TabPages.Add(tabMainCoordination);
@@ -434,7 +616,7 @@ namespace Civil3DCsharp
 
             chkUpdatePropertySet = new CheckBox
             {
-                Text = "🔹 Cập nhật Property Set cho 3D Solid",
+                Text = "🔹 Cập nhật Property Set (Solid & Surface)",
                 Font = boldFont,
                 ForeColor = DrawingColor.FromArgb(10, 50, 120),
                 AutoSize = true,
@@ -719,10 +901,11 @@ namespace Civil3DCsharp
 
             var colSolidCount = new DataGridViewTextBoxColumn
             {
-                HeaderText = "Solid 3D",
-                Width = 65,
+                HeaderText = "Solid / Surf",
+                Width = 90,
                 ReadOnly = true,
                 Name = "colSolidCount",
+                ToolTipText = "Số lượng 3D Solid và Surface (bao gồm Body sẽ chuyển thành Surface) thuộc Layer",
                 DefaultCellStyle = new DataGridViewCellStyle
                 {
                     Alignment = DataGridViewContentAlignment.MiddleCenter,
@@ -1046,22 +1229,41 @@ namespace Civil3DCsharp
 
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                // Đếm số lượng 3D Solid / Body theo Layer
+                // Đếm số lượng 3D Solid / Body và Surface theo Layer
                 var solidCountByLayer = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var surfaceCountByLayer = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                var solidRx = RXClass.GetClass(typeof(Solid3d));
+                var bodyRx = RXClass.GetClass(typeof(Body));
+                var civSurfRx = RXClass.GetClass(typeof(CivSurface));
+                var acadSurfRx = RXClass.GetClass(typeof(AcadSurface));
+
                 try
                 {
                     var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                     var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
                     foreach (ObjectId entId in ms)
                     {
-                        if (entId.ObjectClass.DxfName.Equals("3DSOLID", StringComparison.OrdinalIgnoreCase) ||
-                            entId.ObjectClass.DxfName.Equals("BODY", StringComparison.OrdinalIgnoreCase))
+                        if (!entId.IsValid || entId.IsErased) continue;
+                        var rxClass = entId.ObjectClass;
+                        bool isSolid = rxClass.IsDerivedFrom(solidRx);
+                        bool isBody = rxClass.IsDerivedFrom(bodyRx);
+                        bool isSurf = rxClass.IsDerivedFrom(civSurfRx) || rxClass.IsDerivedFrom(acadSurfRx);
+
+                        if (!isSolid && !isBody && !isSurf) continue;
+
+                        var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
+                        if (ent != null)
                         {
-                            var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
-                            if (ent != null)
+                            string lay = ent.Layer;
+                            if (isSolid)
                             {
-                                string lay = ent.Layer;
                                 solidCountByLayer[lay] = solidCountByLayer.TryGetValue(lay, out int count) ? count + 1 : 1;
+                            }
+                            else if (isSurf || isBody)
+                            {
+                                // Body sẽ tự động CONVTOSURFACE thành surface trước khi xử lý, nên tính vào nhóm Surface
+                                surfaceCountByLayer[lay] = surfaceCountByLayer.TryGetValue(lay, out int count) ? count + 1 : 1;
                             }
                         }
                     }
@@ -1087,13 +1289,15 @@ namespace Civil3DCsharp
                     catch { }
 
                     int solidCount = solidCountByLayer.TryGetValue(name, out int sc) ? sc : 0;
-                    double? beDayExtracted = ExtractBeDay(name);
+                    int surfaceCount = surfaceCountByLayer.TryGetValue(name, out int sfc) ? sfc : 0;
+                    var parsedInfo = ParseLayerName(name);
                     string doChatExtracted = ExtractDoChat(name);
 
                     var rowModel = new LayerBimRowModel
                     {
                         LayerName = name,
                         SolidCount = solidCount,
+                        SurfaceCount = surfaceCount,
                         CurrentColor = drawCol,
                         CurrentColorDesc = colDesc,
                         CurrentDescription = ltr.Description ?? "",
@@ -1101,18 +1305,20 @@ namespace Civil3DCsharp
                         IsLocked = ltr.IsLocked,
                         IsFrozen = ltr.IsFrozen,
                         IsOff = ltr.IsOff,
-                        IsSelected = solidCount > 0,
+                        IsSelected = (solidCount + surfaceCount) > 0,
+                        CauKien = parsedInfo.CauKien,
+                        VatLieu = parsedInfo.VatLieu,
                         DoChat = doChatExtracted,
-                        BeDay = beDayExtracted,
+                        BeDay = parsedInfo.HasThicknessDeclared ? parsedInfo.BeDay : 0.0,
                         HangMuc = _lastHangMuc
                     };
 
                     // Khôi phục từ bộ nhớ tạm (Persistent State) nếu có
                     if (_savedLayerStates.TryGetValue(name, out var saved))
                     {
-                        rowModel.SelectedPresetCode = saved.PresetCode;
-                        rowModel.CauKien = saved.CauKien;
-                        rowModel.VatLieu = saved.VatLieu;
+                        if (!string.IsNullOrEmpty(saved.PresetCode)) rowModel.SelectedPresetCode = saved.PresetCode;
+                        if (!string.IsNullOrEmpty(saved.CauKien)) rowModel.CauKien = saved.CauKien;
+                        if (!string.IsNullOrEmpty(saved.VatLieu)) rowModel.VatLieu = saved.VatLieu;
                         if (!string.IsNullOrEmpty(saved.DoChat)) rowModel.DoChat = saved.DoChat;
                         if (saved.BeDay.HasValue) rowModel.BeDay = saved.BeDay;
                         if (!string.IsNullOrEmpty(saved.HangMuc)) rowModel.HangMuc = saved.HangMuc;
@@ -1120,6 +1326,11 @@ namespace Civil3DCsharp
                         rowModel.NewG = saved.G;
                         rowModel.NewB = saved.B;
                         rowModel.IsSelected = saved.IsSelected;
+                    }
+                    else
+                    {
+                        // Tự động nhận diện mẫu màu theo Vật liệu / Cấu kiện đã tách nếu chưa có trong saved state
+                        TryAutoInferColorForModel(rowModel);
                     }
 
                     _allLayerRows.Add(rowModel);
@@ -1173,8 +1384,8 @@ namespace Civil3DCsharp
                     var matched = _presets.FirstOrDefault(p => p.Code == model.SelectedPresetCode);
                     if (matched != null)
                     {
-                        model.CauKien = matched.GroupName;
-                        model.VatLieu = matched.MaterialName;
+                        if (string.IsNullOrWhiteSpace(model.CauKien)) model.CauKien = matched.GroupName;
+                        if (string.IsNullOrWhiteSpace(model.VatLieu)) model.VatLieu = matched.MaterialName;
                         model.NewR = matched.R;
                         model.NewG = matched.G;
                         model.NewB = matched.B;
@@ -1214,7 +1425,21 @@ namespace Civil3DCsharp
 
                     row.Cells["colCheck"].Value = rowModel.IsSelected;
                     row.Cells["colLayerName"].Value = rowModel.LayerName;
-                    row.Cells["colSolidCount"].Value = rowModel.SolidCount > 0 ? rowModel.SolidCount.ToString("N0") : "-";
+                    string countDisplay = "-";
+                    if (rowModel.SolidCount > 0 && rowModel.SurfaceCount > 0)
+                    {
+                        countDisplay = $"{rowModel.SolidCount}S / {rowModel.SurfaceCount}Sf";
+                    }
+                    else if (rowModel.SolidCount > 0)
+                    {
+                        countDisplay = $"{rowModel.SolidCount}";
+                    }
+                    else if (rowModel.SurfaceCount > 0)
+                    {
+                        countDisplay = $"{rowModel.SurfaceCount} (Sf)";
+                    }
+                    row.Cells["colSolidCount"].Value = countDisplay;
+                    row.Cells["colSolidCount"].ToolTipText = $"Solid: {rowModel.SolidCount}, Surface: {rowModel.SurfaceCount} (Tổng: {rowModel.TotalEntityCount})";
 
                     // Set ComboBox display
                     string comboDisplay = "-- (Chưa gán mẫu) --";
@@ -1257,8 +1482,10 @@ namespace Civil3DCsharp
             int selectedLayers = _allLayerRows.Count(x => x.IsSelected);
             int totalSolids = _allLayerRows.Sum(x => x.SolidCount);
             int selectedSolids = _allLayerRows.Where(x => x.IsSelected).Sum(x => x.SolidCount);
+            int totalSurfaces = _allLayerRows.Sum(x => x.SurfaceCount);
+            int selectedSurfaces = _allLayerRows.Where(x => x.IsSelected).Sum(x => x.SurfaceCount);
 
-            lblStats.Text = $"📊 {totalLayers} Layer ({selectedLayers} chọn) | 🧊 {totalSolids} 3D Solid ({selectedSolids} chọn)";
+            lblStats.Text = $"📊 {totalLayers} Layer ({selectedLayers} chọn) | 🧊 {totalSolids} Solid ({selectedSolids} chọn) | 🌐 {totalSurfaces} Surface ({selectedSurfaces} chọn)";
         }
         #endregion
 
@@ -1647,8 +1874,8 @@ namespace Civil3DCsharp
                     if (preset != null)
                     {
                         model.SelectedPresetCode = preset.Code;
-                        model.CauKien = preset.GroupName;
-                        model.VatLieu = preset.MaterialName;
+                        if (string.IsNullOrWhiteSpace(model.CauKien)) model.CauKien = preset.GroupName;
+                        if (string.IsNullOrWhiteSpace(model.VatLieu)) model.VatLieu = preset.MaterialName;
                         model.NewR = preset.R;
                         model.NewG = preset.G;
                         model.NewB = preset.B;
@@ -1689,9 +1916,9 @@ namespace Civil3DCsharp
             else if (colName == "colBeDay")
             {
                 string val = row.Cells["colBeDay"].Value?.ToString()?.Trim() ?? "";
-                if (double.TryParse(val.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double dVal) && dVal > 0)
+                if (double.TryParse(val.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double dVal) && dVal >= 0)
                 {
-                    model.BeDay = dVal;
+                    model.BeDay = Math.Round(dVal, 3);
                     try
                     {
                         _isUpdatingGrid = true;
@@ -1704,11 +1931,11 @@ namespace Civil3DCsharp
                 }
                 else
                 {
-                    model.BeDay = null;
+                    model.BeDay = 0.0;
                     try
                     {
                         _isUpdatingGrid = true;
-                        row.Cells["colBeDay"].Value = "";
+                        row.Cells["colBeDay"].Value = "0";
                     }
                     finally
                     {
@@ -1734,6 +1961,26 @@ namespace Civil3DCsharp
             if (colName == "colCustomColorBtn")
             {
                 PromptCustomColor(model, row);
+            }
+        }
+
+        /// <summary>
+        /// Tự động tra cứu màu sắc theo Model vừa nạp
+        /// </summary>
+        private void TryAutoInferColorForModel(LayerBimRowModel model)
+        {
+            if (string.IsNullOrWhiteSpace(model.VatLieu) && string.IsNullOrWhiteSpace(model.CauKien) && string.IsNullOrWhiteSpace(model.LayerName)) return;
+
+            var matched = (!string.IsNullOrWhiteSpace(model.VatLieu) ? FindBestMatchingPreset(model.VatLieu) : null)
+                ?? (!string.IsNullOrWhiteSpace(model.CauKien) ? FindBestMatchingPreset(model.CauKien) : null)
+                ?? FindBestMatchingPreset(model.LayerName);
+
+            if (matched != null)
+            {
+                model.SelectedPresetCode = matched.Code;
+                model.NewR = matched.R;
+                model.NewG = matched.G;
+                model.NewB = matched.B;
             }
         }
 
@@ -1806,12 +2053,15 @@ namespace Civil3DCsharp
 
             foreach (var model in _allLayerRows)
             {
-                var matchedPreset = FindBestMatchingPreset(model.LayerName);
+                var matchedPreset = (!string.IsNullOrWhiteSpace(model.VatLieu) ? FindBestMatchingPreset(model.VatLieu) : null)
+                    ?? (!string.IsNullOrWhiteSpace(model.CauKien) ? FindBestMatchingPreset(model.CauKien) : null)
+                    ?? FindBestMatchingPreset(model.LayerName);
+
                 if (matchedPreset != null)
                 {
                     model.SelectedPresetCode = matchedPreset.Code;
-                    model.CauKien = matchedPreset.GroupName;
-                    model.VatLieu = matchedPreset.MaterialName;
+                    if (string.IsNullOrEmpty(model.CauKien)) model.CauKien = matchedPreset.GroupName;
+                    if (string.IsNullOrEmpty(model.VatLieu)) model.VatLieu = matchedPreset.MaterialName;
                     model.NewR = matchedPreset.R;
                     model.NewG = matchedPreset.G;
                     model.NewB = matchedPreset.B;
@@ -1897,8 +2147,8 @@ namespace Civil3DCsharp
             foreach (var model in selectedLayers)
             {
                 model.SelectedPresetCode = preset.Code;
-                model.CauKien = preset.GroupName;
-                model.VatLieu = preset.MaterialName;
+                if (string.IsNullOrWhiteSpace(model.CauKien)) model.CauKien = preset.GroupName;
+                if (string.IsNullOrWhiteSpace(model.VatLieu)) model.VatLieu = preset.MaterialName;
                 model.NewR = preset.R;
                 model.NewG = preset.G;
                 model.NewB = preset.B;
@@ -1911,12 +2161,15 @@ namespace Civil3DCsharp
         private void BtnApplyBatchBeDay_Click(object? sender, EventArgs e)
         {
             string text = txtBatchBeDay.Text.Trim().Replace(',', '.');
-            if (!double.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double thickness) || thickness <= 0)
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double thickness) || thickness < 0)
             {
-                MessageBox.Show("Vui lòng nhập giá trị bề dày kết cấu hợp lệ (> 0 m), ví dụ: 0.05 hoặc 0.15!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Vui lòng nhập giá trị bề dày kết cấu hợp lệ (>= 0 m), ví dụ: 0, 0.05 hoặc 0.15!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 txtBatchBeDay.Focus();
                 return;
             }
+
+            // Chuẩn hóa hiển thị trên ô nhập luôn có số 0 ở đầu (ví dụ: 0.03 thay vì .03)
+            txtBatchBeDay.Text = thickness.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
             var selectedLayers = _allLayerRows.Where(x => x.IsSelected).ToList();
             if (selectedLayers.Count == 0)
@@ -1948,9 +2201,10 @@ namespace Civil3DCsharp
             var ed = doc.Editor;
 
             string selectedLayerName = "";
+            string objectInfo = "";
             using (var interaction = ed.StartUserInteraction(this))
             {
-                var pOpt = new PromptEntityOptions("\nChọn đối tượng (3D Solid, Body,...) trên bản vẽ: ");
+                var pOpt = new PromptEntityOptions("\nChọn đối tượng (3D Solid, Body, Surface,...) trên bản vẽ: ");
                 pOpt.SetRejectMessage("\nChỉ chọn đối tượng AutoCAD hợp lệ!");
                 pOpt.AddAllowedClass(typeof(Entity), true);
 
@@ -1965,6 +2219,22 @@ namespace Civil3DCsharp
                         if (ent != null)
                         {
                             selectedLayerName = ent.Layer;
+                            if (ent is CivSurface cs && !string.IsNullOrWhiteSpace(cs.Name))
+                            {
+                                objectInfo = $"Surface '{cs.Name}'";
+                            }
+                            else if (ent is Solid3d)
+                            {
+                                objectInfo = "3D Solid";
+                            }
+                            else if (ent is Body)
+                            {
+                                objectInfo = "Body (sẽ tự động chuyển thành Surface)";
+                            }
+                            else
+                            {
+                                objectInfo = ent.GetType().Name;
+                            }
 
                             // Đọc thử các PropertySet hiện có trên đối tượng được chọn
                             try
@@ -1987,13 +2257,13 @@ namespace Civil3DCsharp
                                             if (string.IsNullOrEmpty(strVal)) continue;
 
                                             string norm = CapNhatMauVaPropertySetCmd.NormalizePropertyName(pDef.Name);
-                                            if (norm == "TENCONGTRINH" && string.IsNullOrEmpty(txtTenCongTrinh.Text.Trim()))
+                                            if ((norm == "tencongtrinh" || norm == "tenduan") && string.IsNullOrEmpty(txtTenCongTrinh.Text.Trim()))
                                                 txtTenCongTrinh.Text = strVal;
-                                            else if (norm == "VITRI" && string.IsNullOrEmpty(txtViTri.Text.Trim()))
+                                            else if ((norm == "vitri" || norm == "diadiem") && string.IsNullOrEmpty(txtViTri.Text.Trim()))
                                                 txtViTri.Text = strVal;
-                                            else if (norm == "NHOMCAUKIEN" && string.IsNullOrEmpty(txtNhomCauKien.Text.Trim()))
+                                            else if (norm == "nhomcaukien" && string.IsNullOrEmpty(txtNhomCauKien.Text.Trim()))
                                                 txtNhomCauKien.Text = strVal;
-                                            else if (norm == "HANGMUC" && string.IsNullOrEmpty(txtHangMuc.Text.Trim()))
+                                            else if (norm == "hangmuc" && string.IsNullOrEmpty(txtHangMuc.Text.Trim()))
                                                 txtHangMuc.Text = strVal;
                                         }
                                     }
@@ -2009,7 +2279,7 @@ namespace Civil3DCsharp
             if (!string.IsNullOrEmpty(selectedLayerName))
             {
                 txtSearch.Text = selectedLayerName;
-                AppendLog($"🎯 Đã chọn đối tượng trên Layer '{selectedLayerName}', nạp thông tin dự án từ Property Set.");
+                AppendLog($"🎯 Đã chọn {objectInfo} trên Layer '{selectedLayerName}', nạp thông tin dự án từ Property Set.");
             }
         }
 
@@ -2055,7 +2325,7 @@ namespace Civil3DCsharp
 
                 var headerList = new List<string>
                 {
-                    "STT", "Tên Layer", "Số Solid", "Cấu kiện", "Vật liệu", "Độ chặt", "Bề dày (m)", "Hạng mục", "Mã RGB", "Mã HEX", "Mã Mẫu BIM"
+                    "STT", "Tên Layer", "Solid / Surface", "Cấu kiện", "Vật liệu", "Độ chặt", "Bề dày (m)", "Hạng mục", "Mã RGB", "Mã HEX", "Mã Mẫu BIM"
                 };
 
                 for (int c = 0; c < headerList.Count; c++)
@@ -2081,7 +2351,10 @@ namespace Civil3DCsharp
                     ws.Cell(row, col++).SetValue(item.LayerName);
                     ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-                    ws.Cell(row, col++).SetValue(item.SolidCount);
+                    string countStr = item.SurfaceCount > 0 
+                        ? (item.SolidCount > 0 ? $"{item.SolidCount} Solid, {item.SurfaceCount} Surf" : $"{item.SurfaceCount} Surface") 
+                        : item.SolidCount.ToString();
+                    ws.Cell(row, col++).SetValue(countStr);
                     ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
                     ws.Cell(row, col++).SetValue(item.CauKien ?? "");
@@ -2327,6 +2600,8 @@ namespace Civil3DCsharp
         #region Execute Updates
         private void BtnExecute_Click(object? sender, EventArgs e)
         {
+            dgvLayers.EndEdit();
+
             var selectedRows = _allLayerRows.Where(x => x.IsSelected).ToList();
             if (selectedRows.Count == 0)
             {
@@ -2360,13 +2635,22 @@ namespace Civil3DCsharp
                     txtViTri.Text.Trim(),
                     txtNhomCauKien.Text.Trim(),
                     txtHangMuc.Text.Trim(),
-                    msg => AppendLog(msg)
+                    msg => AppendLog(msg),
+                    this
                 );
 
                 LoadDataFromDrawing();
                 PopulateLayersGrid();
 
-                string psetMsg = updatePropertySet ? $", cập nhật {result.updatedSolids} đối tượng 3D Solid / Body" : "";
+                string psetMsg = "";
+                if (updatePropertySet)
+                {
+                    var psetParts = new List<string>();
+                    if (result.updatedSolids > 0) psetParts.Add($"{result.updatedSolids} 3D Solid");
+                    if (result.updatedSurfaces > 0) psetParts.Add($"{result.updatedSurfaces} Surface");
+                    if (psetParts.Count > 0)
+                        psetMsg = $", cập nhật Property Set cho {string.Join(" & ", psetParts)}";
+                }
                 string byLayMsg = applyByLayer ? $", chuyển {result.byLayerCount} đối tượng về ByLayer" : "";
                 MessageBox.Show($"Đã hoàn tất cập nhật thành công cho {result.updatedLayers} Layer{psetMsg}{byLayMsg}!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

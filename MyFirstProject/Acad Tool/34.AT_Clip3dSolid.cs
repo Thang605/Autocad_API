@@ -13,6 +13,8 @@ using MyFirstProject.Acad_Tool;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Exception = System.Exception;
 using Region = Autodesk.AutoCAD.DatabaseServices.Region;
+using AcDbSurface = Autodesk.AutoCAD.DatabaseServices.Surface;
+using Body = Autodesk.AutoCAD.DatabaseServices.Body;
 
 [assembly: CommandClass(typeof(Civil3DCsharp.AT_Clip3dSolidCmd))]
 
@@ -56,18 +58,32 @@ namespace Civil3DCsharp
             Database db = doc.Database;
             Editor ed = doc.Editor;
 
+            // 0. Phân loại đối tượng và tự động chuyển đổi Body thành Solid3d hoặc Surface trước khi cắt
+            List<ObjectId> allSolidIds = new List<ObjectId>();
+            List<ObjectId> allSurfaceIds = new List<ObjectId>();
+            int convertedBodyCount = 0;
+
+            PrepareTargetsAndConvertBodies(doc, form.SelectedSolidIds, allSolidIds, allSurfaceIds, out convertedBodyCount);
+
+            if (allSolidIds.Count == 0 && allSurfaceIds.Count == 0)
+            {
+                ed.WriteMessage("\n[Lỗi] Không có khối 3D Solid, Body hoặc Surface hợp lệ nào để cắt.");
+                return;
+            }
+
             using (DocumentLock docLock = doc.LockDocument())
             {
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
                     try
                     {
-                        // 1. Thu thập các khối Solid3d hợp lệ và tính toán Z min/max
+                        // 1. Thu thập các khối Solid3d và Surface hợp lệ và tính toán Z min/max
                         List<Solid3d> targetSolids = new List<Solid3d>();
+                        List<AcDbSurface> targetSurfaces = new List<AcDbSurface>();
                         double minZ = double.MaxValue;
                         double maxZ = double.MinValue;
 
-                        foreach (ObjectId solidId in form.SelectedSolidIds)
+                        foreach (ObjectId solidId in allSolidIds)
                         {
                             if (solidId.IsNull || !solidId.IsValid || solidId.IsErased) continue;
 
@@ -75,23 +91,25 @@ namespace Civil3DCsharp
                             if (s != null && !s.IsErased)
                             {
                                 targetSolids.Add(s);
-                                try
-                                {
-                                    Extents3d ext = s.GeometricExtents;
-                                    if (!double.IsNaN(ext.MinPoint.Z) && !double.IsInfinity(ext.MinPoint.Z) &&
-                                        !double.IsNaN(ext.MaxPoint.Z) && !double.IsInfinity(ext.MaxPoint.Z))
-                                    {
-                                        if (ext.MinPoint.Z < minZ) minZ = ext.MinPoint.Z;
-                                        if (ext.MaxPoint.Z > maxZ) maxZ = ext.MaxPoint.Z;
-                                    }
-                                }
-                                catch { }
+                                UpdateMinMaxZ(s, ref minZ, ref maxZ);
                             }
                         }
 
-                        if (targetSolids.Count == 0)
+                        foreach (ObjectId surfId in allSurfaceIds)
                         {
-                            ed.WriteMessage("\n[Lỗi] Không có khối 3D Solid hợp lệ nào để cắt.");
+                            if (surfId.IsNull || !surfId.IsValid || surfId.IsErased) continue;
+
+                            AcDbSurface sf = tr.GetObject(surfId, OpenMode.ForRead) as AcDbSurface;
+                            if (sf != null && !sf.IsErased)
+                            {
+                                targetSurfaces.Add(sf);
+                                UpdateMinMaxZ(sf, ref minZ, ref maxZ);
+                            }
+                        }
+
+                        if (targetSolids.Count == 0 && targetSurfaces.Count == 0)
+                        {
+                            ed.WriteMessage("\n[Lỗi] Không có khối 3D Solid hoặc Surface hợp lệ nào để cắt.");
                             return;
                         }
 
@@ -157,7 +175,7 @@ namespace Civil3DCsharp
                             }
                         }
 
-                        // 4. Thực hiện phép toán Boolean cho từng Solid
+                        // 4.1 Thực hiện phép toán Boolean cho từng Solid
                         int totalProcessed = 0;
                         int createdInsideCount = 0;
                         int createdOutsideCount = 0;
@@ -383,6 +401,177 @@ namespace Civil3DCsharp
                             }
                         }
 
+                        // 4.2 Thực hiện phép cắt cho từng Surface (chuyển đổi từ Body hoặc Surface có sẵn)
+                        int createdSurfaceInsideCount = 0;
+                        int createdSurfaceOutsideCount = 0;
+                        int erasedOriginalSurfaceCount = 0;
+
+                        foreach (AcDbSurface originalSurf in targetSurfaces)
+                        {
+                            if (originalSurf == null || originalSurf.IsErased) continue;
+                            totalProcessed++;
+                            bool anyCreated = false;
+
+                            BlockTableRecord targetSpace = (BlockTableRecord)tr.GetObject(originalSurf.BlockId, OpenMode.ForWrite);
+
+                            if (form.DeleteOriginal)
+                            {
+                                UnlockLayerIfLocked(db, tr, originalSurf.LayerId);
+                            }
+
+                            if (form.ClipMode == ClipSolidMode.KeepInside)
+                            {
+                                foreach (Solid3d baseCutter in baseCutters)
+                                {
+                                    using (Solid3d cutterClone = (Solid3d)baseCutter.Clone())
+                                    {
+                                        cutterClone.RecordHistory = false;
+                                        try
+                                        {
+                                            Entity[] insideEntities = originalSurf.BooleanIntersect(cutterClone);
+                                            if (insideEntities != null && insideEntities.Length > 0)
+                                            {
+                                                foreach (Entity ent in insideEntities)
+                                                {
+                                                    if (ent != null && !ent.IsDisposed)
+                                                    {
+                                                        if (form.AssignLayer) ent.Layer = form.LayerInside;
+                                                        else ent.Layer = originalSurf.Layer;
+                                                        ent.Color = originalSurf.Color;
+                                                        targetSpace.AppendEntity(ent);
+                                                        tr.AddNewlyCreatedDBObject(ent, true);
+                                                        createdSurfaceInsideCount++;
+                                                        anyCreated = true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+                                if (!anyCreated) unaffectedCount++;
+                            }
+                            else if (form.ClipMode == ClipSolidMode.KeepOutside)
+                            {
+                                AcDbSurface outsideClone = (AcDbSurface)originalSurf.Clone();
+                                foreach (Solid3d baseCutter in baseCutters)
+                                {
+                                    if (outsideClone == null || outsideClone.IsDisposed) break;
+                                    using (Solid3d cutterClone = (Solid3d)baseCutter.Clone())
+                                    {
+                                        cutterClone.RecordHistory = false;
+                                        try
+                                        {
+                                            AcDbSurface res = outsideClone.BooleanSubtract(cutterClone);
+                                            if (res != null && res != outsideClone)
+                                            {
+                                                outsideClone.Dispose();
+                                                outsideClone = res;
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+
+                                if (outsideClone != null && !outsideClone.IsDisposed)
+                                {
+                                    if (IsValidSurface(outsideClone))
+                                    {
+                                        if (form.AssignLayer) outsideClone.Layer = form.LayerOutside;
+                                        else outsideClone.Layer = originalSurf.Layer;
+                                        outsideClone.Color = originalSurf.Color;
+                                        targetSpace.AppendEntity(outsideClone);
+                                        tr.AddNewlyCreatedDBObject(outsideClone, true);
+                                        createdSurfaceOutsideCount++;
+                                        anyCreated = true;
+                                    }
+                                    else
+                                    {
+                                        outsideClone.Dispose();
+                                    }
+                                }
+                                if (!anyCreated) unaffectedCount++;
+                            }
+                            else // SplitBoth
+                            {
+                                // Inside
+                                foreach (Solid3d baseCutter in baseCutters)
+                                {
+                                    using (Solid3d cutterIn = (Solid3d)baseCutter.Clone())
+                                    {
+                                        cutterIn.RecordHistory = false;
+                                        try
+                                        {
+                                            Entity[] insideEntities = originalSurf.BooleanIntersect(cutterIn);
+                                            if (insideEntities != null && insideEntities.Length > 0)
+                                            {
+                                                foreach (Entity ent in insideEntities)
+                                                {
+                                                    if (ent != null && !ent.IsDisposed)
+                                                    {
+                                                        if (form.AssignLayer) ent.Layer = form.LayerInside;
+                                                        else ent.Layer = originalSurf.Layer;
+                                                        ent.Color = originalSurf.Color;
+                                                        targetSpace.AppendEntity(ent);
+                                                        tr.AddNewlyCreatedDBObject(ent, true);
+                                                        createdSurfaceInsideCount++;
+                                                        anyCreated = true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+
+                                // Outside
+                                AcDbSurface outsideClone = (AcDbSurface)originalSurf.Clone();
+                                foreach (Solid3d baseCutter in baseCutters)
+                                {
+                                    if (outsideClone == null || outsideClone.IsDisposed) break;
+                                    using (Solid3d cutterOut = (Solid3d)baseCutter.Clone())
+                                    {
+                                        cutterOut.RecordHistory = false;
+                                        try
+                                        {
+                                            AcDbSurface res = outsideClone.BooleanSubtract(cutterOut);
+                                            if (res != null && res != outsideClone)
+                                            {
+                                                outsideClone.Dispose();
+                                                outsideClone = res;
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+
+                                if (outsideClone != null && !outsideClone.IsDisposed)
+                                {
+                                    if (IsValidSurface(outsideClone))
+                                    {
+                                        if (form.AssignLayer) outsideClone.Layer = form.LayerOutside;
+                                        else outsideClone.Layer = originalSurf.Layer;
+                                        outsideClone.Color = originalSurf.Color;
+                                        targetSpace.AppendEntity(outsideClone);
+                                        tr.AddNewlyCreatedDBObject(outsideClone, true);
+                                        createdSurfaceOutsideCount++;
+                                        anyCreated = true;
+                                    }
+                                    else
+                                    {
+                                        outsideClone.Dispose();
+                                    }
+                                }
+                            }
+
+                            if (form.DeleteOriginal && anyCreated && !originalSurf.IsErased)
+                            {
+                                originalSurf.UpgradeOpen();
+                                originalSurf.Erase(true);
+                                erasedOriginalSurfaceCount++;
+                            }
+                        }
+
                         foreach (Solid3d cutter in baseCutters)
                         {
                             cutter.Dispose();
@@ -391,31 +580,243 @@ namespace Civil3DCsharp
 
                         // 5. Báo cáo thống kê chi tiết
                         ed.WriteMessage("\n=======================================================");
-                        ed.WriteMessage("\n🎉 HOÀN THÀNH CẮT / XÓA 3D SOLID THEO POLYLINE MẶT BẰNG!");
-                        ed.WriteMessage($"\n  • Số đường ranh giới Polyline áp dụng:    {baseCutters.Count}");
-                        ed.WriteMessage($"\n  • Tổng 3D Solid xử lý:                    {totalProcessed}");
-                        if (createdInsideCount > 0)
-                            ed.WriteMessage($"\n  • Số khối tạo ra bên trong:              {createdInsideCount}" + (form.AssignLayer ? $" (Layer: {form.LayerInside})" : ""));
-                        if (createdOutsideCount > 0)
-                            ed.WriteMessage($"\n  • Số khối cắt còn lại bên ngoài:          {createdOutsideCount}" + (form.AssignLayer ? $" (Layer: {form.LayerOutside})" : ""));
-                        if (completelyInsideErasedCount > 0)
-                            ed.WriteMessage($"\n  • Số 3D Solid nằm trọn bên trong đã xóa:  {completelyInsideErasedCount}");
-                        if (erasedOriginalCount > 0)
-                            ed.WriteMessage($"\n  • Tổng số 3D Solid gốc đã xóa:           {erasedOriginalCount}");
+                        ed.WriteMessage("\n🎉 HOÀN THÀNH CẮT / CLIP 3D SOLID & BODY THEO POLYLINE MẶT BẰNG!");
+                        ed.WriteMessage($"\n  • Số đường ranh giới Polyline áp dụng:     {baseCutters.Count}");
+                        ed.WriteMessage($"\n  • Tổng 3D Solid xử lý:                     {targetSolids.Count}");
+                        if (convertedBodyCount > 0)
+                            ed.WriteMessage($"\n  • Số Body đã tự động chuyển đổi & xử lý:   {convertedBodyCount}");
+                        if (targetSurfaces.Count > 0)
+                            ed.WriteMessage($"\n  • Tổng Surface xử lý:                      {targetSurfaces.Count}");
+                        int totalInside = createdInsideCount + createdSurfaceInsideCount;
+                        int totalOutside = createdOutsideCount + createdSurfaceOutsideCount;
+                        if (totalInside > 0)
+                            ed.WriteMessage($"\n  • Số phần tạo ra bên trong:                {totalInside} ({createdInsideCount} Solid, {createdSurfaceInsideCount} Surface)" + (form.AssignLayer ? $" (Layer: {form.LayerInside})" : ""));
+                        if (totalOutside > 0)
+                            ed.WriteMessage($"\n  • Số phần cắt còn lại bên ngoài:           {totalOutside} ({createdOutsideCount} Solid, {createdSurfaceOutsideCount} Surface)" + (form.AssignLayer ? $" (Layer: {form.LayerOutside})" : ""));
+                        int totalErased = erasedOriginalCount + erasedOriginalSurfaceCount + convertedBodyCount;
+                        if (totalErased > 0)
+                            ed.WriteMessage($"\n  • Tổng đối tượng gốc đã xóa:               {totalErased} ({erasedOriginalCount} Solid, {convertedBodyCount} Body, {erasedOriginalSurfaceCount} Surface)");
                         if (unaffectedCount > 0)
-                            ed.WriteMessage($"\n  • Số 3D Solid ngoài ranh giới (giữ nguyên): {unaffectedCount}");
+                            ed.WriteMessage($"\n  • Số đối tượng ngoài ranh giới (giữ nguyên): {unaffectedCount}");
                         if (failedCount > 0)
-                            ed.WriteMessage($"\n  • Số đối tượng lỗi kỹ thuật:              {failedCount}");
+                            ed.WriteMessage($"\n  • Số đối tượng lỗi kỹ thuật:               {failedCount}");
                         ed.WriteMessage("\n=======================================================\n");
                     }
                     catch (Exception ex)
                     {
                         tr.Abort();
-                        ed.WriteMessage($"\n[Lỗi ngoại lệ khi cắt 3D Solid]: {ex.Message}");
+                        ed.WriteMessage($"\n[Lỗi ngoại lệ khi cắt 3D Solid / Body]: {ex.Message}");
                     }
                 }
             }
         }
+
+        #region Helper Geometry & Conversion Methods
+        private static void PrepareTargetsAndConvertBodies(
+            Document doc,
+            List<ObjectId> selectedIds,
+            List<ObjectId> outSolidIds,
+            List<ObjectId> outSurfaceIds,
+            out int convertedBodyCount)
+        {
+            convertedBodyCount = 0;
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+
+            List<ObjectId> bodyIds = new List<ObjectId>();
+
+            RXClass solidClass = RXClass.GetClass(typeof(Solid3d));
+            RXClass bodyClass = RXClass.GetClass(typeof(Body));
+            RXClass surfClass = RXClass.GetClass(typeof(AcDbSurface));
+
+            foreach (ObjectId id in selectedIds)
+            {
+                if (id.IsNull || !id.IsValid || id.IsErased) continue;
+                if (id.ObjectClass.IsDerivedFrom(solidClass))
+                {
+                    outSolidIds.Add(id);
+                }
+                else if (id.ObjectClass.IsDerivedFrom(bodyClass))
+                {
+                    bodyIds.Add(id);
+                }
+                else if (id.ObjectClass.IsDerivedFrom(surfClass))
+                {
+                    outSurfaceIds.Add(id);
+                }
+            }
+
+            if (bodyIds.Count == 0) return;
+
+            ed.WriteMessage($"\n[Phát hiện Body]: Tìm thấy {bodyIds.Count} đối tượng Body. Đang tự động chuyển đổi sang Surface / Solid3d...");
+
+            // Thử chuyển đổi Native trong một transaction nhanh
+            List<ObjectId> remainingBodies = new List<ObjectId>();
+            using (DocumentLock bLock = doc.LockDocument())
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    BlockTableRecord currentSpace = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+
+                    foreach (ObjectId bId in bodyIds)
+                    {
+                        if (bId.IsNull || !bId.IsValid || bId.IsErased) continue;
+                        Body b = tr.GetObject(bId, OpenMode.ForWrite) as Body;
+                        if (b == null || b.IsErased) continue;
+
+                        UnlockLayerIfLocked(db, tr, b.LayerId);
+
+                        bool converted = false;
+
+                        // Thử 1: Chuyển thành Solid3d nếu là solid kín
+                        try
+                        {
+                            Solid3d testSolid = new Solid3d();
+                            testSolid.CreateFrom(b);
+                            testSolid.SetDatabaseDefaults();
+                            testSolid.LayerId = b.LayerId;
+                            testSolid.Color = b.Color;
+                            currentSpace.AppendEntity(testSolid);
+                            tr.AddNewlyCreatedDBObject(testSolid, true);
+                            outSolidIds.Add(testSolid.ObjectId);
+                            b.Erase(true);
+                            converted = true;
+                            convertedBodyCount++;
+                        }
+                        catch { }
+
+                        // Thử 2: Chuyển thành Surface qua Native API
+                        if (!converted)
+                        {
+                            try
+                            {
+                                AcDbSurface testSurf = AcDbSurface.CreateFrom(b);
+                                if (testSurf != null)
+                                {
+                                    testSurf.SetDatabaseDefaults();
+                                    testSurf.LayerId = b.LayerId;
+                                    testSurf.Color = b.Color;
+                                    currentSpace.AppendEntity(testSurf);
+                                    tr.AddNewlyCreatedDBObject(testSurf, true);
+                                    outSurfaceIds.Add(testSurf.ObjectId);
+                                    b.Erase(true);
+                                    converted = true;
+                                    convertedBodyCount++;
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (!converted)
+                        {
+                            remainingBodies.Add(bId);
+                        }
+                    }
+                    tr.Commit();
+                }
+            }
+
+            // Với các Body còn lại chưa chuyển được bằng Native API -> Dùng lệnh CONVTOSURFACE của AutoCAD
+            if (remainingBodies.Count > 0)
+            {
+                List<ObjectId> newAppendedIds = new List<ObjectId>();
+                void OnAppended(object sender, ObjectEventArgs args)
+                {
+                    if (args.DBObject is AcDbSurface || args.DBObject is Solid3d)
+                    {
+                        newAppendedIds.Add(args.DBObject.ObjectId);
+                    }
+                }
+
+                db.ObjectAppended += OnAppended;
+                try
+                {
+                    SelectionSet ss = SelectionSet.FromObjectIds(remainingBodies.ToArray());
+                    ed.Command("._CONVTOSURFACE", ss, "");
+                }
+                catch (Exception ex)
+                {
+                    ed.WriteMessage($"\n[Cảnh báo khi chạy CONVTOSURFACE]: {ex.Message}");
+                }
+                finally
+                {
+                    db.ObjectAppended -= OnAppended;
+                }
+
+                foreach (ObjectId newId in newAppendedIds)
+                {
+                    if (newId.ObjectClass.IsDerivedFrom(solidClass))
+                    {
+                        outSolidIds.Add(newId);
+                        convertedBodyCount++;
+                    }
+                    else if (newId.ObjectClass.IsDerivedFrom(surfClass))
+                    {
+                        outSurfaceIds.Add(newId);
+                        convertedBodyCount++;
+                    }
+                }
+
+                // Xóa các Body gốc nếu chưa bị xóa
+                using (DocumentLock cleanLock = doc.LockDocument())
+                {
+                    using (Transaction trClean = db.TransactionManager.StartTransaction())
+                    {
+                        foreach (ObjectId bId in remainingBodies)
+                        {
+                            if (bId.IsNull || !bId.IsValid || bId.IsErased) continue;
+                            try
+                            {
+                                DBObject obj = trClean.GetObject(bId, OpenMode.ForWrite);
+                                if (obj != null && !obj.IsErased)
+                                {
+                                    UnlockLayerIfLocked(db, trClean, ((Entity)obj).LayerId);
+                                    obj.Erase(true);
+                                }
+                            }
+                            catch { }
+                        }
+                        trClean.Commit();
+                    }
+                }
+            }
+
+            ed.WriteMessage($"\n[Chuyển đổi Body hoàn tất]: {convertedBodyCount}/{bodyIds.Count} Body đã được chuyển đổi thành công.");
+        }
+
+        private static void UpdateMinMaxZ(Entity ent, ref double minZ, ref double maxZ)
+        {
+            try
+            {
+                Extents3d ext = ent.GeometricExtents;
+                if (!double.IsNaN(ext.MinPoint.Z) && !double.IsInfinity(ext.MinPoint.Z) &&
+                    !double.IsNaN(ext.MaxPoint.Z) && !double.IsInfinity(ext.MaxPoint.Z))
+                {
+                    if (ext.MinPoint.Z < minZ) minZ = ext.MinPoint.Z;
+                    if (ext.MaxPoint.Z > maxZ) maxZ = ext.MaxPoint.Z;
+                }
+            }
+            catch { }
+        }
+
+        private static bool IsValidSurface(AcDbSurface surf)
+        {
+            if (surf == null || surf.IsDisposed) return false;
+            try
+            {
+                double area = surf.GetArea();
+                if (area > 1e-6) return true;
+            }
+            catch { }
+            try
+            {
+                Extents3d ext = surf.GeometricExtents;
+                if (ext.MaxPoint.DistanceTo(ext.MinPoint) > 1e-4) return true;
+            }
+            catch { }
+            return false;
+        }
+        #endregion
 
         #region Helper Geometry Methods
         private static Region CreateRegionFromEntity(Entity ent, Transaction tr, Editor ed)

@@ -252,8 +252,8 @@ namespace MyFirstProject
 
             // Property Sets
             dynamic subMenuProp = menu.AddSubMenu(menu.Count + 1, "Property Sets");
-            AddHeader(subMenuProp, "--- 3D Solid & Body ---");
-            AddMenuItem(subMenuProp, "Cập Nhật Màu & PropertySet BIM (3D Solid)", "AT_Cap_Nhat_Mau_Va_Property_Set ");
+            AddHeader(subMenuProp, "--- 3D Solid & Surface ---");
+            AddMenuItem(subMenuProp, "Cập Nhật Màu & PropertySet BIM (Solid & Surface)", "AT_Cap_Nhat_Mau_Va_Property_Set ");
             AddMenuItem(subMenuProp, "Cập Nhật PropertySet Theo Layer", "AT_Solid_Update_PropertySet ");
             AddMenuItem(subMenuProp, "Set PropertySet 3D Solid", "AT_Solid_Set_PropertySet ");
             AddMenuItem(subMenuProp, "Show 3D Solid Info", "AT_Solid_Show_Info ");

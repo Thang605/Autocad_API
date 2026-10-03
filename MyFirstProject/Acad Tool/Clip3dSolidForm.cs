@@ -9,6 +9,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Exception = System.Exception;
 using Font = System.Drawing.Font;
@@ -92,7 +93,7 @@ namespace MyFirstProject.Acad_Tool
 
         private void InitializeComponent()
         {
-            this.Text = "Cắt / Clip 3D Solid Theo Polyline Mặt Bằng";
+            this.Text = "Cắt / Clip 3D Solid & Body Theo Polyline Mặt Bằng";
             this.Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point);
             this.Size = _lastFormSize.Width > 0 ? _lastFormSize : new Size(580, 680);
             this.MinimumSize = new Size(540, 640);
@@ -104,10 +105,10 @@ namespace MyFirstProject.Acad_Tool
             int margin = 14;
             int clientWidth = this.ClientSize.Width;
 
-            // 1. GroupBox Chọn 3D Solid
+            // 1. GroupBox Chọn 3D Solid / Body / Surface
             grpSolids = new GroupBox
             {
-                Text = " 1. Đối tượng 3D Solid cần cắt ",
+                Text = " 1. Đối tượng 3D Solid / Body / Surface cần cắt ",
                 Location = new Point(margin, 12),
                 Size = new Size(clientWidth - margin * 2, 95),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -116,7 +117,7 @@ namespace MyFirstProject.Acad_Tool
 
             btnPickSolids = new Button
             {
-                Text = "Chọn 3D Solid trên CAD",
+                Text = "Chọn 3D Solid / Body trên CAD",
                 Location = new Point(14, 25),
                 Size = new Size(220, 32),
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
@@ -126,9 +127,9 @@ namespace MyFirstProject.Acad_Tool
 
             btnSelectAllSolids = new Button
             {
-                Text = "Chọn tất cả 3D Solid",
+                Text = "Chọn tất cả 3D Solid & Body",
                 Location = new Point(244, 25),
-                Size = new Size(180, 32),
+                Size = new Size(200, 32),
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
                 UseVisualStyleBackColor = true
             };
@@ -390,13 +391,17 @@ namespace MyFirstProject.Acad_Tool
             {
                 TypedValue[] tv = new TypedValue[]
                 {
-                    new TypedValue((int)DxfCode.Start, "3DSOLID")
+                    new TypedValue((int)DxfCode.Operator, "<or"),
+                    new TypedValue((int)DxfCode.Start, "3DSOLID"),
+                    new TypedValue((int)DxfCode.Start, "BODY"),
+                    new TypedValue((int)DxfCode.Start, "*SURFACE"),
+                    new TypedValue((int)DxfCode.Operator, "or>")
                 };
                 SelectionFilter filter = new SelectionFilter(tv);
 
                 PromptSelectionOptions pso = new PromptSelectionOptions
                 {
-                    MessageForAdding = "\nChọn các đối tượng 3D Solid cần cắt: "
+                    MessageForAdding = "\nChọn các đối tượng 3D Solid / Body / Surface cần cắt: "
                 };
 
                 PromptSelectionResult psr = ed.GetSelection(pso, filter);
@@ -429,9 +434,16 @@ namespace MyFirstProject.Acad_Tool
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
 
+                RXClass solidClass = RXClass.GetClass(typeof(Solid3d));
+                RXClass bodyClass = RXClass.GetClass(typeof(Body));
+                RXClass surfClass = RXClass.GetClass(typeof(Autodesk.AutoCAD.DatabaseServices.Surface));
+
                 foreach (ObjectId id in btr)
                 {
-                    if (id.ObjectClass.DxfName.Equals("3DSOLID", StringComparison.OrdinalIgnoreCase))
+                    if (id.IsNull || id.IsErased) continue;
+                    if (id.ObjectClass.IsDerivedFrom(solidClass) ||
+                        id.ObjectClass.IsDerivedFrom(bodyClass) ||
+                        id.ObjectClass.IsDerivedFrom(surfClass))
                     {
                         SelectedSolidIds.Add(id);
                     }
@@ -537,7 +549,29 @@ namespace MyFirstProject.Acad_Tool
         {
             if (SelectedSolidIds.Count > 0)
             {
-                lblSolidStatus.Text = $"Đã chọn: {SelectedSolidIds.Count} đối tượng 3D Solid.";
+                int solidCount = 0;
+                int bodyCount = 0;
+                int surfCount = 0;
+
+                RXClass solidClass = RXClass.GetClass(typeof(Solid3d));
+                RXClass bodyClass = RXClass.GetClass(typeof(Body));
+                RXClass surfClass = RXClass.GetClass(typeof(Autodesk.AutoCAD.DatabaseServices.Surface));
+
+                foreach (ObjectId id in SelectedSolidIds)
+                {
+                    if (id.IsNull || id.IsErased) continue;
+                    if (id.ObjectClass.IsDerivedFrom(solidClass)) solidCount++;
+                    else if (id.ObjectClass.IsDerivedFrom(bodyClass)) bodyCount++;
+                    else if (id.ObjectClass.IsDerivedFrom(surfClass)) surfCount++;
+                }
+
+                List<string> parts = new List<string>();
+                if (solidCount > 0) parts.Add($"{solidCount} Solid");
+                if (bodyCount > 0) parts.Add($"{bodyCount} Body");
+                if (surfCount > 0) parts.Add($"{surfCount} Surface");
+
+                string detail = parts.Count > 0 ? $" ({string.Join(", ", parts)})" : "";
+                lblSolidStatus.Text = $"Đã chọn: {SelectedSolidIds.Count} đối tượng{detail}.";
                 lblSolidStatus.ForeColor = Color.DarkGreen;
             }
             else
@@ -554,8 +588,8 @@ namespace MyFirstProject.Acad_Tool
             // Kiểm tra tính hợp lệ
             if (SelectedSolidIds == null || SelectedSolidIds.Count == 0)
             {
-                MessageBox.Show(this, "Vui lòng chọn ít nhất một đối tượng 3D Solid cần cắt!",
-                    "Chưa chọn Solid", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "Vui lòng chọn ít nhất một đối tượng 3D Solid hoặc Body cần cắt!",
+                    "Chưa chọn đối tượng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
