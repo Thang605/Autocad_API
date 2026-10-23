@@ -116,7 +116,7 @@ namespace Civil3DCsharp
         };
 
         /// <summary>
-        /// Đảm bảo định dạng số thực Property Data Format (BIM / Standard) luôn hiển thị đầy đủ số 0 ở đầu (LeadingZeros = true)
+        /// Đảm bảo định dạng số thực Property Data Format (BIM / Standard) luôn hiển thị đầy đủ số 0 ở đầu (LeadingZeros = false nghĩa là bỏ tick Leading trong nhóm Zero Suppression)
         /// Tránh bị AutoCAD triệt tiêu số 0 ở đầu (ví dụ hiển thị 0.03 thay vì .03)
         /// </summary>
         public static ObjectId EnsureBimPropertyDataFormat(Transaction tr, Database db)
@@ -127,7 +127,7 @@ namespace Civil3DCsharp
                 string bimFormatName = "BIM_Real_Format";
                 ObjectId targetFormatId = ObjectId.Null;
 
-                // 1. Cập nhật định dạng Standard có sẵn trong bản vẽ để luôn hiển thị số 0 ở đầu
+                // 1. Cập nhật định dạng Standard có sẵn trong bản vẽ để bỏ tick Leading trong Zero Suppression
                 try
                 {
                     ObjectId stdId = DictionaryPropertyDataFormat.GetStandardFormat(db);
@@ -135,7 +135,7 @@ namespace Civil3DCsharp
                     {
                         if (tr.GetObject(stdId, OpenMode.ForWrite) is PropertyDataFormat stdPdf)
                         {
-                            stdPdf.LeadingZeros = true;
+                            stdPdf.LeadingZeros = false;
                             stdPdf.TrailingZeros = false;
                             if (stdPdf.Precision < 3) stdPdf.Precision = 3;
                             targetFormatId = stdId;
@@ -144,7 +144,7 @@ namespace Civil3DCsharp
                 }
                 catch { }
 
-                // 2. Duyệt qua tất cả các Record định dạng hiện có trong Dictionary để bật LeadingZeros = true
+                // 2. Duyệt qua tất cả các Record định dạng hiện có trong Dictionary để bỏ tick Leading (LeadingZeros = false)
                 try
                 {
                     ObjectIdCollection formatRecs = formatDict.Records;
@@ -156,7 +156,7 @@ namespace Civil3DCsharp
                             {
                                 if (tr.GetObject(fId, OpenMode.ForWrite) is PropertyDataFormat pdf)
                                 {
-                                    pdf.LeadingZeros = true;
+                                    pdf.LeadingZeros = false;
                                     pdf.TrailingZeros = false;
                                     if (pdf.Precision < 3) pdf.Precision = 3;
                                     if (targetFormatId.IsNull) targetFormatId = fId;
@@ -168,7 +168,7 @@ namespace Civil3DCsharp
                 }
                 catch { }
 
-                // 3. Lấy hoặc tạo định dạng chuẩn chuyên dụng BIM_Real_Format
+                // 3. Lấy hoặc tạo định dạng chuẩn chuyên dụng BIM_Real_Format (bỏ tick Leading)
                 try
                 {
                     if (formatDict.Has(bimFormatName, tr))
@@ -176,7 +176,7 @@ namespace Civil3DCsharp
                         ObjectId existingBimId = formatDict.GetAt(bimFormatName);
                         if (tr.GetObject(existingBimId, OpenMode.ForWrite) is PropertyDataFormat existingPdf)
                         {
-                            existingPdf.LeadingZeros = true;
+                            existingPdf.LeadingZeros = false;
                             existingPdf.TrailingZeros = false;
                             existingPdf.Precision = 3;
                         }
@@ -186,8 +186,8 @@ namespace Civil3DCsharp
                     {
                         PropertyDataFormat newFormat = new();
                         newFormat.SubSetDatabaseDefaults(db);
-                        newFormat.Description = "Định dạng số thực BIM (hiển thị số 0 ở đầu: 0.03 thay vì .03)";
-                        newFormat.LeadingZeros = true;
+                        newFormat.Description = "Định dạng số thực BIM (bỏ tick Leading trong Zero Suppression: hiển thị 0.03 thay vì .03)";
+                        newFormat.LeadingZeros = false;
                         newFormat.TrailingZeros = false;
                         newFormat.Precision = 3;
 

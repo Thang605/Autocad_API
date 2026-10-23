@@ -106,8 +106,11 @@ namespace MyFirstProject
             AddMenuItem(subMenuCorridor, "Xóa Các Region Đang Bị Tắt", "CTC_Xoa_Region_BiTat ");
             AddHeader(subMenuCorridor, "--- Corridor Surface ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Surface", "CTSV_TaoCorridorSurface ");
-            AddHeader(subMenuCorridor, "--- Xuất 3D Solid / Body ---");
+            AddHeader(subMenuCorridor, "--- Xuất 3D Solid / Body / Ranh giới ---");
             AddMenuItem(subMenuCorridor, "Xuất Solid Từ Corridor", "CTC_Xuat_Solid_Tu_Corridor ");
+            AddMenuItem(subMenuCorridor, "Trích Xuất Ranh Giới Corridor", "CTC_Trich_Xuat_Ranh_Gioi_Corridor ");
+            AddHeader(subMenuCorridor, "--- Subassembly .NET ---");
+            AddMenuItem(subMenuCorridor, "Quản Lý & Tạo Subassembly .NET (C# / Stock)", "CTC_Quan_Ly_Subassembly_DotNet ");
 
             // Parcel
             dynamic subMenuParcel = menu.AddSubMenu(menu.Count + 1, "Parcel");
@@ -165,6 +168,7 @@ namespace MyFirstProject
             dynamic subMenuSurface = menu.AddSubMenu(menu.Count + 1, "Surface");
             AddMenuItem(subMenuSurface, "Cao Độ Mặt Phẳng Tại CogoPoint", "CTSU_CaoDoMatPhang_TaiCogopoint ");
             AddMenuItem(subMenuSurface, "Tạo Spot Elevation Tại Tim", "CTS_TaoSpotElevation_OnSurface_TaiTim ");
+            AddMenuItem(subMenuSurface, "Trích Xuất 3D Solid Kết Cấu Áo Đường", "AT_Xuat_Solid_KCAD_Tu_MatPhang ");
 
             // Feature Line
             dynamic subMenuFeatureLine = menu.AddSubMenu(menu.Count + 1, "Feature Line");
@@ -297,7 +301,6 @@ namespace MyFirstProject
 
             // In ấn
             dynamic subMenuPrint = menu.AddSubMenu(menu.Count + 1, "In ấn");
-            AddMenuItem(subMenuPrint, "In Bản Vẽ PDF (DWG To PDF)", "AT_In_Ban_Ve_Pdf ");
             AddMenuItem(subMenuPrint, "In Model Hàng Loạt", "AT_InModel_HangLoat ");
             AddMenuItem(subMenuPrint, "In Bản Vẽ Theo Block", "AT_InBanVe_TheoBlock ");
 
@@ -357,6 +360,8 @@ namespace MyFirstProject
             dynamic subMenuOther = menu.AddSubMenu(menu.Count + 1, "Khác");
             AddMenuItem(subMenuOther, "Tạo Outline", "AT_TaoOutline ");
             AddMenuItem(subMenuOther, "Xóa Đối Tượng Cùng Layer", "AT_XoaDoiTuong_CungLayer ");
+            AddMenuItem(subMenuOther, "Chọn Đối Tượng Theo Layer", "AT_Chon_Theo_Layer ");
+            AddMenuItem(subMenuOther, "Chuyển Đổi Đối Tượng Sang Layer Khác", "AT_Chuyen_Doi_Layer ");
             AddMenuItem(subMenuOther, "Xóa 3DSolid/Body", "AT_XoaDoiTuong_3DSolid_Body ");
             AddMenuItem(subMenuOther, "Cut 3DSolid/Body Vào Clipboard", "CUTSB ");
             AddMenuItem(subMenuOther, "Offset 2 Bên", "AT_Offset_2Ben ");

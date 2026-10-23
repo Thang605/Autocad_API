@@ -1,0 +1,15 @@
+;;;Recreate-Hatch-Boundaries.lsp written by Murray Clack, November 19, 2010
+;;;This routine will recreate boundaries around multiple selected hatch patterns and makes the patterns associative
+(prompt "\nRecreate-Hatch-Boundaries.lsp loaded, Enter RHB to execute")
+(defun c:HRB (/ OLDCE SSET CNT OBJ)
+  (setq OLDCE (getvar "cmdecho"))
+  (setvar "cmdecho" 0)
+  (princ "\nSelect Hatch Objects: ")
+  (setq SSET (ssget))
+  (setq CNT -1)
+  (while (setq OBJ (ssname SSET (setq CNT (1+ CNT))))
+(command "-hatchedit" OBJ "b" "p" "y")
+ )
+(setvar "cmdecho" OLDCE)
+(princ)
+)

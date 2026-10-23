@@ -1,0 +1,31 @@
+﻿(defun c:TT ()
+	(setq V1 (getreal "Nhập bề dày bê tông bảo bệ (mm):"))
+	(setq V2 (/ V1 1000))
+	(setq V2 (- 0 V2))
+	(command "LENGTHEN" "Delta" V2)				
+)
+
+(defun c:T25 ()
+	(setq V2 (- 0 0.025))
+	(command "LENGTHEN" "Delta" V2)				
+)
+
+(defun c:T30 ()
+	(setq V2 (- 0 0.03))
+	(command "LENGTHEN" "Delta" V2)				
+)
+
+(defun c:T40 ()
+	(setq V2 (- 0 0.04))
+	(command "LENGTHEN" "Delta" V2)				
+)
+
+(defun c:T50 ()
+	(setq V2 (- 0 0.05))
+	(command "LENGTHEN" "Delta" V2)				
+)
+
+(defun c:T75 ()
+	(setq V2 (- 0 0.075))
+	(command "LENGTHEN" "Delta" V2)				
+)

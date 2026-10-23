@@ -189,7 +189,7 @@
       (princ (strcat "\n🕒 Thời gian build  : " timeReadable))
       (princ (strcat "\n📁 Đường dẫn        : " dllPath))
 
-      ;; Thực thi lệnh NETLOAD
+      ;; Thực thi lệnh NETLOAD (Civil3DToolsExtensionApplication.Initialize sẽ tự khởi động MCP Bridge)
       (vl-cmdf "._NETLOAD" dllPath)
 
       ;; Lưu lại file DLL đã nạp

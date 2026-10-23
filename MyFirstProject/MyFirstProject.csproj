@@ -48,6 +48,10 @@
       <HintPath>C:\Program Files\Autodesk\AutoCAD 2027\C3D\AeccDbMgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="C3DStockSubassemblies">
+      <HintPath>C:\ProgramData\Autodesk\C3D 2027\enu\C3DStockSubassemblies.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="AeccDataShortcutMgd">
       <HintPath>C:\Program Files\Autodesk\AutoCAD 2027\C3D\AeccDataShortcutMgd.dll</HintPath>
       <Private>False</Private>

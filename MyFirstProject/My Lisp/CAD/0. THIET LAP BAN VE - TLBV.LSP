@@ -1,0 +1,63 @@
+(
+Defun c:TLBV ( )
+	(command "FILEDIA" 1)
+	(command "INSUNITS" 6)  
+   	(command "MSLTSCALE" 1)
+   	(command "PSLTSCALE" 1)
+   	(command "LTSCALE" 1)
+
+   	(command "Startup" 0)
+   	(command "HPQUICKPREVIEW" 0)
+   	(command "TOOLTIPS" 0)
+   	(command "ROLLOVERTIPS" 0)
+   	(command "PEDITACCEPT" 0)
+   	(command "SELECTIONPREVIEW" 0)
+
+   	(command "PLINEGEN" 1)
+	(command "INDEXCTL" 0)
+	(command "XLOADCTL" 2)
+	(command "DEMANDLOAD" 3)
+	(command "LAYOUTREGENCTL" 0)
+	(command "BACKGROUNDPLOT" 2)
+	(command "MIRRTEXT" 0)
+	(command "PICKBOX" 5)
+	(command "VISRETAIN" 1)
+	(command "PEDITACCEPT" Y)
+	(command "REGENMODE" 1)
+	(command "REGENAUTO" "ON")
+	(command "PEDITACCEPT" Y)
+	(command "REGENMODE" 1)
+	(command "LAYEREVALCTL" 0)
+
+	(command "MEASUREMENT" 0)
+	(command "UCSFOLLOW" 0)
+ 	(command "AECCREFTEMPLATEAUTOUPDATE" 1)
+	(command "WHIPTHREAD" 3)
+	(command "COMMANDPREVIEW" 0)
+
+	(command "PROXYSHOW" 1)
+	(command "PROXYNOTICE" 1)
+	(command "PROXYGRAPHICS" 1)
+	(command "-DWGUNITS" 6 2 3 "N" "N")
+
+	(command "VTENABLE" 0)
+	(command "DYNMODE" 1)
+	(command "CURSORBADGE" 1)
+
+	(command "PROPERTYPREVIEW" 0)
+	(command "COMMANDPREVIEW" 0)
+	(command "ANNOALLVISIBLE" 1)
+	(command "SELECTIONANNODISPLAY" 1)
+	(command "DRAWORDERCTL" 1)
+	(command "UCSDETECT" 0)
+
+	(command "CACHEMAXFILES" 0)
+	(command "CACHEMAXFILES" 256)
+	(command "MAXACTVP" 64)
+
+	(command "XCOMPAREENABLE" 0)
+	(command "AECPSDAUTOATTACH" "OFF")
+
+
+	(Princ)
+)

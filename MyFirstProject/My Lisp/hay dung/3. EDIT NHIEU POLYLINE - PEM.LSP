@@ -1,0 +1,13 @@
+(
+Defun c:PEM ( )  
+   	(command "PEDIT" "M" )
+	(Princ)
+)
+(Defun c:OffS ( )  
+ 	 (command "-layer" "OFF" "S KO IN" "")
+   (Princ)
+)  
+   (Defun c:OnS ( )  
+ 	 (command "-layer" "ON" "S KO IN" "")
+   (Princ)
+)

@@ -1,0 +1,30 @@
+﻿(defun c:OT ()
+	(setq V1 (getreal "Nhập bề dày bê tông bảo bệ (mm):"))
+	(setq V2 (/ V1 1000))
+	(command "OFFSET" V2)				
+)
+
+(defun c:O25 ()
+	(setq V2 0.025)
+	(command "OFFSET" V2)				
+)
+
+(defun c:O30 ()
+	(setq V2 0.03)
+	(command "OFFSET" V2)				
+)
+
+(defun c:O40 ()
+	(setq V2 0.040)
+	(command "OFFSET" V2)				
+)
+
+(defun c:O50 ()
+	(setq V2 0.050)
+	(command "OFFSET" V2)				
+)
+
+(defun c:O75 ()
+	(setq V2 0.075)
+	(command "OFFSET" V2)				
+)

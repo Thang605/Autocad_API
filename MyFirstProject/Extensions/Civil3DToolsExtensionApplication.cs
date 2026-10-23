@@ -28,10 +28,12 @@ namespace Civil3DCsharp
         public void Initialize()
         {
             EnsureResolverAttached();
+            AT_McpBridgeServer.EnsureStarted();
         }
 
         public void Terminate()
         {
+            AT_McpBridgeServer.StopBridge();
             if (!_attachedByThisAssembly) return;
             AppDomain.CurrentDomain.AssemblyResolve -= OnAssemblyResolve;
             AppDomain.CurrentDomain.SetData(AttachedKey, null);

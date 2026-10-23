@@ -553,26 +553,26 @@ namespace MyFirstProject.Civil_Tool_2
 
             var grpBim = new GroupBox
             {
-                Text = "Dữ liệu thuộc tính BIM (Extended Entity Data / XData)",
+                Text = "Dữ liệu thuộc tính BIM (Property Sets & Extended Entity Data)",
                 Location = new Point(0, 0),
-                Size = new Size(620, 160),
+                Size = new Size(620, 180),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             chkAttachXData = new CheckBox
             {
-                Text = "Đính kèm metadata (Corridor Name, Shape/Link Code, Baseline, Region) vào XData của Solid",
-                Location = new Point(15, 30),
-                Size = new Size(585, 36),
+                Text = "Đính kèm Property Set mặc định (Corridor Shape/Model Info) & Metadata vào 3D Solid",
+                Location = new Point(15, 26),
+                Size = new Size(585, 30),
                 Checked = false,
                 Font = new WinFormsFont("Segoe UI", 9F, FontStyle.Bold)
             };
 
             var lblBimDesc = new WinFormsLabel
             {
-                Text = "Giúp các mô hình 3D Solid giữ nguyên thông tin cấu kiện khi xuất sang Navisworks, Revit hoặc phần mềm BIM/IFC khác.",
-                Location = new Point(35, 75),
-                Size = new Size(565, 60),
+                Text = "• Không tick (Mặc định): Tự động loại bỏ toàn bộ thông tin Property Set mặc định của Civil 3D (Corridor Shape Information, Corridor Model Information). Các đối tượng 3D Solid xuất ra sẽ là mô hình hình học sạch thuần túy.\n\n• Có tick: Giữ nguyên các bộ Property Set mặc định của Civil 3D và đính kèm metadata (Corridor Name, Shape Code, Baseline, Region) phục vụ BIM / Navisworks.",
+                Location = new Point(35, 62),
+                Size = new Size(565, 100),
                 ForeColor = Color.DarkSlateGray
             };
 

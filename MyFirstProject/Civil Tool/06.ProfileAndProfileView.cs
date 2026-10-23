@@ -248,131 +248,50 @@ namespace Civil3DCsharp
         [CommandMethod("CTP_Fix_DuongTuNhien_TheoCoc")]
         public static void CTPFixDuongTuNhienTheoCoc()
         {
-            // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var ed = doc.Editor;
+
             try
             {
-                UserInput UI = new();
-                UtilitiesCAD CAD = new();
-                UtilitiesC3D C3D = new();
-                //start here
-                ObjectId profileId = UserInput.GProfileId("\n Chọn đường tự nhiên " + "để sửa theo cọc: ");
-                Profile? profile = tr.GetObject(profileId, OpenMode.ForWrite) as Profile;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                profile.StyleName = "Existing Ground Profile (KHONG IN)";
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+                ed.WriteMessage("\n=== SỬA ĐƯỜNG TỰ NHIÊN THEO CỌC (CTP_Fix_DuongTuNhien_TheoCoc) ===");
 
-                ObjectId alignmentId = profile.AlignmentId;
-                Alignment? alignment = tr.GetObject(alignmentId, OpenMode.ForRead) as Alignment;
+                ObjectId preselectedProfileId = ObjectId.Null;
+                ObjectId preselectedAlignmentId = ObjectId.Null;
 
-                // get stations of samplelines
-#pragma warning disable CS8604 // Possible null reference argument.
-                UtilitiesC3D.GCoordinatePointFromAlignment(alignment, 0, out string[] samplelineName, out string[] eastings, out string[] northings, out string[] stations);
-#pragma warning restore CS8604 // Possible null reference argument.
-
-                // Get profile start and end stations for validation
-                double profileStartStation = profile.StartingStation;
-                double profileEndStation = profile.EndingStation;
-                A.Ed.WriteMessage($"\n Profile range: {profileStartStation:F3} to {profileEndStation:F3}");
-
-                // Filter and sort unique stations within profile range
-                var validStations = new List<double>();
-                var uniqueStations = new HashSet<double>();
-
-                foreach (string stationStr in stations)
+                // Kiểm tra xem người dùng có chọn trước Profile hoặc Alignment trên bản vẽ không
+                var psr = ed.SelectImplied();
+                if (psr.Status == PromptStatus.OK && psr.Value != null && psr.Value.Count > 0)
                 {
-                    if (double.TryParse(stationStr, out double stationValue))
+                    using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
                     {
-                        // Only include stations within profile range and avoid duplicates
-                        if (stationValue >= profileStartStation && stationValue <= profileEndStation)
+                        foreach (SelectedObject so in psr.Value)
                         {
-                            // Round to avoid floating point precision issues
-                            double roundedStation = Math.Round(stationValue, 2);
-                            if (uniqueStations.Add(roundedStation))
+                            var obj = tr.GetObject(so.ObjectId, OpenMode.ForRead);
+                            if (obj is Profile prof)
                             {
-                                validStations.Add(roundedStation);
+                                preselectedProfileId = prof.ObjectId;
+                                preselectedAlignmentId = prof.AlignmentId;
+                                break;
+                            }
+                            else if (obj is Alignment al)
+                            {
+                                preselectedAlignmentId = al.ObjectId;
                             }
                         }
+                        tr.Commit();
                     }
                 }
 
-                // Sort stations
-                validStations.Sort();
-                A.Ed.WriteMessage($"\n Số station hợp lệ: {validStations.Count}");
-
-                // Display valid stations
-                A.Ed.WriteMessage("\n Lý trình các cọc hợp lệ: ");
-                foreach (double station in validStations)
+                // Hiển thị Form lựa chọn đoạn cần fix
+                using (var form = new MyFirstProject.Civil_Tool.FixDuongTuNhienTheoCocForm(preselectedProfileId, preselectedAlignmentId))
                 {
-                    A.Ed.WriteMessage(station.ToString("F2") + ", ");
+                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
                 }
-
-                //get elevation for valid stations
-                var stationElevations = new List<(double station, double elevation)>();
-                
-                for (int i = 0; i < validStations.Count; i++)
-                {
-                    try
-                    {
-                        double elevation = profile.ElevationAt(validStations[i]);
-                        stationElevations.Add((validStations[i], elevation));
-                        A.Ed.WriteMessage($"\n Lý trình: {validStations[i]:F2} Cao độ: {elevation:F3}");
-                    }
-                    catch (System.ArgumentException)
-                    {
-                        A.Ed.WriteMessage($"\n Lỗi lấy cao độ tại station {validStations[i]:F2}: Value does not fall within the expected range.");
-                        // Skip this station instead of using interpolated value
-                        continue;
-                    }
-                }
-
-                if (stationElevations.Count == 0)
-                {
-                    A.Ed.WriteMessage("\n Không có station hợp lệ nào để tạo profile.");
-                    return;
-                }
-
-                //create a fix profile
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                ObjectId layerID = alignment.LayerId;
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
-                ObjectId profileStyleId = A.Cdoc.Styles.ProfileStyles["0.TN"];
-                ObjectId profileLabelSetId = A.Cdoc.Styles.LabelSetStyles.ProfileLabelSetStyles["_No Labels"];
-                ObjectId fixProfileId = Profile.CreateByLayout("Fix-" + profile.Name, alignmentId, layerID, profileStyleId, profileLabelSetId);
-                Profile? fixProfile = tr.GetObject(fixProfileId, OpenMode.ForWrite) as Profile;
-
-                // Add PVIs with additional validation
-                int successCount = 0;
-                foreach (var (station, elevation) in stationElevations)
-                {
-                    try
-                    {
-                        // Additional check: ensure station is within alignment range
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                        if (station >= alignment.StartingStation && station <= alignment.EndingStation)
-                        {
-                            fixProfile.PVIs.AddPVI(station, elevation);
-                            successCount++;
-                        }
-                        else
-                        {
-                            A.Ed.WriteMessage($"\n Station {station:F2} nằm ngoài phạm vi alignment.");
-                        }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
-                    }
-                    catch (System.ArgumentException ex)
-                    {
-                        A.Ed.WriteMessage($"\n Lỗi thêm PVI tại station {station:F2}: {ex.Message}");
-                    }
-                }
-
-                A.Ed.WriteMessage($"\n Đã tạo thành công {successCount} PVI trong tổng số {stationElevations.Count} station.");
-
-                tr.Commit();
             }
-            catch (Autodesk.AutoCAD.Runtime.Exception e)
+            catch (System.Exception ex)
             {
-                A.Ed.WriteMessage(e.Message);
+                ed.WriteMessage($"\n❌ Lỗi thực thi lệnh CTP_Fix_DuongTuNhien_TheoCoc: {ex.Message}\n");
             }
         }
 

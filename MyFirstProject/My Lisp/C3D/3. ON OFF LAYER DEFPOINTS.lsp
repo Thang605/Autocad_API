@@ -1,0 +1,8 @@
+   (Defun c:Off ( )  
+ 	 (command "-layer" "OFF" "Defpoints" "")
+   (Princ)
+)  
+   (Defun c:On ( )  
+ 	 (command "-layer" "ON" "Defpoints" "")
+   (Princ)
+)

@@ -61,12 +61,13 @@ if ($LASTEXITCODE -eq 0) {
         }
     } catch { }
 
-    # Output path for AutoLISP to read directly
-    [System.IO.File]::WriteAllText("$repoRoot\last_dll.txt", $forwardSlashPath, [System.Text.Encoding]::UTF8)
+    # Output path for AutoLISP to read directly (UTF-8 without BOM)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText("$repoRoot\last_dll.txt", $forwardSlashPath, $utf8NoBom)
     
     # Write cleanly formatted AutoLISP command
     $lspContent = "(vl-load-com)`n(vl-cmdf `"._NETLOAD`" `"$forwardSlashPath`")`n(princ `"\n=======================================================\n`")`n(princ `"\n[NETLOAD] DA NAP THANH CONG: $uniqueAssemblyName.dll\n`")`n(princ `"\n👉 Go lenh: AT_Solid_Update_PropertySet de mo Form!\n`")`n(princ `"\n=======================================================\n`")`n(princ)"
-    [System.IO.File]::WriteAllText("$repoRoot\last_reload.lsp", $lspContent, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText("$repoRoot\last_reload.lsp", $lspContent, $utf8NoBom)
 
     exit 0
 } else {
