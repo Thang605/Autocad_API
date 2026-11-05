@@ -495,6 +495,7 @@ namespace MyFirstProject.Civil_Tool
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.CancelButton = this.btnCancel;
             this.ClientSize = new System.Drawing.Size(560, 623);
             this.Controls.Add(this.btnApplyAll);
             this.Controls.Add(this.btnCancel);
