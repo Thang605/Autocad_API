@@ -59,10 +59,15 @@
 
 ---
 
-## 6. 📦 GIT WORKFLOW
-- Remote: `https://github.com/Thang605/Autocad_API.git`, branch `master`.
+## 6. 📦 GIT WORKFLOW & GOOGLE JULES TỰ ĐỘNG HẰNG NGÀY
+- **Remote**: `https://github.com/Thang605/Autocad_API.git`, branch `master`.
 - Commit message bằng tiếng Việt không dấu, prefix theo conventional commits (`fix:`, `feat:`, `refactor:`...).
 - Chỉ commit các file source code đã sửa, **KHÔNG** commit output build (`C:\CadBuild\`), file tạm (`last_dll.txt`, `last_reload.lsp`).
+- **Quy trình Tự động Check Code với Google Jules (`https://jules.google.com/repo/github/Thang605/Autocad_API/overview`):**
+  - **File quy tắc chuẩn cho Jules**: `AGENTS.md` ở gốc dự án và `Directory.Build.props` (`EnableWindowsTargeting=true`).
+  - **Environment Setup Script chuẩn**: `dotnet --info || true` và `git checkout -- .` (đảm bảo working tree sạch 100% trước khi Jules snapshot).
+  - **Lịch chạy 00:00 (12:00 AM GMT+7 hằng ngày)**: 3 tác nhân **Bolt ⚡** (Performance), **Palette 🎨** (UX/WinForms A11y), **Sentinel 🛡️** (Defensive Coding & CAD Transaction Safety) tự động quét nhánh `master` và tạo bản vá.
+  - **Lịch duyệt 08:00 (08:00 AM GMT+7 hằng ngày)**: Antigravity (`daily-jules-autocad-review` lúc 08:00 sáng) mở trình duyệt kiểm tra kết quả của Jules, phản hồi phê duyệt các kế hoạch (Plan review) hợp lý bằng Tiếng Anh, kiểm tra diff code C# (bảo toàn `.csproj` HintPaths, `OpenMode.ForWrite`, Persistent State) và nhấn `Publish PR` cho các tác vụ `Ready for review` đạt chuẩn.
 
 ---
 
