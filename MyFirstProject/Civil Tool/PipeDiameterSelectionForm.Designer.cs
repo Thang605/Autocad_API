@@ -101,8 +101,10 @@
             // 
             // PipeDiameterSelectionForm
             // 
+            AcceptButton = btnOK;
             AutoScaleDimensions = new SizeF(10F, 25F);
             AutoScaleMode = AutoScaleMode.Font;
+            CancelButton = btnCancel;
             ClientSize = new Size(968, 922);
             Controls.Add(lblCurrentInfo);
             Controls.Add(lblInstructions);
