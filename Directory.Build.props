@@ -11,11 +11,16 @@
     Directory.Build.props được MSBuild import TRƯỚC Sdk.props, nên đây là chỗ
     duy nhất đặt được BaseIntermediateOutputPath (obj) một cách hợp lệ.
   -->
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
     <CadBuildRoot>C:\CadBuild\Autocad2026_API\</CadBuildRoot>
 
     <BaseOutputPath>$(CadBuildRoot)$(MSBuildProjectName)\bin\</BaseOutputPath>
     <BaseIntermediateOutputPath>$(CadBuildRoot)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Cho phép đọc cấu hình project net10.0-windows trên Linux VM (như Google Jules) -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
     <!-- Giữ layout phẳng: bin\Debug\ chứ không bin\Debug\net10.0-windows\ -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

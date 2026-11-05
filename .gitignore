@@ -1,9 +1,15 @@
 bin/
 obj/
 .vs/
+.claude/
+.codex-tmp/
+scratch/
+scratch_inspect/
 *.dwl
 *.dwl2
 *.log
 last_dll*.txt
 last_reload*.lsp
+debug_*.txt
+inspect_*.txt
 output/
