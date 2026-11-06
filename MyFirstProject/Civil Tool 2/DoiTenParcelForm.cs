@@ -251,6 +251,9 @@ namespace MyFirstProject.Civil_Tool_2
                 btnOK, btnCancel, btnHelp
             });
 
+            this.AcceptButton = btnOK;
+            this.CancelButton = btnCancel;
+
             this.ResumeLayout(false);
         }
 
