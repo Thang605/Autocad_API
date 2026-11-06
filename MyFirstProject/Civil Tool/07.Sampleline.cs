@@ -727,9 +727,9 @@ namespace Civil3DCsharp
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
                 Station[] station = alignment.GetStationSet(StationTypes.GeometryPoint);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-                String[] sampleLineGeo = new string[station.Count()];
+                String[] sampleLineGeo = new string[station.Length];
                 int y = 0;
-                for (int i = 0; i < station.Count(); i++)
+                for (int i = 0; i < station.Length; i++)
                 {
                     if (station[i].GeometryStationType == AlignmentGeometryPointStationType.BegOfAlign)
                     {
@@ -776,7 +776,7 @@ namespace Civil3DCsharp
                     sampleLineGroupId = alignment.GetSampleLineGroupIds()[0];
                 }
 
-                for (int i = 0; i < station.Count(); i++)
+                for (int i = 0; i < station.Length; i++)
                 {
                     ObjectId sampleLineId = UtilitiesC3D.CreateSampleline(sampleLineGeo[i].ToString(), sampleLineGroupId, alignment, station[i].RawStation);
                 }
@@ -811,21 +811,21 @@ namespace Civil3DCsharp
                 A.Ed.WriteMessage("\n Số cọc H: " + soLuongCocH);
 
                 //cộng 2 mảng đặc biệt và H
-                Double[] rawStation = new double[station.Count() + soLuongCocH];
-                for (int i = 0; i < station.Count(); i++)
+                Double[] rawStation = new double[station.Length + soLuongCocH];
+                for (int i = 0; i < station.Length; i++)
                 {
                     rawStation[i] = station[i].RawStation;
                 }
                 for (int i = 0; i < soLuongCocH; i++)
                 {
-                    rawStation[i + station.Count()] = stationCocH[i];
+                    rawStation[i + station.Length] = stationCocH[i];
                 }
                 rawStation = Csharp.CSMangSapXepTangDan(rawStation);
 
                 //cọc chi tiết (từ form)
                 List<double> stationList = [];
                 List<String> sampleLineNameS = [];
-                for (int i = 0; i < rawStation.Count() - 1; i++)
+                for (int i = 0; i < rawStation.Length - 1; i++)
                 {
                     double stationDetail = rawStation[i];
                     for (int j = 1; j < Math.Ceiling((rawStation[i + 1] - rawStation[i]) / khoangCach); j++)
@@ -908,7 +908,7 @@ namespace Civil3DCsharp
                     ObjectId labelSampleLineGroup = SampleLineLabelGroup.Create(sampleLineGroupId, labelId);
                 }
 
-                A.Ed.WriteMessage($"\n Đã phát sinh {station.Count()} cọc đặc biệt, {soLuongCocH} cọc H/Km, {stationList.Count} cọc chi tiết.");
+                A.Ed.WriteMessage($"\n Đã phát sinh {station.Length} cọc đặc biệt, {soLuongCocH} cọc H/Km, {stationList.Count} cọc chi tiết.");
                 tr.Commit();
             }
             catch (Autodesk.AutoCAD.Runtime.Exception e)
@@ -1222,7 +1222,7 @@ namespace Civil3DCsharp
 
                 //sampleLineGroup_0.Erase();
                 //tạo cọc vào nhóm cọc mới
-                for (int i = 0; i < stationList.Count(); i++)
+                for (int i = 0; i < stationList.Count; i++)
                 {
                     A.Ed.WriteMessage(sampleLineNameS[i].ToString() + "-" + stationList[i].ToString());
                     ObjectId sampleLineId = UtilitiesC3D.CreateSampleline(sampleLineNameS[i] + "C", sampleLineGroupId, alignment, stationList[i]);

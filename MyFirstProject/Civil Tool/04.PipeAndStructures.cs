@@ -249,7 +249,7 @@ namespace Civil3DCsharp
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
                 }
 
-                UtilitiesCAD.TaoBangHoTHu(structureName.Count(), 3, "hố thu", structureName, elevation, elevation2);
+                UtilitiesCAD.TaoBangHoTHu(structureName.Length, 3, "hố thu", structureName, elevation, elevation2);
 
                 tr.Commit();
             }
