@@ -35,9 +35,6 @@ namespace Civil3DCsharp
     public class CTPO_TaoCogoPoint_TongHop_Commands
     {
         [CommandMethod("CTPO_TaoCogoPoint_MultiSource")]
-        [CommandMethod("CTPO_TaoCogoPoint")]
-        [CommandMethod("TAOCOGOPOINT")]
-        [CommandMethod("TCP")]
         public static void RunTaoCogoPoint()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -214,15 +211,15 @@ namespace Civil3DCsharp
                     switch (config.SourceType)
                     {
                         case CogoPointSourceType.Text:
-                            rawPoints = ExtractPointsFromText(db, tr, form, config, surface);
+                            rawPoints = ExtractPointsFromText(db, tr, ed, form, config, surface);
                             break;
 
                         case CogoPointSourceType.Circle:
-                            rawPoints = ExtractPointsFromCircle(db, tr, form, config, surface);
+                            rawPoints = ExtractPointsFromCircle(db, tr, ed, form, config, surface);
                             break;
 
                         case CogoPointSourceType.Point:
-                            rawPoints = ExtractPointsFromPoint(db, tr, form, config, surface);
+                            rawPoints = ExtractPointsFromPoint(db, tr, ed, form, config, surface);
                             break;
 
                         case CogoPointSourceType.Table:
@@ -382,14 +379,14 @@ namespace Civil3DCsharp
         #region Extraction Logic For Each Source
 
         // Source 1: Text / MText
-        private static List<RawPointInput> ExtractPointsFromText(Database db, Transaction tr, TaoCogoPointForm form, CogoPointCreationConfig config, CivSurface? surface)
+        private static List<RawPointInput> ExtractPointsFromText(Database db, Transaction tr, Editor ed, TaoCogoPointForm form, CogoPointCreationConfig config, CivSurface? surface)
         {
             List<RawPointInput> list = new List<RawPointInput>();
             List<ObjectId> targetIds = new List<ObjectId>();
 
             if (config.TextFilterLayer && !string.IsNullOrEmpty(config.TextLayerName) && config.TextLayerName != "<Tất cả>")
             {
-                targetIds = GetAllTextIdsInLayer(db, tr, config.TextLayerName);
+                targetIds = GetAllTextIdsInLayer(ed, config.TextLayerName);
             }
             else
             {
@@ -488,14 +485,14 @@ namespace Civil3DCsharp
         }
 
         // Source 2: Circle
-        private static List<RawPointInput> ExtractPointsFromCircle(Database db, Transaction tr, TaoCogoPointForm form, CogoPointCreationConfig config, CivSurface? surface)
+        private static List<RawPointInput> ExtractPointsFromCircle(Database db, Transaction tr, Editor ed, TaoCogoPointForm form, CogoPointCreationConfig config, CivSurface? surface)
         {
             List<RawPointInput> list = new List<RawPointInput>();
             List<ObjectId> targetIds = new List<ObjectId>();
 
             if (config.CircleFilterLayer && !string.IsNullOrEmpty(config.CircleLayerName) && config.CircleLayerName != "<Tất cả>")
             {
-                targetIds = GetAllCircleIdsInLayer(db, tr, config.CircleLayerName);
+                targetIds = GetAllCircleIdsInLayer(ed, config.CircleLayerName);
             }
             else
             {
@@ -506,7 +503,7 @@ namespace Civil3DCsharp
             List<TextSpatialInfo>? spatialTexts = null;
             if (config.CircleZMode == 1 || config.CircleNameMode == 1)
             {
-                spatialTexts = CollectAllTextSpatialInfo(db, tr);
+                spatialTexts = CollectAllTextSpatialInfo(ed, tr);
             }
 
             foreach (ObjectId id in targetIds)
@@ -564,14 +561,14 @@ namespace Civil3DCsharp
         }
 
         // Source 3: CAD Point (DBPoint)
-        private static List<RawPointInput> ExtractPointsFromPoint(Database db, Transaction tr, TaoCogoPointForm form, CogoPointCreationConfig config, CivSurface? surface)
+        private static List<RawPointInput> ExtractPointsFromPoint(Database db, Transaction tr, Editor ed, TaoCogoPointForm form, CogoPointCreationConfig config, CivSurface? surface)
         {
             List<RawPointInput> list = new List<RawPointInput>();
             List<ObjectId> targetIds = new List<ObjectId>();
 
             if (config.PointFilterLayer && !string.IsNullOrEmpty(config.PointLayerName) && config.PointLayerName != "<Tất cả>")
             {
-                targetIds = GetAllPointIdsInLayer(db, tr, config.PointLayerName);
+                targetIds = GetAllPointIdsInLayer(ed, config.PointLayerName);
             }
             else
             {
@@ -582,7 +579,7 @@ namespace Civil3DCsharp
             List<TextSpatialInfo>? spatialTexts = null;
             if (config.PointZMode == 1 || config.PointNameMode == 1)
             {
-                spatialTexts = CollectAllTextSpatialInfo(db, tr);
+                spatialTexts = CollectAllTextSpatialInfo(ed, tr);
             }
 
             foreach (ObjectId id in targetIds)
@@ -796,50 +793,60 @@ namespace Civil3DCsharp
             public double? NumericValue { get; set; }
         }
 
-        private static List<TextSpatialInfo> CollectAllTextSpatialInfo(Database db, Transaction tr)
+                private static List<TextSpatialInfo> CollectAllTextSpatialInfo(Editor ed, Transaction tr)
         {
             List<TextSpatialInfo> list = new List<TextSpatialInfo>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                TypedValue[] tvs = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    AcadDBObject obj = tr.GetObject(id, OpenMode.ForRead);
-
-                    if (obj is DBText dt)
+                    new TypedValue((int)DxfCode.Operator, "<AND"),
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.Operator, "<OR"),
+                    new TypedValue((int)DxfCode.Start, "TEXT"),
+                    new TypedValue((int)DxfCode.Start, "MTEXT"),
+                    new TypedValue((int)DxfCode.Operator, "OR>"),
+                    new TypedValue((int)DxfCode.Operator, "AND>")
+                };
+                SelectionFilter filter = new SelectionFilter(tvs);
+                PromptSelectionResult psr = ed.SelectAll(filter);
+                if (psr.Status == PromptStatus.OK)
+                {
+                    foreach (ObjectId id in psr.Value.GetObjectIds())
                     {
-                        string clean = CleanMTextString(dt.TextString);
-                        double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
-                        Point3d textPos = dt.Position;
-                        if (dt.Justify != AttachmentPoint.BaseLeft && 
-                            dt.Justify != AttachmentPoint.BaseAlign && 
-                            dt.Justify != AttachmentPoint.BaseFit)
+                        AcadDBObject obj = tr.GetObject(id, OpenMode.ForRead);
+                        if (obj is DBText dt)
                         {
-                            textPos = dt.AlignmentPoint;
+                            string clean = CleanMTextString(dt.TextString);
+                            double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
+                            Point3d textPos = dt.Position;
+                            if (dt.Justify != AttachmentPoint.BaseLeft &&
+                                dt.Justify != AttachmentPoint.BaseAlign &&
+                                dt.Justify != AttachmentPoint.BaseFit)
+                            {
+                                textPos = dt.AlignmentPoint;
+                            }
+
+                            list.Add(new TextSpatialInfo
+                            {
+                                Id = id,
+                                Location = new Point2d(textPos.X, textPos.Y),
+                                Text = clean,
+                                NumericValue = num
+                            });
                         }
-
-                        list.Add(new TextSpatialInfo
+                        else if (obj is MText mt)
                         {
-                            Id = id,
-                            Location = new Point2d(textPos.X, textPos.Y),
-                            Text = clean,
-                            NumericValue = num
-                        });
-                    }
-                    else if (obj is MText mt)
-                    {
-                        string clean = CleanMTextString(mt.Contents);
-                        double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
-                        list.Add(new TextSpatialInfo
-                        {
-                            Id = id,
-                            Location = new Point2d(mt.Location.X, mt.Location.Y),
-                            Text = clean,
-                            NumericValue = num
-                        });
+                            string clean = CleanMTextString(mt.Contents);
+                            double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
+                            list.Add(new TextSpatialInfo
+                            {
+                                Id = id,
+                                Location = new Point2d(mt.Location.X, mt.Location.Y),
+                                Text = clean,
+                                NumericValue = num
+                            });
+                        }
                     }
                 }
             }
@@ -1226,70 +1233,75 @@ namespace Civil3DCsharp
             return FormatPointNumbersToRangeString(allNumbers);
         }
 
-        private static List<ObjectId> GetAllTextIdsInLayer(Database db, Transaction tr, string layerName)
+                private static List<ObjectId> GetAllTextIdsInLayer(Editor ed, string layerName)
         {
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                TypedValue[] tvs = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    AcadDBObject dbo = tr.GetObject(id, OpenMode.ForRead);
-                    if (dbo is DBText dt && dt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
-                    else if (dbo is MText mt && mt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    new TypedValue((int)DxfCode.Operator, "<AND"),
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.LayerName, layerName),
+                    new TypedValue((int)DxfCode.Operator, "<OR"),
+                    new TypedValue((int)DxfCode.Start, "TEXT"),
+                    new TypedValue((int)DxfCode.Start, "MTEXT"),
+                    new TypedValue((int)DxfCode.Operator, "OR>"),
+                    new TypedValue((int)DxfCode.Operator, "AND>")
+                };
+                SelectionFilter filter = new SelectionFilter(tvs);
+                PromptSelectionResult psr = ed.SelectAll(filter);
+                if (psr.Status == PromptStatus.OK)
+                {
+                    list.AddRange(psr.Value.GetObjectIds());
                 }
             }
             catch { }
             return list;
         }
 
-        private static List<ObjectId> GetAllCircleIdsInLayer(Database db, Transaction tr, string layerName)
+                private static List<ObjectId> GetAllCircleIdsInLayer(Editor ed, string layerName)
         {
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                TypedValue[] tvs = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    Circle? circle = tr.GetObject(id, OpenMode.ForRead) as Circle;
-                    if (circle != null && circle.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    new TypedValue((int)DxfCode.Operator, "<AND"),
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.LayerName, layerName),
+                    new TypedValue((int)DxfCode.Start, "CIRCLE"),
+                    new TypedValue((int)DxfCode.Operator, "AND>")
+                };
+                SelectionFilter filter = new SelectionFilter(tvs);
+                PromptSelectionResult psr = ed.SelectAll(filter);
+                if (psr.Status == PromptStatus.OK)
+                {
+                    list.AddRange(psr.Value.GetObjectIds());
                 }
             }
             catch { }
             return list;
         }
 
-        private static List<ObjectId> GetAllPointIdsInLayer(Database db, Transaction tr, string layerName)
+                private static List<ObjectId> GetAllPointIdsInLayer(Editor ed, string layerName)
         {
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                TypedValue[] tvs = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    DBPoint? pt = tr.GetObject(id, OpenMode.ForRead) as DBPoint;
-                    if (pt != null && pt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    new TypedValue((int)DxfCode.Operator, "<AND"),
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.LayerName, layerName),
+                    new TypedValue((int)DxfCode.Start, "POINT"),
+                    new TypedValue((int)DxfCode.Operator, "AND>")
+                };
+                SelectionFilter filter = new SelectionFilter(tvs);
+                PromptSelectionResult psr = ed.SelectAll(filter);
+                if (psr.Status == PromptStatus.OK)
+                {
+                    list.AddRange(psr.Value.GetObjectIds());
                 }
             }
             catch { }

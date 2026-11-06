@@ -20,7 +20,6 @@ namespace Civil3DCsharp
         private static ObjectId _lastSelectedAlignmentId = ObjectId.Null;
 
         [CommandMethod("CTS_DoiTenCoc_QuyTac")]
-        [CommandMethod("CTS_DTCQ")]
         public static void CTSDoiTenCocQuyTac()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

@@ -82,10 +82,6 @@ namespace Civil3DCsharp
         /// Lệnh chính xuất bảng CAD sang file Excel với Form giao diện
         /// </summary>
         [CommandMethod("AT_XuatBangCadRaExcel")]
-        [CommandMethod("AT_XuatBangExcel")]
-        [CommandMethod("XUATBANGEXCEL")]
-        [CommandMethod("BANG2EXCEL")]
-        [CommandMethod("TB2EXCEL")]
         public static void RunXuatBangCadRaExcel()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

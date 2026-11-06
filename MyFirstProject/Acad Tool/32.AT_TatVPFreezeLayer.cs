@@ -43,8 +43,6 @@ namespace Civil3DCsharp
     public class AT_TatVPFreezeLayerCmd
     {
         [CommandMethod("AT_VPFREEZE")]
-        [CommandMethod("AT_TATVPFREEZE")]
-        [CommandMethod("VPF")]
         public void TatVPFreezeLayerCommand()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
