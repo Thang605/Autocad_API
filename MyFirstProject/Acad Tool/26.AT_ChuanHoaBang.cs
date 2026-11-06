@@ -275,9 +275,12 @@ namespace Civil3DCsharp
             // 2. Chuẩn hoá từng Cell nếu có yêu cầu
             if (config.StandardizeCells)
             {
-                for (int r = 0; r < rowCount; r++)
+                table.SuppressRegenerateTable(true);
+                try
                 {
-                    // Xác định vai trò của hàng: 0 = Title, 1 = Header, >=2 = Data
+                    for (int r = 0; r < rowCount; r++)
+                    {
+                        // Xác định vai trò của hàng: 0 = Title, 1 = Header, >=2 = Data
                     bool isTitleRow = (r == 0);
                     bool isHeaderRow = (r == 1);
                     double targetHeight = isTitleRow ? config.TitleHeight : (isHeaderRow ? config.HeaderHeight : config.DataHeight);
@@ -309,15 +312,20 @@ namespace Civil3DCsharp
                         cellsProcessed++;
                     }
 
-                    // Tự động tối ưu chiều cao hàng
-                    if (config.RecalculateRowHeight)
-                    {
-                        double minRequiredHeight = targetHeight + (2.0 * config.CellMargin) + 1.5;
-                        if (table.Rows[r].Height < minRequiredHeight)
+                        // Tự động tối ưu chiều cao hàng
+                        if (config.RecalculateRowHeight)
                         {
-                            table.Rows[r].Height = minRequiredHeight;
+                            double minRequiredHeight = targetHeight + (2.0 * config.CellMargin) + 1.5;
+                            if (table.Rows[r].Height < minRequiredHeight)
+                            {
+                                table.Rows[r].Height = minRequiredHeight;
+                            }
                         }
                     }
+                }
+                finally
+                {
+                    table.SuppressRegenerateTable(false);
                 }
             }
 
