@@ -23,9 +23,6 @@ namespace Civil3DCsharp
     public class CapNhatMauLayerCmd
     {
         [CommandMethod("AT_CapNhatMauLayer")]
-        [CommandMethod("CNML")]
-        [CommandMethod("AT_UpdateLayerColor")]
-        [CommandMethod("AT_MauLayerBIM")]
         public void CapNhatMauLayerCommand()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

@@ -18,7 +18,6 @@ namespace Civil3DCsharp
     public class CTC_Xoa_Region_BiTat_Command
     {
         [CommandMethod("CTC_Xoa_Region_BiTat")]
-        [CommandMethod("CTC_XoaRegionBiTat")]
         public static void Execute()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

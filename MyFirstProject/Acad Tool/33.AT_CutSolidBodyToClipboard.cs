@@ -21,11 +21,6 @@ namespace Civil3DCsharp
     public class AT_CutSolidBodyCmd
     {
         [CommandMethod("CUTSB")]
-        [CommandMethod("CSB")]
-        [CommandMethod("AT_CutSolidBody")]
-        [CommandMethod("AT_CutSolidBodyToClipboard")]
-        [CommandMethod("CUT_SOLID_BODY")]
-        [CommandMethod("AT_CopySolidBody")] // Alias tương thích
         public static void CutSolidBodyToClipboard()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
