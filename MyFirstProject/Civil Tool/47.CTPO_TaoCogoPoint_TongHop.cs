@@ -35,9 +35,6 @@ namespace Civil3DCsharp
     public class CTPO_TaoCogoPoint_TongHop_Commands
     {
         [CommandMethod("CTPO_TaoCogoPoint_MultiSource")]
-        [CommandMethod("CTPO_TaoCogoPoint")]
-        [CommandMethod("TAOCOGOPOINT")]
-        [CommandMethod("TCP")]
         public static void RunTaoCogoPoint()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -801,45 +798,55 @@ namespace Civil3DCsharp
             List<TextSpatialInfo> list = new List<TextSpatialInfo>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                TypedValue[] filter = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    AcadDBObject obj = tr.GetObject(id, OpenMode.ForRead);
-
-                    if (obj is DBText dt)
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.Operator, "<OR"),
+                    new TypedValue((int)DxfCode.Start, "TEXT"),
+                    new TypedValue((int)DxfCode.Start, "MTEXT"),
+                    new TypedValue((int)DxfCode.Operator, "OR>")
+                };
+                PromptSelectionResult psr = ed.SelectAll(new SelectionFilter(filter));
+                if (psr.Status == PromptStatus.OK && psr.Value != null)
+                {
+                    foreach (ObjectId id in psr.Value.GetObjectIds())
                     {
-                        string clean = CleanMTextString(dt.TextString);
-                        double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
-                        Point3d textPos = dt.Position;
-                        if (dt.Justify != AttachmentPoint.BaseLeft && 
-                            dt.Justify != AttachmentPoint.BaseAlign && 
-                            dt.Justify != AttachmentPoint.BaseFit)
+                        if (id.IsNull || id.IsErased) continue;
+                        AcadDBObject obj = tr.GetObject(id, OpenMode.ForRead);
+
+                        if (obj is DBText dt)
                         {
-                            textPos = dt.AlignmentPoint;
+                            string clean = CleanMTextString(dt.TextString);
+                            double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
+                            Point3d textPos = dt.Position;
+                            if (dt.Justify != AttachmentPoint.BaseLeft &&
+                                dt.Justify != AttachmentPoint.BaseAlign &&
+                                dt.Justify != AttachmentPoint.BaseFit)
+                            {
+                                textPos = dt.AlignmentPoint;
+                            }
+
+                            list.Add(new TextSpatialInfo
+                            {
+                                Id = id,
+                                Location = new Point2d(textPos.X, textPos.Y),
+                                Text = clean,
+                                NumericValue = num
+                            });
                         }
-
-                        list.Add(new TextSpatialInfo
+                        else if (obj is MText mt)
                         {
-                            Id = id,
-                            Location = new Point2d(textPos.X, textPos.Y),
-                            Text = clean,
-                            NumericValue = num
-                        });
-                    }
-                    else if (obj is MText mt)
-                    {
-                        string clean = CleanMTextString(mt.Contents);
-                        double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
-                        list.Add(new TextSpatialInfo
-                        {
-                            Id = id,
-                            Location = new Point2d(mt.Location.X, mt.Location.Y),
-                            Text = clean,
-                            NumericValue = num
-                        });
+                            string clean = CleanMTextString(mt.Contents);
+                            double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
+                            list.Add(new TextSpatialInfo
+                            {
+                                Id = id,
+                                Location = new Point2d(mt.Location.X, mt.Location.Y),
+                                Text = clean,
+                                NumericValue = num
+                            });
+                        }
                     }
                 }
             }
@@ -1231,21 +1238,20 @@ namespace Civil3DCsharp
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                TypedValue[] filter = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    AcadDBObject dbo = tr.GetObject(id, OpenMode.ForRead);
-                    if (dbo is DBText dt && dt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
-                    else if (dbo is MText mt && mt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.LayerName, layerName),
+                    new TypedValue((int)DxfCode.Operator, "<OR"),
+                    new TypedValue((int)DxfCode.Start, "TEXT"),
+                    new TypedValue((int)DxfCode.Start, "MTEXT"),
+                    new TypedValue((int)DxfCode.Operator, "OR>")
+                };
+                PromptSelectionResult psr = ed.SelectAll(new SelectionFilter(filter));
+                if (psr.Status == PromptStatus.OK && psr.Value != null)
+                {
+                    list = psr.Value.GetObjectIds().ToList();
                 }
             }
             catch { }
@@ -1257,17 +1263,17 @@ namespace Civil3DCsharp
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                TypedValue[] filter = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    Circle? circle = tr.GetObject(id, OpenMode.ForRead) as Circle;
-                    if (circle != null && circle.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.LayerName, layerName),
+                    new TypedValue((int)DxfCode.Start, "CIRCLE")
+                };
+                PromptSelectionResult psr = ed.SelectAll(new SelectionFilter(filter));
+                if (psr.Status == PromptStatus.OK && psr.Value != null)
+                {
+                    list = psr.Value.GetObjectIds().ToList();
                 }
             }
             catch { }
@@ -1279,17 +1285,17 @@ namespace Civil3DCsharp
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                TypedValue[] filter = new TypedValue[]
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    DBPoint? pt = tr.GetObject(id, OpenMode.ForRead) as DBPoint;
-                    if (pt != null && pt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    new TypedValue((int)DxfCode.LayoutName, "Model"),
+                    new TypedValue((int)DxfCode.LayerName, layerName),
+                    new TypedValue((int)DxfCode.Start, "POINT")
+                };
+                PromptSelectionResult psr = ed.SelectAll(new SelectionFilter(filter));
+                if (psr.Status == PromptStatus.OK && psr.Value != null)
+                {
+                    list = psr.Value.GetObjectIds().ToList();
                 }
             }
             catch { }
