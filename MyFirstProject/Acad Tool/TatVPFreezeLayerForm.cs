@@ -447,6 +447,8 @@ namespace MyFirstProject.Acad_Tool
             this.Controls.Add(lblStatusSummary);
             this.Controls.Add(btnClose);
 
+            this.CancelButton = btnClose;
+
             this.FormClosing += TatVPFreezeLayerForm_FormClosing;
             this.ResumeLayout(false);
         }
