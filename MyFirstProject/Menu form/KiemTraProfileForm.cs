@@ -180,19 +180,14 @@ namespace MyFirstProject.Menu_form
             {
                 using (var tr = A.Db.TransactionManager.StartTransaction())
                 {
-                    var bt = (BlockTable)tr.GetObject(A.Db.BlockTableId, OpenMode.ForRead);
-                    var btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                    foreach (ObjectId id in btr)
+                    var alignmentIds = A.Cdoc.GetAlignmentIds();
+                    foreach (ObjectId id in alignmentIds)
                     {
-                        if (id.ObjectClass.Name == "AeccDbAlignment")
+                        var align = tr.GetObject(id, OpenMode.ForRead) as Alignment;
+                        if (align != null && !align.IsConnectedAlignment)
                         {
-                            var align = tr.GetObject(id, OpenMode.ForRead) as Alignment;
-                            if (align != null && !align.IsConnectedAlignment)
-                            {
-                                cbbAlignments.Items.Add(align.Name);
-                                _alignmentIds.Add(id);
-                            }
+                            cbbAlignments.Items.Add(align.Name);
+                            _alignmentIds.Add(id);
                         }
                     }
                     tr.Commit();
