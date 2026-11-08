@@ -1,0 +1,1 @@
+## 2024-05-18 - Initialize Palette Journal\n**Learning:** Accessibility and UX are key in WinForms too.\n**Action:** Ensure all forms have AcceptButton and CancelButton configured for keyboard navigation.
