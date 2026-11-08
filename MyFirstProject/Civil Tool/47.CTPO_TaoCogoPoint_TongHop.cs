@@ -1231,21 +1231,41 @@ namespace Civil3DCsharp
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                if (db != A.Cdoc.Database)
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    AcadDBObject dbo = tr.GetObject(id, OpenMode.ForRead);
-                    if (dbo is DBText dt && dt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                    BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    foreach (ObjectId id in btr)
                     {
-                        list.Add(id);
+                        if (id.IsNull || id.IsErased) continue;
+                        if (id.ObjectClass.IsDerivedFrom(RXClass.GetClass(typeof(DBText))) ||
+                            id.ObjectClass.IsDerivedFrom(RXClass.GetClass(typeof(MText))))
+                        {
+                            AcadEntity? ent = tr.GetObject(id, OpenMode.ForRead) as AcadEntity;
+                            if (ent != null && ent.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                list.Add(id);
+                            }
+                        }
                     }
-                    else if (dbo is MText mt && mt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(id);
-                    }
+                    return list;
+                }
+
+                TypedValue[] acTypValAr = new TypedValue[6];
+                acTypValAr[0] = new TypedValue((int)DxfCode.LayoutName, "Model");
+                acTypValAr[1] = new TypedValue((int)DxfCode.LayerName, layerName);
+                acTypValAr[2] = new TypedValue((int)DxfCode.Operator, "<or");
+                acTypValAr[3] = new TypedValue((int)DxfCode.Start, "TEXT");
+                acTypValAr[4] = new TypedValue((int)DxfCode.Start, "MTEXT");
+                acTypValAr[5] = new TypedValue((int)DxfCode.Operator, "or>");
+
+                SelectionFilter filter = new SelectionFilter(acTypValAr);
+                PromptSelectionResult psr = A.Ed.SelectAll(filter);
+
+                if (psr.Status == PromptStatus.OK)
+                {
+                    list.AddRange(psr.Value.GetObjectIds());
                 }
             }
             catch { }
@@ -1257,17 +1277,37 @@ namespace Civil3DCsharp
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                if (db != A.Cdoc.Database)
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    Circle? circle = tr.GetObject(id, OpenMode.ForRead) as Circle;
-                    if (circle != null && circle.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                    BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    foreach (ObjectId id in btr)
                     {
-                        list.Add(id);
+                        if (id.IsNull || id.IsErased) continue;
+                        if (id.ObjectClass.IsDerivedFrom(RXClass.GetClass(typeof(Circle))))
+                        {
+                            Circle? circle = tr.GetObject(id, OpenMode.ForRead) as Circle;
+                            if (circle != null && circle.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                list.Add(id);
+                            }
+                        }
                     }
+                    return list;
+                }
+
+                TypedValue[] acTypValAr = new TypedValue[3];
+                acTypValAr[0] = new TypedValue((int)DxfCode.LayoutName, "Model");
+                acTypValAr[1] = new TypedValue((int)DxfCode.LayerName, layerName);
+                acTypValAr[2] = new TypedValue((int)DxfCode.Start, "CIRCLE");
+
+                SelectionFilter filter = new SelectionFilter(acTypValAr);
+                PromptSelectionResult psr = A.Ed.SelectAll(filter);
+
+                if (psr.Status == PromptStatus.OK)
+                {
+                    list.AddRange(psr.Value.GetObjectIds());
                 }
             }
             catch { }
@@ -1279,17 +1319,37 @@ namespace Civil3DCsharp
             List<ObjectId> list = new List<ObjectId>();
             try
             {
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in btr)
+                if (db != A.Cdoc.Database)
                 {
-                    if (id.IsNull || id.IsErased) continue;
-                    DBPoint? pt = tr.GetObject(id, OpenMode.ForRead) as DBPoint;
-                    if (pt != null && pt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                    BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    foreach (ObjectId id in btr)
                     {
-                        list.Add(id);
+                        if (id.IsNull || id.IsErased) continue;
+                        if (id.ObjectClass.IsDerivedFrom(RXClass.GetClass(typeof(DBPoint))))
+                        {
+                            DBPoint? pt = tr.GetObject(id, OpenMode.ForRead) as DBPoint;
+                            if (pt != null && pt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                list.Add(id);
+                            }
+                        }
                     }
+                    return list;
+                }
+
+                TypedValue[] acTypValAr = new TypedValue[3];
+                acTypValAr[0] = new TypedValue((int)DxfCode.LayoutName, "Model");
+                acTypValAr[1] = new TypedValue((int)DxfCode.LayerName, layerName);
+                acTypValAr[2] = new TypedValue((int)DxfCode.Start, "POINT");
+
+                SelectionFilter filter = new SelectionFilter(acTypValAr);
+                PromptSelectionResult psr = A.Ed.SelectAll(filter);
+
+                if (psr.Status == PromptStatus.OK)
+                {
+                    list.AddRange(psr.Value.GetObjectIds());
                 }
             }
             catch { }
