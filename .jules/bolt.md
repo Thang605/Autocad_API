@@ -1,0 +1,3 @@
+## 2026-11-09 - [Performance] O(N) ModelSpace iterations with RXClass filtering
+**Learning:** In AutoCAD .NET development, calling `tr.GetObject()` inside O(N) loops over `ModelSpace` to check an object's type can cause severe performance bottlenecks, especially in large drawings. Additionally, `RXClass.GetClass()` is an expensive reflection-based operation.
+**Action:** When filtering objects by type during `ModelSpace` iterations, declare the required `RXClass` variable(s) outside of the loop. Inside the loop, check the object's type metadata directly from the `ObjectId` using `id.ObjectClass.IsDerivedFrom(...)` before opening it with a transaction.

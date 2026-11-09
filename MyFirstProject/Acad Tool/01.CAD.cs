@@ -557,8 +557,10 @@ namespace Civil3DCsharp
                 BlockTable bt = (BlockTable)tr.GetObject(A.Doc.Database.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
+                RXClass rxSolid = RXClass.GetClass(typeof(Solid3d));
                 foreach (ObjectId objId in btr)
                 {
+                    if (!objId.ObjectClass.IsDerivedFrom(rxSolid)) continue;
                     Entity ent = (Entity)tr.GetObject(objId, OpenMode.ForRead);
                     if (ent is Solid3d)
                     {
@@ -567,8 +569,10 @@ namespace Civil3DCsharp
                     }
                 }
 
+                RXClass rxBody = RXClass.GetClass(typeof(Body));
                 foreach (ObjectId objId in btr)
                 {
+                    if (!objId.ObjectClass.IsDerivedFrom(rxBody)) continue;
                     Entity ent = (Entity)tr.GetObject(objId, OpenMode.ForRead);
                     if (ent is Body)
                     {

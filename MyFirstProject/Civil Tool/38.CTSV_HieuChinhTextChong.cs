@@ -373,13 +373,12 @@ namespace Civil3DCsharp
             {
                 try
                 {
-                    var dbObj = tr.GetObject(entId, OpenMode.ForRead);
-                    AcadEntity ent = dbObj as AcadEntity;
-                    if (ent == null) continue;
-
-                    // Kiểm tra DxfName cho label group
-                    string dxfName = ent.GetRXClass().DxfName;
+                    string dxfName = entId.ObjectClass.DxfName;
                     if (!dxfName.Contains("AECC") || !dxfName.Contains("BAND")) continue;
+
+                    var dbObj = tr.GetObject(entId, OpenMode.ForRead);
+                    Autodesk.AutoCAD.DatabaseServices.Entity ent = dbObj as Autodesk.AutoCAD.DatabaseServices.Entity;
+                    if (ent == null) continue;
 
                     // Kiểm tra nếu label group nằm gần section view
                     try

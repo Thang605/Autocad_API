@@ -183,10 +183,12 @@ namespace Civil3DCsharp
                 BlockTableRecord? btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
                 if (btr == null) return result;
 
+                RXClass rxAlignment = RXClass.GetClass(typeof(Alignment));
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
+                        if (!entityId.ObjectClass.IsDerivedFrom(rxAlignment)) continue;
                         if (tr.GetObject(entityId, OpenMode.ForRead) is Alignment alignment)
                         {
                             ObjectIdCollection sampleLineGroupIds = alignment.GetSampleLineGroupIds();
@@ -938,12 +940,18 @@ namespace Civil3DCsharp
                 var allAeccTables = new List<Autodesk.AutoCAD.DatabaseServices.Entity>();
                 var allYellowTexts = new List<(string Text, double X, double Y)>();
 
+                RXClass rxText = RXClass.GetClass(typeof(DBText));
+                RXClass rxMText = RXClass.GetClass(typeof(MText));
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
+                        string dxfName = entityId.ObjectClass.DxfName;
+                        bool isTable = dxfName.Contains("AECC") && dxfName.Contains("TABLE");
+                        bool isText = entityId.ObjectClass.IsDerivedFrom(rxText) || entityId.ObjectClass.IsDerivedFrom(rxMText);
+                        if (!isTable && !isText) continue;
                         var dbObj = tr.GetObject(entityId, OpenMode.ForRead);
-                        if (dbObj is Autodesk.AutoCAD.DatabaseServices.Entity ent && ent.GetRXClass().DxfName.Contains("AECC") && ent.GetRXClass().DxfName.Contains("TABLE"))
+                        if (isTable && dbObj is Autodesk.AutoCAD.DatabaseServices.Entity ent)
                         {
                             allAeccTables.Add(ent);
                         }
