@@ -147,11 +147,12 @@ namespace Civil3DCsharp
                 if (btr == null) return materialInfoList;
 
                 // Duyệt qua tất cả entities để tìm material sections
+                var materialSectionClass = RXClass.GetClass(typeof(MaterialSection));
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
-                        if (tr.GetObject(entityId, OpenMode.ForRead) is MaterialSection materialSection)
+                        if (entityId.ObjectClass.IsDerivedFrom(materialSectionClass) && tr.GetObject(entityId, OpenMode.ForRead) is MaterialSection materialSection)
                         {
                             // Kiểm tra xem material section này có thuộc sample line group không
                             if (IsMaterialSectionBelongToGroup(materialSection, sampleLineIds, tr))
@@ -325,11 +326,12 @@ namespace Civil3DCsharp
                 BlockTableRecord? btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
                 if (btr == null) return FormatStation(station);
 
+                var sampleLineClass = RXClass.GetClass(typeof(SampleLine));
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
-                        if (tr.GetObject(entityId, OpenMode.ForRead) is SampleLine sampleLine)
+                        if (entityId.ObjectClass.IsDerivedFrom(sampleLineClass) && tr.GetObject(entityId, OpenMode.ForRead) is SampleLine sampleLine)
                         {
                             if (Math.Abs(sampleLine.Station - station) < 0.001)
                             {
@@ -806,11 +808,12 @@ namespace Civil3DCsharp
                 if (btr == null) return volumes;
 
                 // Duyệt qua tất cả entities để tìm material sections
+                var materialSectionClass = RXClass.GetClass(typeof(MaterialSection));
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
-                        if (tr.GetObject(entityId, OpenMode.ForRead) is MaterialSection materialSection)
+                        if (entityId.ObjectClass.IsDerivedFrom(materialSectionClass) && tr.GetObject(entityId, OpenMode.ForRead) is MaterialSection materialSection)
                         {
                             // Kiểm tra xem material section này có thuộc sample line group không
                             if (IsMaterialSectionBelongToGroup(materialSection, sampleLineIds, tr))
