@@ -88,7 +88,7 @@ File gốc `.cs` được thay bằng file comment-only liệt kê cấu trúc:
 ```powershell
 dotnet build
 ```
-Cwd: `c:\Onedrive\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject`
+Cwd: `C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\MyFirstProject`
 
 2. Nếu build lỗi:
    - Kiểm tra thiếu `using` → bổ sung

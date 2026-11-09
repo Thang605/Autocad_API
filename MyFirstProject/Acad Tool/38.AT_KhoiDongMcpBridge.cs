@@ -38,7 +38,7 @@ using Entity = Autodesk.AutoCAD.DatabaseServices.Entity;
 
 namespace Civil3DCsharp
 {
-    public class AT_McpBridgeServer
+    public partial class AT_McpBridgeServer
     {
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
@@ -148,9 +148,48 @@ namespace Civil3DCsharp
         }
 
         /// <summary>
-        /// Thực thi một hàm đồng bộ ngay trên Main UI Thread của AutoCAD với DocumentLock an toàn.
+        /// Tìm và trả về Document mục tiêu từ danh sách các bản vẽ đang mở theo tên hoặc đường dẫn.
+        /// Nếu không chỉ định targetDocName, trả về MdiActiveDocument.
         /// </summary>
-        private static T RunOnAutoCadMainThread<T>(Func<Document, T> func)
+        public static Document ResolveTargetDocument(string? targetDocName)
+        {
+            if (string.IsNullOrWhiteSpace(targetDocName))
+            {
+                Document? active = Application.DocumentManager.MdiActiveDocument;
+                if (active == null)
+                    throw new InvalidOperationException("Không có bản vẽ (MdiActiveDocument) nào đang mở trong AutoCAD.");
+                return active;
+            }
+
+            string filter = targetDocName.Trim();
+            foreach (Document d in Application.DocumentManager)
+            {
+                string dName = Path.GetFileName(d.Name);
+                string dFull = d.Database?.Filename ?? d.Name;
+                if (d.Name.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
+                    dName.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
+                    dName.Equals(Path.GetFileName(filter), StringComparison.OrdinalIgnoreCase) ||
+                    dFull.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
+                    d.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                    dFull.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                {
+                    return d;
+                }
+            }
+
+            var openList = new List<string>();
+            foreach (Document d in Application.DocumentManager)
+            {
+                openList.Add(Path.GetFileName(d.Name));
+            }
+            throw new FileNotFoundException($"Không tìm thấy bản vẽ '{targetDocName}' trong số các bản vẽ đang mở. Danh sách bản vẽ hiện có: [{string.Join(", ", openList)}]");
+        }
+
+        /// <summary>
+        /// Thực thi một hàm đồng bộ ngay trên Main UI Thread của AutoCAD với DocumentLock an toàn.
+        /// Hỗ trợ chỉ định bản vẽ mục tiêu qua targetDocName (mặc định null = MdiActiveDocument).
+        /// </summary>
+        private static T RunOnAutoCadMainThread<T>(Func<Document, T> func, string? targetDocName = null)
         {
             if (_uiMarshalControl == null || !_uiMarshalControl.IsHandleCreated)
             {
@@ -164,10 +203,7 @@ namespace Civil3DCsharp
             {
                 try
                 {
-                    Document? doc = Application.DocumentManager.MdiActiveDocument;
-                    if (doc == null)
-                        throw new InvalidOperationException("Không có bản vẽ (MdiActiveDocument) nào đang mở trong AutoCAD.");
-
+                    Document doc = ResolveTargetDocument(targetDocName);
                     using (doc.LockDocument())
                     {
                         result = func(doc);
@@ -209,6 +245,7 @@ namespace Civil3DCsharp
             {
                 if (path == "/status")
                 {
+                    string reqDoc = ctx.Request.QueryString["document_name"] ?? ctx.Request.QueryString["drawing_name"] ?? "";
                     var info = RunOnAutoCadMainThread(doc =>
                     {
                         Database db = doc.Database;
@@ -270,7 +307,7 @@ namespace Civil3DCsharp
                         {
                             status = "connected",
                             service = "autocad-mcp-csharp-bridge",
-                            bridge_version = "3.1-civil3d-multidoc",
+                            bridge_version = "3.2-multidoc-pagination",
                             pid = Environment.ProcessId,
                             port = _activePort,
                             active_document = doc.Name,
@@ -280,7 +317,7 @@ namespace Civil3DCsharp
                             civil3d_summary = civilSummary,
                             layers = layers
                         };
-                    });
+                    }, string.IsNullOrWhiteSpace(reqDoc) ? null : reqDoc);
 
                     await WriteJsonResponseAsync(ctx.Response, 200, info).ConfigureAwait(false);
                     return;
@@ -293,13 +330,34 @@ namespace Civil3DCsharp
                         : "{}";
                     string queryAction = ctx.Request.QueryString["action"] ?? "";
                     string queryTarget = ctx.Request.QueryString["target"] ?? "";
-                    var civilRes = RunOnAutoCadMainThread(doc => ExecuteCivilRequest(doc, body, queryAction, queryTarget));
+                    string targetDoc = ctx.Request.QueryString["document_name"] ?? ctx.Request.QueryString["drawing_name"] ?? "";
+                    if (string.IsNullOrWhiteSpace(targetDoc) && !string.IsNullOrWhiteSpace(body))
+                    {
+                        try
+                        {
+                            using var jd = JsonDocument.Parse(body);
+                            targetDoc = GetStr(jd.RootElement, "document_name", GetStr(jd.RootElement, "drawing_name", ""));
+                        }
+                        catch { }
+                    }
+                    var civilRes = RunOnAutoCadMainThread(doc => ExecuteCivilRequest(doc, body, queryAction, queryTarget), string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
                     await WriteJsonResponseAsync(ctx.Response, 200, civilRes).ConfigureAwait(false);
                     return;
                 }
 
                 if (path == "/clear" && ctx.Request.HttpMethod == "POST")
                 {
+                    string body = await ReadBodyAsync(ctx.Request).ConfigureAwait(false);
+                    string targetDoc = ctx.Request.QueryString["document_name"] ?? ctx.Request.QueryString["drawing_name"] ?? "";
+                    if (string.IsNullOrWhiteSpace(targetDoc) && !string.IsNullOrWhiteSpace(body))
+                    {
+                        try
+                        {
+                            using var jd = JsonDocument.Parse(body);
+                            targetDoc = GetStr(jd.RootElement, "document_name", GetStr(jd.RootElement, "drawing_name", ""));
+                        }
+                        catch { }
+                    }
                     int deleted = RunOnAutoCadMainThread(doc =>
                     {
                         Database db = doc.Database;
@@ -320,7 +378,7 @@ namespace Civil3DCsharp
                         }
                         doc.Editor.Regen();
                         return count;
-                    });
+                    }, string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
 
                     await WriteJsonResponseAsync(ctx.Response, 200, new { status = "success", deleted_count = deleted }).ConfigureAwait(false);
                     return;
@@ -329,14 +387,22 @@ namespace Civil3DCsharp
                 if (path == "/draw" && ctx.Request.HttpMethod == "POST")
                 {
                     string body = await ReadBodyAsync(ctx.Request).ConfigureAwait(false);
-                    var drawRes = RunOnAutoCadMainThread(doc => ExecuteDrawBatch(doc, body));
+                    string targetDoc = "";
+                    try
+                    {
+                        using var jd = JsonDocument.Parse(body);
+                        targetDoc = GetStr(jd.RootElement, "document_name", GetStr(jd.RootElement, "drawing_name", ""));
+                    }
+                    catch { }
+                    var drawRes = RunOnAutoCadMainThread(doc => ExecuteDrawBatch(doc, body), string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
                     await WriteJsonResponseAsync(ctx.Response, 200, drawRes).ConfigureAwait(false);
                     return;
                 }
 
                 if (path == "/inspect")
                 {
-                    var inspectRes = RunOnAutoCadMainThread(doc => InspectModelSpace(doc));
+                    string targetDoc = ctx.Request.QueryString["document_name"] ?? ctx.Request.QueryString["drawing_name"] ?? "";
+                    var inspectRes = RunOnAutoCadMainThread(doc => InspectModelSpace(doc), string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
                     await WriteJsonResponseAsync(ctx.Response, 200, inspectRes).ConfigureAwait(false);
                     return;
                 }
@@ -345,12 +411,14 @@ namespace Civil3DCsharp
                 {
                     string body = await ReadBodyAsync(ctx.Request).ConfigureAwait(false);
                     string cmdToSend = "";
+                    string targetDoc = "";
                     using (JsonDocument jdoc = JsonDocument.Parse(body))
                     {
                         if (jdoc.RootElement.TryGetProperty("command", out JsonElement cmdEl))
                         {
                             cmdToSend = cmdEl.GetString() ?? "";
                         }
+                        targetDoc = GetStr(jdoc.RootElement, "document_name", GetStr(jdoc.RootElement, "drawing_name", ""));
                     }
 
                     bool sent = RunOnAutoCadMainThread(doc =>
@@ -364,7 +432,7 @@ namespace Civil3DCsharp
                         }
                         catch { }
                         return true;
-                    });
+                    }, string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
 
                     await WriteJsonResponseAsync(ctx.Response, 200, new { status = "ok", dispatched = sent }).ConfigureAwait(false);
                     return;
@@ -373,6 +441,13 @@ namespace Civil3DCsharp
                 if (path == "/manage" && ctx.Request.HttpMethod == "POST")
                 {
                     string body = await ReadBodyAsync(ctx.Request).ConfigureAwait(false);
+                    string targetDoc = "";
+                    try
+                    {
+                        using var jd = JsonDocument.Parse(body);
+                        targetDoc = GetStr(jd.RootElement, "document_name", GetStr(jd.RootElement, "drawing_name", ""));
+                    }
+                    catch { }
                     var manageRes = RunOnAutoCadMainThread<object>(doc =>
                     {
                         using JsonDocument jdoc = JsonDocument.Parse(body);
@@ -409,7 +484,7 @@ namespace Civil3DCsharp
                             }
                         }
                         return new { status = "error", message = $"Action không hỗ trợ qua HTTP: {act}" };
-                    });
+                    }, string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
 
                     await WriteJsonResponseAsync(ctx.Response, 200, manageRes).ConfigureAwait(false);
                     return;
@@ -448,7 +523,43 @@ namespace Civil3DCsharp
                     return;
                 }
 
+                if ((path == "/table" || path == "/propsets") && ctx.Request.HttpMethod == "POST")
+                {
+                    string body = await ReadBodyAsync(ctx.Request).ConfigureAwait(false);
+                    string targetDoc = ctx.Request.QueryString["document_name"] ?? "";
+                    if (string.IsNullOrWhiteSpace(targetDoc))
+                    {
+                        try
+                        {
+                            using var jd = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                            targetDoc = GetStr(jd.RootElement, "document_name", GetStr(jd.RootElement, "drawing_name", ""));
+                        }
+                        catch { }
+                    }
+                    object res = path == "/table"
+                        ? RunOnAutoCadMainThread(doc => CreateNativeTable(doc, body), string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc)
+                        : RunOnAutoCadMainThread(doc => ExecutePropertySetRequest(doc, body), string.IsNullOrWhiteSpace(targetDoc) ? null : targetDoc);
+                    await WriteJsonResponseAsync(ctx.Response, 200, res).ConfigureAwait(false);
+                    return;
+                }
+
                 await WriteJsonResponseAsync(ctx.Response, 404, new { status = "not_found" }).ConfigureAwait(false);
+            }
+            catch (FileNotFoundException fnfEx)
+            {
+                try
+                {
+                    await WriteJsonResponseAsync(ctx.Response, 404, new { status = "error", message = fnfEx.Message }).ConfigureAwait(false);
+                }
+                catch { }
+            }
+            catch (ArgumentException aex)
+            {
+                try
+                {
+                    await WriteJsonResponseAsync(ctx.Response, 400, new { status = "error", message = aex.Message }).ConfigureAwait(false);
+                }
+                catch { }
             }
             catch (System.Exception ex)
             {
@@ -647,43 +758,26 @@ namespace Civil3DCsharp
 
         private static Document ResolveCivilTargetDocument(Document activeDoc, JsonElement root)
         {
-            string docFilter = GetStr(root, "document_name", "").Trim();
+            string docFilter = GetStr(root, "document_name", GetStr(root, "drawing_name", "")).Trim();
             if (!string.IsNullOrWhiteSpace(docFilter))
             {
                 foreach (Document d in Application.DocumentManager)
                 {
-                    if (d.Name.Contains(docFilter, StringComparison.OrdinalIgnoreCase) ||
-                        d.Database.Filename.Contains(docFilter, StringComparison.OrdinalIgnoreCase))
+                    string dName = Path.GetFileName(d.Name);
+                    string dFull = d.Database?.Filename ?? d.Name;
+                    if (d.Name.Equals(docFilter, StringComparison.OrdinalIgnoreCase) ||
+                        dName.Equals(docFilter, StringComparison.OrdinalIgnoreCase) ||
+                        dName.Equals(Path.GetFileName(docFilter), StringComparison.OrdinalIgnoreCase) ||
+                        dFull.Equals(docFilter, StringComparison.OrdinalIgnoreCase) ||
+                        d.Name.Contains(docFilter, StringComparison.OrdinalIgnoreCase) ||
+                        dFull.Contains(docFilter, StringComparison.OrdinalIgnoreCase))
                     {
                         return d;
                     }
                 }
             }
 
-            try
-            {
-                CivilDocument activeCdoc = CivilDocument.GetCivilDocument(activeDoc.Database);
-                int activeCivilCount = activeCdoc.GetAlignmentIds().Count
-                                     + activeCdoc.GetSurfaceIds().Count
-                                     + activeCdoc.CorridorCollection.Count
-                                     + activeCdoc.GetPipeNetworkIds().Count;
-                if (activeCivilCount == 0)
-                {
-                    foreach (Document d in Application.DocumentManager)
-                    {
-                        if (d == activeDoc) continue;
-                        try
-                        {
-                            CivilDocument cdoc = CivilDocument.GetCivilDocument(d.Database);
-                            int cnt = cdoc.GetAlignmentIds().Count + cdoc.GetSurfaceIds().Count + cdoc.CorridorCollection.Count;
-                            if (cnt > 0) return d;
-                        }
-                        catch { }
-                    }
-                }
-            }
-            catch { }
-
+            // Luôn mặc định sử dụng activeDoc, loại bỏ hoàn toàn việc tự động chuyển sang bản vẽ khác (anti-pattern hijacking)
             return activeDoc;
         }
 
@@ -703,6 +797,10 @@ namespace Civil3DCsharp
 
                 string targetName = GetStr(root, "target_name", GetStr(root, "alignment_name", queryTarget)).Trim();
                 int maxItems = Math.Max(10, GetInt(root, "max_items", 500));
+                bool summaryOnly = GetBool(root, "summary_only", GetBool(root, "summary", action == "summary"));
+                string entityType = GetStr(root, "entity_type", GetStr(root, "type", "")).Trim().ToLowerInvariant();
+                int page = Math.Max(1, GetInt(root, "page", 1));
+                int pageSize = Math.Max(1, GetInt(root, "page_size", 50));
 
                 switch (action)
                 {
@@ -710,7 +808,7 @@ namespace Civil3DCsharp
                     case "summary":
                     case "all":
                     case "inspect_all":
-                        return InspectAllCivil3DData(db, root, targetName, maxItems);
+                        return InspectAllCivil3DData(db, root, summaryOnly, entityType, targetName, maxItems, page, pageSize);
 
                     case "stake_report":
                     case "alignment_report":
@@ -738,8 +836,19 @@ namespace Civil3DCsharp
                     case "dieu_chinh_be_rong_coc":
                         return AdjustSampleLineWidths(doc, root, targetName);
 
+                    case "list_property_sets":
+                    case "get_property_sets":
+                    case "attach_property_set":
+                    case "set_property_values":
+                    case "import_property_sets":
+                    case "list_schedule_styles":
+                    case "list_schedule_tables":
+                    case "insert_schedule_table":
+                    case "update_schedule_tables":
+                        return ExecutePropertySetFromCivil(doc, root, action);
+
                     default:
-                        return InspectAllCivil3DData(db, root, targetName, maxItems);
+                        return InspectAllCivil3DData(db, root, summaryOnly, entityType, targetName, maxItems, page, pageSize);
                 }
             }
             finally
@@ -749,12 +858,60 @@ namespace Civil3DCsharp
         }
 
         /// <summary>
-        /// 1. Đọc & liệt kê chi tiết toàn bộ đối tượng Civil 3D trong bản vẽ hiện hành.
+        /// 1. Đọc & liệt kê chi tiết hoặc tóm tắt đối tượng Civil 3D trong bản vẽ với hỗ trợ lọc và phân trang.
         /// </summary>
-        private static object InspectAllCivil3DData(Database db, JsonElement root, string filterName, int maxItems)
+        private static object InspectAllCivil3DData(
+            Database db,
+            JsonElement root,
+            bool summaryOnly = false,
+            string entityType = "",
+            string targetName = "",
+            int maxItems = 500,
+            int page = 1,
+            int pageSize = 50)
         {
             using Transaction tr = db.TransactionManager.StartTransaction();
             CivilDocument cdoc = CivilDocument.GetCivilDocument(db);
+
+            int totalAlignments = cdoc.GetAlignmentIds().Count;
+            int totalSurfaces = cdoc.GetSurfaceIds().Count;
+            int totalCorridors = cdoc.CorridorCollection.Count;
+            int totalPipeNetworks = cdoc.GetPipeNetworkIds().Count;
+            int totalAssemblies = 0;
+            try { totalAssemblies = cdoc.AssemblyCollection.Count; } catch { }
+            int totalCogoPoints = 0;
+            try { totalCogoPoints = (int)cdoc.CogoPoints.Count; } catch { }
+            int totalParcels = 0;
+            try
+            {
+                foreach (ObjectId sId in cdoc.GetSiteIds())
+                {
+                    if (sId.IsNull || sId.IsErased) continue;
+                    if (tr.GetObject(sId, OpenMode.ForRead) is Site st)
+                        totalParcels += st.GetParcelIds().Count;
+                }
+            }
+            catch { }
+            int totalSampleLineGroups = 0;
+            try
+            {
+                foreach (ObjectId aId in cdoc.GetAlignmentIds())
+                {
+                    if (aId.IsNull || aId.IsErased) continue;
+                    if (tr.GetObject(aId, OpenMode.ForRead) is Alignment al)
+                        totalSampleLineGroups += al.GetSampleLineGroupIds().Count;
+                }
+            }
+            catch { }
+
+            bool matchAll = string.IsNullOrWhiteSpace(entityType) || entityType == "all";
+            bool wantAlignments = matchAll || entityType.Contains("align") || entityType.Contains("profile") || entityType.Contains("sample");
+            bool wantSurfaces = matchAll || entityType.Contains("surf");
+            bool wantCorridors = matchAll || entityType.Contains("corr");
+            bool wantParcels = matchAll || entityType.Contains("parcel");
+            bool wantPipeNetworks = matchAll || entityType.Contains("pipe") || entityType.Contains("net");
+            bool wantCogoPoints = matchAll || entityType.Contains("cogo") || entityType.Contains("point");
+            bool wantAssemblies = matchAll || entityType.Contains("assemb");
 
             var alignments = new List<object>();
             var surfaces = new List<object>();
@@ -766,454 +923,614 @@ namespace Civil3DCsharp
             var assemblies = new List<object>();
 
             // 1. Alignments + Profiles + ProfileViews + SampleLineGroups
-            foreach (ObjectId aId in cdoc.GetAlignmentIds())
+            if (wantAlignments)
             {
-                if (aId.IsNull || aId.IsErased) continue;
-                if (tr.GetObject(aId, OpenMode.ForWrite) is not Alignment al) continue;
-                if (!string.IsNullOrWhiteSpace(filterName) && !al.Name.Contains(filterName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var profList = new List<object>();
-                foreach (ObjectId pId in al.GetProfileIds())
+                foreach (ObjectId aId in cdoc.GetAlignmentIds())
                 {
-                    if (pId.IsNull || pId.IsErased) continue;
-                    if (tr.GetObject(pId, OpenMode.ForWrite) is Profile prof)
+                    if (aId.IsNull || aId.IsErased) continue;
+                    if (tr.GetObject(aId, OpenMode.ForRead) is not Alignment al) continue;
+                    if (!string.IsNullOrWhiteSpace(targetName) && !al.Name.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var profList = new List<object>();
+                    foreach (ObjectId pId in al.GetProfileIds())
                     {
-                        var pvis = new List<object>();
-                        try
+                        if (pId.IsNull || pId.IsErased) continue;
+                        if (tr.GetObject(pId, OpenMode.ForRead) is Profile prof)
                         {
-                            int pviLimit = Math.Min(prof.PVIs.Count, 100);
-                            for (int i = 0; i < pviLimit; i++)
+                            int totalPvis = SafeGet(() => prof.PVIs.Count, 0);
+                            double minElev = 0, maxElev = 0, startSta = 0, endSta = 0;
+                            try { minElev = Math.Round(prof.ElevationMin, 3); } catch { }
+                            try { maxElev = Math.Round(prof.ElevationMax, 3); } catch { }
+                            try { startSta = Math.Round(prof.StartingStation, 3); } catch { }
+                            try { endSta = Math.Round(prof.EndingStation, 3); } catch { }
+
+                            if (summaryOnly)
                             {
-                                ProfilePVI pvi = prof.PVIs[i];
-                                double gIn = 0, gOut = 0;
-                                try { gIn = Math.Round(pvi.GradeIn * 100.0, 3); } catch { }
-                                try { gOut = Math.Round(pvi.GradeOut * 100.0, 3); } catch { }
-                                pvis.Add(new
+                                profList.Add(new
                                 {
-                                    index = i,
-                                    station = Math.Round(pvi.RawStation, 3),
-                                    elevation = Math.Round(pvi.Elevation, 3),
-                                    grade_in_pct = gIn,
-                                    grade_out_pct = gOut
+                                    name = prof.Name,
+                                    handle = prof.Handle.ToString(),
+                                    profile_type = prof.ProfileType.ToString(),
+                                    style = SafeGet(() => prof.StyleName, ""),
+                                    layer = SafeGet(() => prof.Layer, ""),
+                                    starting_station = startSta,
+                                    ending_station = endSta,
+                                    elevation_min = minElev,
+                                    elevation_max = maxElev,
+                                    pvi_count = totalPvis
+                                });
+                            }
+                            else
+                            {
+                                var pvis = new List<object>();
+                                try
+                                {
+                                    int pviStart = Math.Max(0, (page - 1) * pageSize);
+                                    int pviEnd = Math.Min(totalPvis, pviStart + Math.Min(pageSize, maxItems));
+                                    for (int i = pviStart; i < pviEnd; i++)
+                                    {
+                                        ProfilePVI pvi = prof.PVIs[i];
+                                        double gIn = 0, gOut = 0;
+                                        try { gIn = Math.Round(pvi.GradeIn * 100.0, 3); } catch { }
+                                        try { gOut = Math.Round(pvi.GradeOut * 100.0, 3); } catch { }
+                                        pvis.Add(new
+                                        {
+                                            index = i,
+                                            station = Math.Round(pvi.RawStation, 3),
+                                            elevation = Math.Round(pvi.Elevation, 3),
+                                            grade_in_pct = gIn,
+                                            grade_out_pct = gOut
+                                        });
+                                    }
+                                }
+                                catch { }
+
+                                profList.Add(new
+                                {
+                                    name = prof.Name,
+                                    handle = prof.Handle.ToString(),
+                                    profile_type = prof.ProfileType.ToString(),
+                                    style = SafeGet(() => prof.StyleName, ""),
+                                    layer = SafeGet(() => prof.Layer, ""),
+                                    starting_station = startSta,
+                                    ending_station = endSta,
+                                    elevation_min = minElev,
+                                    elevation_max = maxElev,
+                                    pvi_count = totalPvis,
+                                    pvi_page = page,
+                                    pvi_page_size = pageSize,
+                                    pvis = pvis
                                 });
                             }
                         }
-                        catch { }
-
-                        double minElev = 0, maxElev = 0, startSta = 0, endSta = 0;
-                        try { minElev = Math.Round(prof.ElevationMin, 3); } catch { }
-                        try { maxElev = Math.Round(prof.ElevationMax, 3); } catch { }
-                        try { startSta = Math.Round(prof.StartingStation, 3); } catch { }
-                        try { endSta = Math.Round(prof.EndingStation, 3); } catch { }
-
-                        profList.Add(new
-                        {
-                            name = prof.Name,
-                            handle = prof.Handle.ToString(),
-                            profile_type = prof.ProfileType.ToString(),
-                            style = SafeGet(() => prof.StyleName, ""),
-                            layer = SafeGet(() => prof.Layer, ""),
-                            starting_station = startSta,
-                            ending_station = endSta,
-                            elevation_min = minElev,
-                            elevation_max = maxElev,
-                            pvi_count = SafeGet(() => prof.PVIs.Count, 0),
-                            pvis = pvis
-                        });
                     }
-                }
 
-                var pvList = new List<object>();
-                foreach (ObjectId pvId in al.GetProfileViewIds())
-                {
-                    if (pvId.IsNull || pvId.IsErased) continue;
-                    if (tr.GetObject(pvId, OpenMode.ForWrite) is ProfileView pv)
+                    var pvList = new List<object>();
+                    foreach (ObjectId pvId in al.GetProfileViewIds())
                     {
-                        pvList.Add(new
+                        if (pvId.IsNull || pvId.IsErased) continue;
+                        if (tr.GetObject(pvId, OpenMode.ForRead) is ProfileView pv)
                         {
-                            name = pv.Name,
-                            handle = pv.Handle.ToString(),
-                            layer = SafeGet(() => pv.Layer, ""),
-                            station_start = SafeGet(() => Math.Round(pv.StationStart, 3), 0.0),
-                            station_end = SafeGet(() => Math.Round(pv.StationEnd, 3), 0.0),
-                            elevation_min = SafeGet(() => Math.Round(pv.ElevationMin, 3), 0.0),
-                            elevation_max = SafeGet(() => Math.Round(pv.ElevationMax, 3), 0.0),
-                            location = new[] { Math.Round(pv.Location.X, 3), Math.Round(pv.Location.Y, 3) }
-                        });
-                    }
-                }
-
-                var slgNames = new List<string>();
-                foreach (ObjectId gId in al.GetSampleLineGroupIds())
-                {
-                    if (gId.IsNull || gId.IsErased) continue;
-                    if (tr.GetObject(gId, OpenMode.ForWrite) is SampleLineGroup grp)
-                    {
-                        slgNames.Add(grp.Name);
-
-                        var svgList = new List<object>();
-                        foreach (SectionViewGroup svg in grp.SectionViewGroups)
-                        {
-                            svgList.Add(new
+                            pvList.Add(new
                             {
-                                name = svg.Name,
-                                section_view_count = svg.GetSectionViewIds().Count
+                                name = pv.Name,
+                                handle = pv.Handle.ToString(),
+                                layer = SafeGet(() => pv.Layer, ""),
+                                station_start = SafeGet(() => Math.Round(pv.StationStart, 3), 0.0),
+                                station_end = SafeGet(() => Math.Round(pv.StationEnd, 3), 0.0),
+                                elevation_min = SafeGet(() => Math.Round(pv.ElevationMin, 3), 0.0),
+                                elevation_max = SafeGet(() => Math.Round(pv.ElevationMax, 3), 0.0),
+                                location = new[] { Math.Round(pv.Location.X, 3), Math.Round(pv.Location.Y, 3) }
                             });
                         }
+                    }
 
-                        var slItems = new List<object>();
-                        ObjectIdCollection slIds = grp.GetSampleLineIds();
-                        int slLimit = Math.Min(slIds.Count, maxItems);
-                        for (int i = 0; i < slLimit; i++)
+                    var slgNames = new List<string>();
+                    foreach (ObjectId gId in al.GetSampleLineGroupIds())
+                    {
+                        if (gId.IsNull || gId.IsErased) continue;
+                        if (tr.GetObject(gId, OpenMode.ForRead) is SampleLineGroup grp)
                         {
-                            if (tr.GetObject(slIds[i], OpenMode.ForWrite) is SampleLine sl)
+                            slgNames.Add(grp.Name);
+
+                            var svgList = new List<object>();
+                            foreach (SectionViewGroup svg in grp.SectionViewGroups)
                             {
-                                double cx = 0, cy = 0;
-                                try { al.PointLocation(sl.Station, 0, ref cx, ref cy); } catch { }
-                                GetSampleLineOffsets(sl, al, out double leftW, out double rightW);
-                                slItems.Add(new
+                                svgList.Add(new
                                 {
-                                    name = sl.Name,
-                                    number = sl.Number,
-                                    station = Math.Round(sl.Station, 3),
-                                    easting = Math.Round(cx, 3),
-                                    northing = Math.Round(cy, 3),
-                                    left_width = Math.Round(leftW, 2),
-                                    right_width = Math.Round(rightW, 2)
+                                    name = svg.Name,
+                                    section_view_count = svg.GetSectionViewIds().Count
+                                });
+                            }
+
+                            ObjectIdCollection slIds = grp.GetSampleLineIds();
+                            int totalSl = slIds.Count;
+
+                            if (summaryOnly)
+                            {
+                                sampleLineGroups.Add(new
+                                {
+                                    alignment_name = al.Name,
+                                    group_name = grp.Name,
+                                    handle = grp.Handle.ToString(),
+                                    sample_line_count = totalSl,
+                                    section_view_groups = svgList
+                                });
+                            }
+                            else
+                            {
+                                var slItems = new List<object>();
+                                int slStart = Math.Max(0, (page - 1) * pageSize);
+                                int slEnd = Math.Min(totalSl, slStart + Math.Min(pageSize, maxItems));
+                                for (int i = slStart; i < slEnd; i++)
+                                {
+                                    if (tr.GetObject(slIds[i], OpenMode.ForRead) is SampleLine sl)
+                                    {
+                                        double cx = 0, cy = 0;
+                                        try { al.PointLocation(sl.Station, 0, ref cx, ref cy); } catch { }
+                                        GetSampleLineOffsets(sl, al, out double leftW, out double rightW);
+                                        slItems.Add(new
+                                        {
+                                            name = sl.Name,
+                                            number = sl.Number,
+                                            station = Math.Round(sl.Station, 3),
+                                            easting = Math.Round(cx, 3),
+                                            northing = Math.Round(cy, 3),
+                                            left_width = Math.Round(leftW, 2),
+                                            right_width = Math.Round(rightW, 2)
+                                        });
+                                    }
+                                }
+
+                                sampleLineGroups.Add(new
+                                {
+                                    alignment_name = al.Name,
+                                    group_name = grp.Name,
+                                    handle = grp.Handle.ToString(),
+                                    sample_line_count = totalSl,
+                                    sample_lines_page = page,
+                                    sample_lines_page_size = pageSize,
+                                    section_view_groups = svgList,
+                                    sample_lines = slItems
                                 });
                             }
                         }
-
-                        sampleLineGroups.Add(new
-                        {
-                            alignment_name = al.Name,
-                            group_name = grp.Name,
-                            handle = grp.Handle.ToString(),
-                            sample_line_count = slIds.Count,
-                            section_view_groups = svgList,
-                            sample_lines = slItems
-                        });
                     }
+
+                    double startX = 0, startY = 0, endX = 0, endY = 0;
+                    try { al.PointLocation(al.StartingStation, 0, ref startX, ref startY); } catch { }
+                    try { al.PointLocation(al.EndingStation, 0, ref endX, ref endY); } catch { }
+
+                    alignments.Add(new
+                    {
+                        name = al.Name,
+                        handle = al.Handle.ToString(),
+                        alignment_type = al.AlignmentType.ToString(),
+                        layer = SafeGet(() => al.Layer, ""),
+                        style = SafeGet(() => al.StyleName, ""),
+                        site_name = SafeGet(() => al.SiteName, ""),
+                        starting_station = Math.Round(al.StartingStation, 3),
+                        ending_station = Math.Round(al.EndingStation, 3),
+                        length = Math.Round(al.Length, 3),
+                        start_point = new[] { Math.Round(startX, 3), Math.Round(startY, 3) },
+                        end_point = new[] { Math.Round(endX, 3), Math.Round(endY, 3) },
+                        profile_count = profList.Count,
+                        profiles = profList,
+                        profile_view_count = pvList.Count,
+                        profile_views = pvList,
+                        sample_line_groups = slgNames
+                    });
                 }
-
-                double startX = 0, startY = 0, endX = 0, endY = 0;
-                try { al.PointLocation(al.StartingStation, 0, ref startX, ref startY); } catch { }
-                try { al.PointLocation(al.EndingStation, 0, ref endX, ref endY); } catch { }
-
-                alignments.Add(new
-                {
-                    name = al.Name,
-                    handle = al.Handle.ToString(),
-                    alignment_type = al.AlignmentType.ToString(),
-                    layer = SafeGet(() => al.Layer, ""),
-                    style = SafeGet(() => al.StyleName, ""),
-                    site_name = SafeGet(() => al.SiteName, ""),
-                    starting_station = Math.Round(al.StartingStation, 3),
-                    ending_station = Math.Round(al.EndingStation, 3),
-                    length = Math.Round(al.Length, 3),
-                    start_point = new[] { Math.Round(startX, 3), Math.Round(startY, 3) },
-                    end_point = new[] { Math.Round(endX, 3), Math.Round(endY, 3) },
-                    profile_count = profList.Count,
-                    profiles = profList,
-                    profile_view_count = pvList.Count,
-                    profile_views = pvList,
-                    sample_line_groups = slgNames
-                });
             }
 
             // 2. Surfaces (TIN, Grid, Volume)
-            foreach (ObjectId sId in cdoc.GetSurfaceIds())
+            if (wantSurfaces)
             {
-                if (sId.IsNull || sId.IsErased) continue;
-                if (tr.GetObject(sId, OpenMode.ForWrite) is not CivSurface surf) continue;
-
-                double minZ = 0, maxZ = 0, meanZ = 0, area2d = 0, area3d = 0;
-                int numPts = 0, numTris = 0;
-                double cutVol = 0, fillVol = 0, netVol = 0;
-
-                try
+                foreach (ObjectId sId in cdoc.GetSurfaceIds())
                 {
-                    var gen = surf.GetGeneralProperties();
-                    minZ = Math.Round(gen.MinimumElevation, 3);
-                    maxZ = Math.Round(gen.MaximumElevation, 3);
-                    meanZ = Math.Round(gen.MeanElevation, 3);
-                    numPts = gen.NumberOfPoints;
-                }
-                catch { }
+                    if (sId.IsNull || sId.IsErased) continue;
+                    if (tr.GetObject(sId, OpenMode.ForRead) is not CivSurface surf) continue;
+                    if (!string.IsNullOrWhiteSpace(targetName) && !surf.Name.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                        continue;
 
-                if (surf is CivilTinSurface tinSurf)
-                {
+                    double minZ = 0, maxZ = 0, meanZ = 0, area2d = 0, area3d = 0;
+                    int numPts = 0, numTris = 0;
+                    double cutVol = 0, fillVol = 0, netVol = 0;
+
                     try
                     {
-                        var tp = tinSurf.GetTerrainProperties();
-                        area2d = Math.Round(tp.SurfaceArea2D, 2);
-                        area3d = Math.Round(tp.SurfaceArea3D, 2);
+                        var gen = surf.GetGeneralProperties();
+                        minZ = Math.Round(gen.MinimumElevation, 3);
+                        maxZ = Math.Round(gen.MaximumElevation, 3);
+                        meanZ = Math.Round(gen.MeanElevation, 3);
+                        numPts = gen.NumberOfPoints;
                     }
                     catch { }
-                    try
-                    {
-                        numTris = tinSurf.GetTinProperties().NumberOfTriangles;
-                    }
-                    catch { }
-                }
-                else if (surf is CivilGridSurface gridSurf)
-                {
-                    try
-                    {
-                        var tp = gridSurf.GetTerrainProperties();
-                        area2d = Math.Round(tp.SurfaceArea2D, 2);
-                        area3d = Math.Round(tp.SurfaceArea3D, 2);
-                    }
-                    catch { }
-                }
-                else if (surf is CivilVolumeSurface volSurf)
-                {
-                    try
-                    {
-                        var vp = volSurf.GetVolumeProperties();
-                        cutVol = Math.Round(vp.AdjustedCutVolume, 2);
-                        fillVol = Math.Round(vp.AdjustedFillVolume, 2);
-                        netVol = Math.Round(vp.AdjustedNetVolume, 2);
-                    }
-                    catch { }
-                }
 
-                surfaces.Add(new
-                {
-                    name = surf.Name,
-                    handle = surf.Handle.ToString(),
-                    type = surf.GetType().Name,
-                    layer = SafeGet(() => surf.Layer, ""),
-                    style = SafeGet(() => surf.StyleName, ""),
-                    is_out_of_date = SafeGet(() => surf.IsOutOfDate, false),
-                    min_elevation = minZ,
-                    max_elevation = maxZ,
-                    mean_elevation = meanZ,
-                    number_of_points = numPts,
-                    number_of_triangles = numTris,
-                    area_2d_m2 = area2d,
-                    area_3d_m2 = area3d,
-                    volume_cut_m3 = cutVol,
-                    volume_fill_m3 = fillVol,
-                    volume_net_m3 = netVol
-                });
+                    if (surf is CivilTinSurface tinSurf)
+                    {
+                        try
+                        {
+                            var tp = tinSurf.GetTerrainProperties();
+                            area2d = Math.Round(tp.SurfaceArea2D, 2);
+                            area3d = Math.Round(tp.SurfaceArea3D, 2);
+                        }
+                        catch { }
+                        try
+                        {
+                            numTris = tinSurf.GetTinProperties().NumberOfTriangles;
+                        }
+                        catch { }
+                    }
+                    else if (surf is CivilGridSurface gridSurf)
+                    {
+                        try
+                        {
+                            var tp = gridSurf.GetTerrainProperties();
+                            area2d = Math.Round(tp.SurfaceArea2D, 2);
+                            area3d = Math.Round(tp.SurfaceArea3D, 2);
+                        }
+                        catch { }
+                    }
+                    else if (surf is CivilVolumeSurface volSurf)
+                    {
+                        try
+                        {
+                            var vp = volSurf.GetVolumeProperties();
+                            cutVol = Math.Round(vp.AdjustedCutVolume, 2);
+                            fillVol = Math.Round(vp.AdjustedFillVolume, 2);
+                            netVol = Math.Round(vp.AdjustedNetVolume, 2);
+                        }
+                        catch { }
+                    }
+
+                    surfaces.Add(new
+                    {
+                        name = surf.Name,
+                        handle = surf.Handle.ToString(),
+                        type = surf.GetType().Name,
+                        layer = SafeGet(() => surf.Layer, ""),
+                        style = SafeGet(() => surf.StyleName, ""),
+                        is_out_of_date = SafeGet(() => surf.IsOutOfDate, false),
+                        min_elevation = minZ,
+                        max_elevation = maxZ,
+                        mean_elevation = meanZ,
+                        number_of_points = numPts,
+                        number_of_triangles = numTris,
+                        area_2d_m2 = area2d,
+                        area_3d_m2 = area3d,
+                        volume_cut_m3 = cutVol,
+                        volume_fill_m3 = fillVol,
+                        volume_net_m3 = netVol
+                    });
+                }
             }
 
             // 3. Corridors
-            foreach (ObjectId cId in cdoc.CorridorCollection)
+            if (wantCorridors)
             {
-                if (cId.IsNull || cId.IsErased) continue;
-                if (tr.GetObject(cId, OpenMode.ForWrite) is not Corridor corr) continue;
-
-                var baselines = new List<object>();
-                try
+                foreach (ObjectId cId in cdoc.CorridorCollection)
                 {
-                    foreach (Baseline bl in corr.Baselines)
-                    {
-                        string alignName = "";
-                        string profName = "";
-                        try
-                        {
-                            if (!bl.AlignmentId.IsNull && tr.GetObject(bl.AlignmentId, OpenMode.ForWrite) is Alignment blAl)
-                                alignName = blAl.Name;
-                        }
-                        catch { }
-                        try
-                        {
-                            if (!bl.ProfileId.IsNull && tr.GetObject(bl.ProfileId, OpenMode.ForWrite) is Profile blPr)
-                                profName = blPr.Name;
-                        }
-                        catch { }
+                    if (cId.IsNull || cId.IsErased) continue;
+                    if (tr.GetObject(cId, OpenMode.ForRead) is not Corridor corr) continue;
+                    if (!string.IsNullOrWhiteSpace(targetName) && !corr.Name.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                        continue;
 
-                        var regions = new List<object>();
-                        foreach (BaselineRegion reg in bl.BaselineRegions)
+                    var baselines = new List<object>();
+                    try
+                    {
+                        foreach (Baseline bl in corr.Baselines)
                         {
-                            string asmName = "";
+                            string alignName = "";
+                            string profName = "";
                             try
                             {
-                                if (!reg.AssemblyId.IsNull && tr.GetObject(reg.AssemblyId, OpenMode.ForWrite) is Assembly asm)
-                                    asmName = asm.Name;
+                                if (!bl.AlignmentId.IsNull && tr.GetObject(bl.AlignmentId, OpenMode.ForRead) is Alignment blAl)
+                                    alignName = blAl.Name;
+                            }
+                            catch { }
+                            try
+                            {
+                                if (!bl.ProfileId.IsNull && tr.GetObject(bl.ProfileId, OpenMode.ForRead) is Profile blPr)
+                                    profName = blPr.Name;
                             }
                             catch { }
 
-                            regions.Add(new
+                            var regions = new List<object>();
+                            if (!summaryOnly)
                             {
-                                name = reg.Name,
-                                assembly_name = asmName,
-                                start_station = Math.Round(reg.StartStation, 3),
-                                end_station = Math.Round(reg.EndStation, 3)
+                                foreach (BaselineRegion reg in bl.BaselineRegions)
+                                {
+                                    string asmName = "";
+                                    try
+                                    {
+                                        if (!reg.AssemblyId.IsNull && tr.GetObject(reg.AssemblyId, OpenMode.ForRead) is Assembly asm)
+                                            asmName = asm.Name;
+                                    }
+                                    catch { }
+
+                                    regions.Add(new
+                                    {
+                                        name = reg.Name,
+                                        assembly_name = asmName,
+                                        start_station = Math.Round(reg.StartStation, 3),
+                                        end_station = Math.Round(reg.EndStation, 3)
+                                    });
+                                }
+                            }
+
+                            baselines.Add(new
+                            {
+                                name = bl.Name,
+                                alignment_name = alignName,
+                                profile_name = profName,
+                                start_station = SafeGet(() => Math.Round(bl.StartStation, 3), 0.0),
+                                end_station = SafeGet(() => Math.Round(bl.EndStation, 3), 0.0),
+                                region_count = bl.BaselineRegions.Count,
+                                regions = regions
                             });
                         }
+                    }
+                    catch { }
 
-                        baselines.Add(new
+                    corridors.Add(new
+                    {
+                        name = corr.Name,
+                        handle = corr.Handle.ToString(),
+                        layer = SafeGet(() => corr.Layer, ""),
+                        is_out_of_date = SafeGet(() => corr.IsOutOfDate, false),
+                        baseline_count = baselines.Count,
+                        baselines = baselines
+                    });
+                }
+            }
+
+            // 4. Parcels (grouped by Site)
+            if (wantParcels)
+            {
+                var parcelSegmentIds = new List<string>();
+                try
+                {
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                    foreach (ObjectId entId in ms)
+                    {
+                        if (tr.GetObject(entId, OpenMode.ForRead) is ParcelSegment seg)
                         {
-                            name = bl.Name,
-                            alignment_name = alignName,
-                            profile_name = profName,
-                            start_station = SafeGet(() => Math.Round(bl.StartStation, 3), 0.0),
-                            end_station = SafeGet(() => Math.Round(bl.EndStation, 3), 0.0),
-                            region_count = regions.Count,
-                            regions = regions
-                        });
+                            parcelSegmentIds.Add(seg.Handle.ToString());
+                        }
                     }
                 }
                 catch { }
 
-                corridors.Add(new
+                foreach (ObjectId siteId in cdoc.GetSiteIds())
                 {
-                    name = corr.Name,
-                    handle = corr.Handle.ToString(),
-                    layer = SafeGet(() => corr.Layer, ""),
-                    is_out_of_date = SafeGet(() => corr.IsOutOfDate, false),
-                    baseline_count = baselines.Count,
-                    baselines = baselines
-                });
-            }
+                    if (siteId.IsNull || siteId.IsErased) continue;
+                    if (tr.GetObject(siteId, OpenMode.ForRead) is not Site site) continue;
 
-            // 4. Parcels (grouped by Site)
-            foreach (ObjectId siteId in cdoc.GetSiteIds())
-            {
-                if (siteId.IsNull || siteId.IsErased) continue;
-                if (tr.GetObject(siteId, OpenMode.ForWrite) is not Site site) continue;
-
-                foreach (ObjectId pId in site.GetParcelIds())
-                {
-                    if (pId.IsNull || pId.IsErased) continue;
-                    if (tr.GetObject(pId, OpenMode.ForWrite) is CivilParcel parcel)
+                    foreach (ObjectId pId in site.GetParcelIds())
                     {
-                        parcels.Add(new
+                        if (pId.IsNull || pId.IsErased) continue;
+                        if (tr.GetObject(pId, OpenMode.ForRead) is CivilParcel parcel)
                         {
-                            site_name = site.Name,
-                            name = parcel.Name,
-                            number = SafeGet(() => (int)parcel.Number, 0),
-                            handle = parcel.Handle.ToString(),
-                            layer = SafeGet(() => parcel.Layer, ""),
-                            style = SafeGet(() => parcel.StyleName, ""),
-                            area_m2 = SafeGet(() => Math.Round(parcel.Area, 2), 0.0),
-                            description = SafeGet(() => parcel.Description, "")
-                        });
+                            if (!string.IsNullOrWhiteSpace(targetName) && !parcel.Name.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            double[] pBbox = new double[] { 0, 0, 0, 0 };
+                            double[] pCentroid = new double[] { 0, 0 };
+                            try
+                            {
+                                Extents3d pExt = parcel.GeometricExtents;
+                                pBbox = new[]
+                                {
+                                    Math.Round(pExt.MinPoint.X, 4),
+                                    Math.Round(pExt.MinPoint.Y, 4),
+                                    Math.Round(pExt.MaxPoint.X, 4),
+                                    Math.Round(pExt.MaxPoint.Y, 4)
+                                };
+                                pCentroid = new[]
+                                {
+                                    Math.Round(parcel.Centroid.X, 4),
+                                    Math.Round(parcel.Centroid.Y, 4)
+                                };
+                            }
+                            catch
+                            {
+                                try
+                                {
+                                    Extents3d pExt = parcel.GeometricExtents;
+                                    pCentroid = new[]
+                                    {
+                                        Math.Round((pExt.MinPoint.X + pExt.MaxPoint.X) / 2.0, 4),
+                                        Math.Round((pExt.MinPoint.Y + pExt.MaxPoint.Y) / 2.0, 4)
+                                    };
+                                }
+                                catch { }
+                            }
+
+                            double perimeter = GetParcelPerimeter(parcel);
+
+                            int taxIdVal = 0;
+                            try { taxIdVal = parcel.TaxId; } catch { }
+
+                            string styleIdStr = "";
+                            try { styleIdStr = parcel.StyleId.Handle.ToString(); } catch { }
+
+                            string siteIdStr = site.Handle.ToString();
+
+                            parcels.Add(new
+                            {
+                                site_name = site.Name,
+                                site_id = siteIdStr,
+                                name = parcel.Name,
+                                number = SafeGet(() => (int)parcel.Number, 0),
+                                handle = parcel.Handle.ToString(),
+                                tax_id = taxIdVal.ToString(),
+                                layer = SafeGet(() => parcel.Layer, ""),
+                                style = SafeGet(() => parcel.StyleName, ""),
+                                style_id = styleIdStr,
+                                area_m2 = SafeGet(() => Math.Round(parcel.Area, 2), 0.0),
+                                perimeter_m = perimeter,
+                                bounding_box = pBbox,
+                                centroid = pCentroid,
+                                parcel_segments_count = parcelSegmentIds.Count,
+                                parcel_segments = parcelSegmentIds,
+                                description = SafeGet(() => parcel.Description, "")
+                            });
+                        }
                     }
                 }
             }
 
             // 5. Pipe Networks
-            foreach (ObjectId netId in cdoc.GetPipeNetworkIds())
+            if (wantPipeNetworks)
             {
-                if (netId.IsNull || netId.IsErased) continue;
-                if (tr.GetObject(netId, OpenMode.ForWrite) is not Network net) continue;
-
-                var pipes = new List<object>();
-                foreach (ObjectId pipeId in net.GetPipeIds())
+                foreach (ObjectId netId in cdoc.GetPipeNetworkIds())
                 {
-                    if (pipeId.IsNull || pipeId.IsErased) continue;
-                    if (tr.GetObject(pipeId, OpenMode.ForWrite) is Pipe pipe)
+                    if (netId.IsNull || netId.IsErased) continue;
+                    if (tr.GetObject(netId, OpenMode.ForRead) is not Network net) continue;
+                    if (!string.IsNullOrWhiteSpace(targetName) && !net.Name.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (summaryOnly)
                     {
-                        pipes.Add(new
+                        pipeNetworks.Add(new
                         {
-                            name = pipe.Name,
-                            handle = pipe.Handle.ToString(),
-                            inner_diameter_mm = SafeGet(() => Math.Round(pipe.InnerDiameterOrWidth * 1000.0, 1), 0.0),
-                            length_2d = SafeGet(() => Math.Round(pipe.Length2DCenterToCenter, 3), 0.0),
-                            length_3d = SafeGet(() => Math.Round(pipe.Length3DCenterToCenter, 3), 0.0),
-                            slope_pct = SafeGet(() => Math.Round(pipe.Slope * 100.0, 3), 0.0),
-                            start_point = new[] { Math.Round(pipe.StartPoint.X, 3), Math.Round(pipe.StartPoint.Y, 3), Math.Round(pipe.StartPoint.Z, 3) },
-                            end_point = new[] { Math.Round(pipe.EndPoint.X, 3), Math.Round(pipe.EndPoint.Y, 3), Math.Round(pipe.EndPoint.Z, 3) }
+                            name = net.Name,
+                            handle = net.Handle.ToString(),
+                            pipe_count = net.GetPipeIds().Count,
+                            structure_count = net.GetStructureIds().Count
                         });
                     }
-                }
-
-                var structures = new List<object>();
-                foreach (ObjectId stId in net.GetStructureIds())
-                {
-                    if (stId.IsNull || stId.IsErased) continue;
-                    if (tr.GetObject(stId, OpenMode.ForWrite) is Structure st)
+                    else
                     {
-                        structures.Add(new
+                        var pipes = new List<object>();
+                        foreach (ObjectId pipeId in net.GetPipeIds())
                         {
-                            name = st.Name,
-                            handle = st.Handle.ToString(),
-                            location = new[] { Math.Round(st.Location.X, 3), Math.Round(st.Location.Y, 3), Math.Round(st.Location.Z, 3) },
-                            rim_elevation = SafeGet(() => Math.Round(st.RimElevation, 3), 0.0),
-                            sump_elevation = SafeGet(() => Math.Round(st.SumpElevation, 3), 0.0)
-                        });
-                    }
-                }
+                            if (pipeId.IsNull || pipeId.IsErased) continue;
+                            if (tr.GetObject(pipeId, OpenMode.ForRead) is Pipe pipe)
+                            {
+                                pipes.Add(new
+                                {
+                                    name = pipe.Name,
+                                    handle = pipe.Handle.ToString(),
+                                    inner_diameter_mm = SafeGet(() => Math.Round(pipe.InnerDiameterOrWidth * 1000.0, 1), 0.0),
+                                    length_2d = SafeGet(() => Math.Round(pipe.Length2DCenterToCenter, 3), 0.0),
+                                    length_3d = SafeGet(() => Math.Round(pipe.Length3DCenterToCenter, 3), 0.0),
+                                    slope_pct = SafeGet(() => Math.Round(pipe.Slope * 100.0, 3), 0.0),
+                                    start_point = new[] { Math.Round(pipe.StartPoint.X, 3), Math.Round(pipe.StartPoint.Y, 3), Math.Round(pipe.StartPoint.Z, 3) },
+                                    end_point = new[] { Math.Round(pipe.EndPoint.X, 3), Math.Round(pipe.EndPoint.Y, 3), Math.Round(pipe.EndPoint.Z, 3) }
+                                });
+                            }
+                        }
 
-                pipeNetworks.Add(new
-                {
-                    name = net.Name,
-                    handle = net.Handle.ToString(),
-                    pipe_count = pipes.Count,
-                    structure_count = structures.Count,
-                    pipes = pipes,
-                    structures = structures
-                });
-            }
-
-            // 6. CogoPoints (Lấy mẫu tối đa 100 điểm để tránh quá tải JSON)
-            int totalCogoPoints = 0;
-            try
-            {
-                totalCogoPoints = (int)cdoc.CogoPoints.Count;
-                int cogoIdx = 0;
-                foreach (ObjectId ptId in cdoc.CogoPoints)
-                {
-                    if (cogoIdx >= Math.Min(maxItems, 100)) break;
-                    if (ptId.IsNull || ptId.IsErased) continue;
-                    if (tr.GetObject(ptId, OpenMode.ForWrite) is CogoPoint cp)
-                    {
-                        cogoPointsSample.Add(new
+                        var structures = new List<object>();
+                        foreach (ObjectId stId in net.GetStructureIds())
                         {
-                            point_number = SafeGet(() => (int)cp.PointNumber, 0),
-                            point_name = SafeGet(() => cp.PointName, ""),
-                            easting = SafeGet(() => Math.Round(cp.Easting, 3), 0.0),
-                            northing = SafeGet(() => Math.Round(cp.Northing, 3), 0.0),
-                            elevation = SafeGet(() => Math.Round(cp.Elevation, 3), 0.0),
-                            description = SafeGet(() => cp.RawDescription, "")
-                        });
-                        cogoIdx++;
-                    }
-                }
-            }
-            catch { }
+                            if (stId.IsNull || stId.IsErased) continue;
+                            if (tr.GetObject(stId, OpenMode.ForRead) is Structure st)
+                            {
+                                structures.Add(new
+                                {
+                                    name = st.Name,
+                                    handle = st.Handle.ToString(),
+                                    location = new[] { Math.Round(st.Location.X, 3), Math.Round(st.Location.Y, 3), Math.Round(st.Location.Z, 3) },
+                                    rim_elevation = SafeGet(() => Math.Round(st.RimElevation, 3), 0.0),
+                                    sump_elevation = SafeGet(() => Math.Round(st.SumpElevation, 3), 0.0)
+                                });
+                            }
+                        }
 
-            // 7. Assemblies (Mẫu mặt cắt ngang thiết kế)
-            try
-            {
-                foreach (ObjectId asmId in cdoc.AssemblyCollection)
-                {
-                    if (asmId.IsNull || asmId.IsErased) continue;
-                    if (tr.GetObject(asmId, OpenMode.ForWrite) is Assembly asm)
-                    {
-                        assemblies.Add(new
+                        pipeNetworks.Add(new
                         {
-                            name = asm.Name,
-                            handle = asm.Handle.ToString(),
-                            layer = SafeGet(() => asm.Layer, "")
+                            name = net.Name,
+                            handle = net.Handle.ToString(),
+                            pipe_count = pipes.Count,
+                            structure_count = structures.Count,
+                            pipes = pipes,
+                            structures = structures
                         });
                     }
                 }
             }
-            catch { }
+
+            // 6. CogoPoints
+            if (wantCogoPoints && !summaryOnly)
+            {
+                try
+                {
+                    int cogoStart = Math.Max(0, (page - 1) * pageSize);
+                    int cogoEnd = Math.Min(totalCogoPoints, cogoStart + Math.Min(pageSize, maxItems));
+                    int curIdx = 0;
+                    foreach (ObjectId ptId in cdoc.CogoPoints)
+                    {
+                        if (curIdx >= cogoEnd) break;
+                        if (curIdx >= cogoStart)
+                        {
+                            if (!ptId.IsNull && !ptId.IsErased && tr.GetObject(ptId, OpenMode.ForRead) is CogoPoint cp)
+                            {
+                                cogoPointsSample.Add(new
+                                {
+                                    point_number = SafeGet(() => (int)cp.PointNumber, 0),
+                                    point_name = SafeGet(() => cp.PointName, ""),
+                                    easting = SafeGet(() => Math.Round(cp.Easting, 3), 0.0),
+                                    northing = SafeGet(() => Math.Round(cp.Northing, 3), 0.0),
+                                    elevation = SafeGet(() => Math.Round(cp.Elevation, 3), 0.0),
+                                    description = SafeGet(() => cp.RawDescription, "")
+                                });
+                            }
+                        }
+                        curIdx++;
+                    }
+                }
+                catch { }
+            }
+
+            // 7. Assemblies
+            if (wantAssemblies)
+            {
+                try
+                {
+                    foreach (ObjectId asmId in cdoc.AssemblyCollection)
+                    {
+                        if (asmId.IsNull || asmId.IsErased) continue;
+                        if (tr.GetObject(asmId, OpenMode.ForRead) is Assembly asm)
+                        {
+                            assemblies.Add(new
+                            {
+                                name = asm.Name,
+                                handle = asm.Handle.ToString(),
+                                layer = SafeGet(() => asm.Layer, "")
+                            });
+                        }
+                    }
+                }
+                catch { }
+            }
 
             tr.Commit();
 
             return new
             {
                 status = "success",
-                action = "inspect_all",
+                action = summaryOnly ? "summary" : "inspect_all",
                 document = db.Filename,
+                document_name = Path.GetFileName(db.Filename),
+                summary_only = summaryOnly,
+                entity_type = string.IsNullOrWhiteSpace(entityType) ? "all" : entityType,
+                page = page,
+                page_size = pageSize,
                 summary = new
                 {
-                    alignment_count = alignments.Count,
-                    surface_count = surfaces.Count,
-                    corridor_count = corridors.Count,
-                    sample_line_group_count = sampleLineGroups.Count,
-                    parcel_count = parcels.Count,
-                    pipe_network_count = pipeNetworks.Count,
+                    alignment_count = totalAlignments,
+                    surface_count = totalSurfaces,
+                    corridor_count = totalCorridors,
+                    sample_line_group_count = totalSampleLineGroups,
+                    parcel_count = totalParcels,
+                    pipe_network_count = totalPipeNetworks,
                     cogo_point_count = totalCogoPoints,
-                    assembly_count = assemblies.Count
+                    assembly_count = totalAssemblies
                 },
                 alignments = alignments,
                 surfaces = surfaces,
@@ -1955,6 +2272,26 @@ namespace Civil3DCsharp
             catch { return fallback; }
         }
 
+        private static double GetParcelPerimeter(CivilParcel parcel)
+        {
+            try
+            {
+                if (parcel.BaseCurve != null)
+                {
+                    Curve c = parcel.BaseCurve;
+                    return Math.Round(Math.Abs(c.GetDistanceAtParameter(c.EndParam) - c.GetDistanceAtParameter(c.StartParam)), 4);
+                }
+            }
+            catch { }
+            try
+            {
+                Extents3d ext = parcel.GeometricExtents;
+                return Math.Round(2 * ((ext.MaxPoint.X - ext.MinPoint.X) + (ext.MaxPoint.Y - ext.MinPoint.Y)), 4);
+            }
+            catch { }
+            return 0.0;
+        }
+
         private static Alignment? FindAlignment(CivilDocument cdoc, Transaction tr, string nameFilter, bool requireSampleLines)
         {
             foreach (ObjectId aId in cdoc.GetAlignmentIds())
@@ -2372,7 +2709,7 @@ namespace Civil3DCsharp
                     {
                         existingRec.Font = new Autodesk.AutoCAD.GraphicsInterface.FontDescriptor("Tahoma", false, false, 0, 0);
                     }
-                    db.Textstyle = existingId;
+                    // Không đổi Text Style hiện hành (TEXTSTYLE) của người dùng
                     return existingId;
                 }
 
@@ -2384,7 +2721,6 @@ namespace Civil3DCsharp
                 };
                 ObjectId newId = tst.Add(tstr);
                 tr.AddNewlyCreatedDBObject(tstr, true);
-                db.Textstyle = newId;
                 return newId;
             }
             catch
@@ -2402,6 +2738,7 @@ namespace Civil3DCsharp
             {
                 Point3d pos = GetPt3d(item, "position", Point3d.Origin);
                 string txtVal = GetStr(item, "text", "");
+                if (string.IsNullOrWhiteSpace(txtVal)) return false; // Không tạo DBText rỗng
                 double height = Math.Max(0.05, GetDbl(item, "height", 2.5));
                 double rot = GetDbl(item, "rotation", 0.0) * Math.PI / 180.0;
                 string align = GetStr(item, "align", "left").ToLowerInvariant();
@@ -2438,6 +2775,7 @@ namespace Civil3DCsharp
             {
                 Point3d pos = GetPt3d(item, "position", Point3d.Origin);
                 string txtVal = GetStr(item, "text", "");
+                if (string.IsNullOrWhiteSpace(txtVal)) return false; // Không tạo MText rỗng
                 double height = Math.Max(0.05, GetDbl(item, "height", 2.5));
                 double width = GetDbl(item, "width", 50.0);
 
@@ -2570,6 +2908,8 @@ namespace Civil3DCsharp
         {
             Database db = doc.Database;
             var entities = new List<object>();
+            var countsByType = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            void AddCount(string t) => countsByType[t] = countsByType.TryGetValue(t, out int c) ? c + 1 : 1;
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
@@ -2585,6 +2925,26 @@ namespace Civil3DCsharp
 
                 var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                var parcelSiteMap = new Dictionary<ObjectId, (string Name, string Handle)>();
+                try
+                {
+                    CivilDocument cdoc = CivilDocument.GetCivilDocument(db);
+                    foreach (ObjectId sId in cdoc.GetSiteIds())
+                    {
+                        if (sId.IsNull || sId.IsErased) continue;
+                        if (tr.GetObject(sId, OpenMode.ForRead) is Site st)
+                        {
+                            string sName = st.Name;
+                            string sHandle = st.Handle.ToString();
+                            foreach (ObjectId pid in st.GetParcelIds())
+                            {
+                                parcelSiteMap[pid] = (sName, sHandle);
+                            }
+                        }
+                    }
+                }
+                catch { }
 
                 foreach (ObjectId id in ms)
                 {
@@ -2606,6 +2966,7 @@ namespace Civil3DCsharp
                             p1 = new[] { Math.Round(ln.StartPoint.X, 4), Math.Round(ln.StartPoint.Y, 4) },
                             p2 = new[] { Math.Round(ln.EndPoint.X, 4), Math.Round(ln.EndPoint.Y, 4) }
                         });
+                        AddCount("LINE");
                     }
                     else if (ent is Polyline pl)
                     {
@@ -2623,6 +2984,7 @@ namespace Civil3DCsharp
                             closed = pl.Closed ? 1 : 0,
                             pts = pts
                         });
+                        AddCount("LWPOLYLINE");
                     }
                     else if (ent is Circle cir)
                     {
@@ -2634,6 +2996,7 @@ namespace Civil3DCsharp
                             c = new[] { Math.Round(cir.Center.X, 4), Math.Round(cir.Center.Y, 4) },
                             r = Math.Round(cir.Radius, 4)
                         });
+                        AddCount("CIRCLE");
                     }
                     else if (ent is Arc arc)
                     {
@@ -2647,6 +3010,7 @@ namespace Civil3DCsharp
                             sa = Math.Round(arc.StartAngle, 4),
                             ea = Math.Round(arc.EndAngle, 4)
                         });
+                        AddCount("ARC");
                     }
                     else if (ent is RotatedDimension rdim)
                     {
@@ -2666,6 +3030,7 @@ namespace Civil3DCsharp
                             asz = Math.Round(rdim.Dimasz > 0 ? rdim.Dimasz : 0.25, 4),
                             text = dtxt
                         });
+                        AddCount("DIMENSION");
                     }
                     else if (ent is AlignedDimension adim)
                     {
@@ -2685,6 +3050,7 @@ namespace Civil3DCsharp
                             asz = Math.Round(adim.Dimasz > 0 ? adim.Dimasz : 0.25, 4),
                             text = dtxt
                         });
+                        AddCount("DIMENSION");
                     }
                     else if (ent is DBText txt)
                     {
@@ -2703,6 +3069,7 @@ namespace Civil3DCsharp
                             align = align,
                             text = txt.TextString
                         });
+                        AddCount("TEXT");
                     }
                     else if (ent is MText mtxt)
                     {
@@ -2716,6 +3083,274 @@ namespace Civil3DCsharp
                             align = 0,
                             text = mtxt.Text
                         });
+                        AddCount("TEXT");
+                    }
+                    else if (ent is ATable tbl)
+                    {
+                        double[] pos = new[] { Math.Round(tbl.Position.X, 4), Math.Round(tbl.Position.Y, 4), Math.Round(tbl.Position.Z, 4) };
+                        double w = Math.Round(tbl.Width, 4);
+                        double h = Math.Round(tbl.Height, 4);
+                        int rows = tbl.Rows.Count;
+                        int cols = tbl.Columns.Count;
+                        double[] bbox = new double[] { pos[0], pos[1] - h, pos[0] + w, pos[1] };
+                        try
+                        {
+                            Extents3d ext = tbl.GeometricExtents;
+                            bbox = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4) };
+                        }
+                        catch { }
+
+                        entities.Add(new
+                        {
+                            type = "TABLE",
+                            layer = tbl.Layer,
+                            color = col,
+                            handle = tbl.Handle.ToString(),
+                            position = pos,
+                            width = w,
+                            height = h,
+                            rows = rows,
+                            columns = cols,
+                            bounding_box = bbox
+                        });
+                        AddCount("TABLE");
+                    }
+                    else if (ent is CivilParcel parcel)
+                    {
+                        double areaVal = SafeGet(() => Math.Round(parcel.Area, 4), 0.0);
+                        double perimVal = GetParcelPerimeter(parcel);
+                        string pName = SafeGet(() => parcel.Name, "");
+                        int pNum = SafeGet(() => (int)parcel.Number, 0);
+                        string styleName = SafeGet(() => parcel.StyleName, "");
+                        string styleIdStr = SafeGet(() => parcel.StyleId.Handle.ToString(), "");
+                        string taxIdStr = SafeGet(() => parcel.TaxId.ToString(), "");
+
+                        string siteName = "";
+                        string siteIdStr = "";
+                        if (parcelSiteMap.TryGetValue(parcel.ObjectId, out var sInfo))
+                        {
+                            siteName = sInfo.Name;
+                            siteIdStr = sInfo.Handle;
+                        }
+                        else
+                        {
+                            try
+                            {
+                                if (!parcel.OwnerId.IsNull && tr.GetObject(parcel.OwnerId, OpenMode.ForRead) is Site st)
+                                {
+                                    siteName = st.Name;
+                                    siteIdStr = st.Handle.ToString();
+                                }
+                            }
+                            catch { }
+                        }
+
+                        double[] minPt = new double[] { 0, 0, 0 };
+                        double[] maxPt = new double[] { 0, 0, 0 };
+                        double[] centroid = new double[] { 0, 0 };
+                        double[] bbox = new double[] { 0, 0, 0, 0 };
+                        try
+                        {
+                            Extents3d ext = parcel.GeometricExtents;
+                            minPt = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MinPoint.Z, 4) };
+                            maxPt = new[] { Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4), Math.Round(ext.MaxPoint.Z, 4) };
+                            centroid = new[] { Math.Round(parcel.Centroid.X, 4), Math.Round(parcel.Centroid.Y, 4) };
+                            bbox = new[] { minPt[0], minPt[1], maxPt[0], maxPt[1] };
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                Extents3d ext = parcel.GeometricExtents;
+                                minPt = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MinPoint.Z, 4) };
+                                maxPt = new[] { Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4), Math.Round(ext.MaxPoint.Z, 4) };
+                                centroid = new[] { Math.Round((ext.MinPoint.X + ext.MaxPoint.X) / 2.0, 4), Math.Round((ext.MinPoint.Y + ext.MaxPoint.Y) / 2.0, 4) };
+                                bbox = new[] { minPt[0], minPt[1], maxPt[0], maxPt[1] };
+                            }
+                            catch { }
+                        }
+
+                        entities.Add(new
+                        {
+                            type = "CIVIL_PARCEL",
+                            layer = parcel.Layer,
+                            color = col,
+                            handle = parcel.Handle.ToString(),
+                            name = pName,
+                            number = pNum,
+                            area = areaVal,
+                            area_m2 = areaVal,
+                            perimeter_m = perimVal,
+                            site_name = siteName,
+                            site_id = siteIdStr,
+                            style = styleName,
+                            style_id = styleIdStr,
+                            tax_id = taxIdStr,
+                            min_point = minPt,
+                            max_point = maxPt,
+                            centroid = centroid,
+                            bounding_box = bbox
+                        });
+                        AddCount("CIVIL_PARCEL");
+                    }
+                    else if (ent is ParcelSegment ps)
+                    {
+                        double len = 0.0;
+                        try
+                        {
+                            len = Math.Round(ps.StartPoint.DistanceTo(ps.EndPoint), 4);
+                        }
+                        catch { }
+
+                        string segType = "Line";
+                        try
+                        {
+                            if (ps.BaseCurve is Arc) segType = "Curve";
+                            else segType = ps.GetType().Name;
+                        }
+                        catch { }
+
+                        double[] p1 = new double[] { 0, 0 };
+                        double[] p2 = new double[] { 0, 0 };
+                        double[] bbox = new double[] { 0, 0, 0, 0 };
+                        try
+                        {
+                            p1 = new[] { Math.Round(ps.StartPoint.X, 4), Math.Round(ps.StartPoint.Y, 4) };
+                            p2 = new[] { Math.Round(ps.EndPoint.X, 4), Math.Round(ps.EndPoint.Y, 4) };
+                            Extents3d ext = ps.GeometricExtents;
+                            bbox = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4) };
+                        }
+                        catch { }
+
+                        entities.Add(new
+                        {
+                            type = "CIVIL_PARCEL_SEGMENT",
+                            layer = ps.Layer,
+                            color = col,
+                            handle = ps.Handle.ToString(),
+                            length = len,
+                            segment_type = segType,
+                            p1 = p1,
+                            p2 = p2,
+                            bounding_box = bbox
+                        });
+                        AddCount("CIVIL_PARCEL_SEGMENT");
+                    }
+                    else if (ent is Alignment al)
+                    {
+                        double startX = 0, startY = 0, endX = 0, endY = 0;
+                        try { al.PointLocation(al.StartingStation, 0, ref startX, ref startY); } catch { }
+                        try { al.PointLocation(al.EndingStation, 0, ref endX, ref endY); } catch { }
+
+                        double[] bbox = new double[] { 0, 0, 0, 0 };
+                        try
+                        {
+                            Extents3d ext = al.GeometricExtents;
+                            bbox = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4) };
+                        }
+                        catch { }
+
+                        entities.Add(new
+                        {
+                            type = "CIVIL_ALIGNMENT",
+                            layer = al.Layer,
+                            color = col,
+                            handle = al.Handle.ToString(),
+                            name = SafeGet(() => al.Name, ""),
+                            length = SafeGet(() => Math.Round(al.Length, 4), 0.0),
+                            style = SafeGet(() => al.StyleName, ""),
+                            start_point = new[] { Math.Round(startX, 4), Math.Round(startY, 4) },
+                            end_point = new[] { Math.Round(endX, 4), Math.Round(endY, 4) },
+                            bounding_box = bbox
+                        });
+                        AddCount("CIVIL_ALIGNMENT");
+                    }
+                    else if (ent is CivSurface surf)
+                    {
+                        string stype = surf is CivilTinSurface ? "TIN" : (surf is CivilGridSurface ? "Grid" : "Volume");
+                        double[] bbox = new double[] { 0, 0, 0, 0 };
+                        try
+                        {
+                            Extents3d ext = surf.GeometricExtents;
+                            bbox = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4) };
+                        }
+                        catch { }
+
+                        entities.Add(new
+                        {
+                            type = "CIVIL_SURFACE",
+                            layer = surf.Layer,
+                            color = col,
+                            handle = surf.Handle.ToString(),
+                            name = SafeGet(() => surf.Name, ""),
+                            surface_type = stype,
+                            style = SafeGet(() => surf.StyleName, ""),
+                            bounding_box = bbox
+                        });
+                        AddCount("CIVIL_SURFACE");
+                    }
+                    else if (ent is Corridor corr)
+                    {
+                        double[] bbox = new double[] { 0, 0, 0, 0 };
+                        try
+                        {
+                            Extents3d ext = corr.GeometricExtents;
+                            bbox = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4) };
+                        }
+                        catch { }
+
+                        entities.Add(new
+                        {
+                            type = "CIVIL_CORRIDOR",
+                            layer = corr.Layer,
+                            color = col,
+                            handle = corr.Handle.ToString(),
+                            name = SafeGet(() => corr.Name, ""),
+                            style = SafeGet(() => corr.StyleName, ""),
+                            bounding_box = bbox
+                        });
+                        AddCount("CIVIL_CORRIDOR");
+                    }
+                    else if (ent is BlockReference blk)
+                    {
+                        string bName = "";
+                        try
+                        {
+                            ObjectId btrId = blk.IsDynamicBlock ? blk.DynamicBlockTableRecord : blk.BlockTableRecord;
+                            if (tr.GetObject(btrId, OpenMode.ForRead) is BlockTableRecord btr)
+                            {
+                                bName = btr.Name;
+                            }
+                        }
+                        catch
+                        {
+                            bName = blk.Name;
+                        }
+
+                        double[] pos = new[] { Math.Round(blk.Position.X, 4), Math.Round(blk.Position.Y, 4), Math.Round(blk.Position.Z, 4) };
+                        double[] bbox = new double[] { pos[0] - 1.0, pos[1] - 1.0, pos[0] + 1.0, pos[1] + 1.0 };
+                        try
+                        {
+                            Extents3d ext = blk.GeometricExtents;
+                            bbox = new[] { Math.Round(ext.MinPoint.X, 4), Math.Round(ext.MinPoint.Y, 4), Math.Round(ext.MaxPoint.X, 4), Math.Round(ext.MaxPoint.Y, 4) };
+                        }
+                        catch { }
+
+                        entities.Add(new
+                        {
+                            type = "BLOCK_REFERENCE",
+                            layer = blk.Layer,
+                            color = col,
+                            handle = blk.Handle.ToString(),
+                            block_name = bName,
+                            position = pos,
+                            bounding_box = bbox
+                        });
+                        AddCount("BLOCK_REFERENCE");
+                    }
+                    else
+                    {
+                        ClassifyOtherEntityInModelSpace(tr, ent, col, entities, AddCount);
                     }
                 }
                 tr.Commit();
@@ -2725,6 +3360,7 @@ namespace Civil3DCsharp
             {
                 status = "success",
                 count = entities.Count,
+                counts_by_type = countsByType,
                 entities = entities
             };
         }

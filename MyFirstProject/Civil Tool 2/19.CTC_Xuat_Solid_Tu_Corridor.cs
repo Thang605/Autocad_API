@@ -116,7 +116,9 @@ namespace Civil3DCsharp
 
                             using (Database tempDb = new Database(true, true))
                             {
+                                SetDatabaseUnitsToMeters(tempDb);
                                 sourceCorridor.ExportSolids(solidsParams, tempDb);
+                                SetDatabaseUnitsToMeters(tempDb);
 
                                 // Đọc thông tin cấu kiện (SubassemblyName) từ PropertySet trước khi dọn
                                 var entityLayerMap = ReadComponentLayerInfo(tempDb);
@@ -203,7 +205,9 @@ namespace Civil3DCsharp
 
                                 using (Database tempDb = new Database(true, true))
                                 {
+                                    SetDatabaseUnitsToMeters(tempDb);
                                     sourceCorridor.ExportSolids(solidsParams, tempDb);
+                                    SetDatabaseUnitsToMeters(tempDb);
 
                                     // Đọc thông tin cấu kiện (SubassemblyName) từ PropertySet trước khi dọn
                                     var entityLayerMap = ReadComponentLayerInfo(tempDb);
@@ -271,6 +275,7 @@ namespace Civil3DCsharp
                                     }
                                 }
 
+                                SetDatabaseUnitsToMeters(targetDb);
                                 targetDb.SaveAs(outputFilePath, DwgVersion.Current);
                             }
 
@@ -289,7 +294,9 @@ namespace Civil3DCsharp
 
                             using (Database targetDb = new Database(true, true))
                             {
+                                SetDatabaseUnitsToMeters(targetDb);
                                 sourceCorridor.ExportSolids(solidsParams, targetDb);
+                                SetDatabaseUnitsToMeters(targetDb);
 
                                 // Đọc thông tin cấu kiện (SubassemblyName) từ PropertySet trước khi dọn
                                 var entityLayerMap = ReadComponentLayerInfo(targetDb);
@@ -345,6 +352,7 @@ namespace Civil3DCsharp
                                     targetTr.Commit();
                                 }
 
+                                SetDatabaseUnitsToMeters(targetDb);
                                 targetDb.SaveAs(outputFilePath, DwgVersion.Current);
                             }
 
@@ -368,8 +376,58 @@ namespace Civil3DCsharp
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  HELPER METHODS - PROPERTY SETS & METADATA CLEANUP
+        //  HELPER METHODS - DRAWING UNITS & PROPERTY SETS CLEANUP
         // ═══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Thiết lập đơn vị bản vẽ đích sang hệ Mét (Meters) cho cả AutoCAD (INSUNITS, MEASUREMENT),
+        /// AEC Drawing Setup (-DWGUNITS / AecDbVarsDwgSetup) và Civil 3D UnitZoneSettings.
+        /// </summary>
+        private static void SetDatabaseUnitsToMeters(Database targetDb)
+        {
+            if (targetDb == null) return;
+
+            // 1. Thiết lập biến hệ thống AutoCAD Database (INSUNITS = Meters, MEASUREMENT = Metric)
+            try
+            {
+                targetDb.Insunits = UnitsValue.Meters;
+                targetDb.Measurement = MeasurementValue.Metric;
+                targetDb.Lunits = 2; // Decimal
+            }
+            catch { }
+
+            // 2. Thiết lập AEC Drawing Setup Variables (-DWGUNITS = 6 [Meters])
+            try
+            {
+                using (Transaction trUnit = targetDb.TransactionManager.StartTransaction())
+                {
+                    ObjectId setupId = Autodesk.Aec.ApplicationServices.DrawingSetupVariables.GetInstance(targetDb, true);
+                    if (!setupId.IsNull && setupId.IsValid)
+                    {
+                        if (trUnit.GetObject(setupId, OpenMode.ForWrite) is Autodesk.Aec.ApplicationServices.DrawingSetupVariables setupVars)
+                        {
+                            setupVars.LinearUnit = Autodesk.Aec.BuiltInUnit.Meter;
+                            setupVars.AreaDisplayUnit = Autodesk.Aec.BuiltInUnit.SquareMeters;
+                            setupVars.VolumeDisplayUnit = Autodesk.Aec.BuiltInUnit.CubicMeter;
+                            setupVars.CurrentDimUnit = Autodesk.Aec.BuiltInUnit.Meter;
+                        }
+                    }
+                    trUnit.Commit();
+                }
+            }
+            catch { }
+
+            // 3. Thiết lập Civil 3D Drawing Settings (UnitZoneSettings.DrawingUnits = Meters)
+            try
+            {
+                var civilDoc = Autodesk.Civil.ApplicationServices.CivilDocument.GetCivilDocument(targetDb);
+                if (civilDoc != null)
+                {
+                    civilDoc.Settings.DrawingSettings.UnitZoneSettings.DrawingUnits = Autodesk.Civil.Settings.DrawingUnitType.Meters;
+                }
+            }
+            catch { }
+        }
+
         /// <summary>
         /// Xóa sạch toàn bộ Property Sets mặc định và định nghĩa PropertySet trong Database
         /// </summary>
