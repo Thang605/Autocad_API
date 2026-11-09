@@ -197,6 +197,8 @@
             this.Name = "SurfaceReferenceForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Thiết lập Surface Reference";
+            this.AcceptButton = this.btnOK;
+            this.CancelButton = this.btnCancel;
             this.groupBoxMode.ResumeLayout(false);
             this.groupBoxMode.PerformLayout();
             this.groupBoxNetwork.ResumeLayout(false);

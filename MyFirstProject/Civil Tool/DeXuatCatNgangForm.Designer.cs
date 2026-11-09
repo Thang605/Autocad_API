@@ -692,6 +692,8 @@ namespace Civil3DCsharp
             this.Name = "DeXuatCatNgangForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "ĐỀ XUẤT MẶT CẮT NGANG ĐƯỜNG & KIỂM TRA TIÊU CHUẨN QUY CHUẨN";
+            this.AcceptButton = this.btnEvaluate;
+            this.CancelButton = this.btnClose;
             this.grpStandard.ResumeLayout(false);
             this.grpStandard.PerformLayout();
             this.grpInputs.ResumeLayout(false);

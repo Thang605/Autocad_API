@@ -156,6 +156,8 @@ namespace MyFirstProject.Civil_Tool_2
             this.Name = "PhanChiaCorridorForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Phân chia Corridor theo Profile";
+            this.AcceptButton = this.btnThucHien;
+            this.CancelButton = this.btnHuy;
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
             this.groupBox2.ResumeLayout(false);
