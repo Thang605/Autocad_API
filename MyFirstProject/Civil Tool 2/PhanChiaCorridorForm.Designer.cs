@@ -151,6 +151,8 @@ namespace MyFirstProject.Civil_Tool_2
             this.Controls.Add(this.btnHuy);
             this.Controls.Add(this.btnThucHien);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            this.AcceptButton = this.btnThucHien;
+            this.CancelButton = this.btnHuy;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "PhanChiaCorridorForm";

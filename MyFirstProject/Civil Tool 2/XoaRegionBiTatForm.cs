@@ -456,6 +456,9 @@ namespace MyFirstProject.Civil_Tool_2
                 pnlHeader, grpScope, grpRegions, grpOptions, pnlBottom
             });
 
+            this.AcceptButton = btnExecute;
+            this.CancelButton = btnCancel;
+
             this.FormClosing += (s, e) => SaveCurrentSettings();
         }
 
