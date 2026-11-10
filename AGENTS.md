@@ -25,6 +25,7 @@
 ### 1. Mandatory Windows Forms UI for Every Command
 - Every command must have a dedicated Windows Forms UI (`System.Windows.Forms.Form`), named `<CommandName>Form.cs` (e.g., `BangThongKeParcelForm.cs`, `DieuChinhDuongDoForm.cs`).
 - Forms must use modern layout (`Segoe UI` font, logical `GroupBox` sections, proper tab order, accessibility labels/tooltips, and resize support).
+- Prefer clean dropdown lists (`ComboBox` / `DataGridViewComboBoxColumn` populated from drawing tables such as `LayerTable`, `TextStyleTable`, `DimStyleTable`) over manual text entry or crowded multi-button grids; set `UseMnemonic = false` on buttons/labels containing `&`, and ensure generous button dimensions (`Height >= 40px`) so text never clips on high-DPI displays.
 - **Two-way Canvas Interaction**:
   - Always use `ed.StartUserInteraction(form)` when picking points or selecting entities on the AutoCAD canvas so the modal form hides cleanly.
   - Display forms via `Application.ShowModalDialog(form)`.
@@ -51,6 +52,7 @@
     - `using WinFormsButton = System.Windows.Forms.Button;`
     - `using WinFormsTextBox = System.Windows.Forms.TextBox;`
     - `using WinFormsComboBox = System.Windows.Forms.ComboBox;`
+    - `using FlowDirection = System.Windows.Forms.FlowDirection;`
     - `using Font = System.Drawing.Font;`
 
 ### 4. Command Method Naming Convention (Strict)

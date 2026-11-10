@@ -4,6 +4,9 @@
 - **Mọi lệnh mới được tạo đều PHẢI có giao diện Form** (Windows Forms kế thừa `System.Windows.Forms.Form`).
 - File Form đặt tên theo format: `TenLenhForm.cs` (Ví dụ: `BangThongKeParcelForm.cs`, `DieuChinhDuongDoForm.cs`).
 - Form được thiết kế chuyên nghiệp, hiện đại (Segoe UI, bố cục GroupBox khoa học, hỗ trợ resize).
+- **Bắt buộc dùng Dropdown (`ComboBox` / `DataGridViewComboBoxColumn`) & Chống cắt chữ High-DPI**:
+  - Khi cho phép chọn Layer, TextStyle, DimStyle, Linetype, Block, Tỷ lệ bản vẽ, Surface, Alignment... **TUYỆT ĐỐI KHÔNG** bắt người dùng gõ tay tên đối tượng vào `TextBox` hoặc dàn ma trận nhiều nút bấm chật chội; phải nạp danh sách từ bản vẽ hiện hành vào `ComboBox` (`DropDownList` hoặc `SuggestAppend`) / `DataGridViewComboBoxColumn` kèm nút Pick từ CAD.
+  - Luôn đặt `UseMnemonic = false` cho các `Button` / `Label` có chứa ký tự `&` (tránh bị WinForms nuốt dấu `&`) và thiết kế nút bấm đủ rộng (`Height >= 40px`) để không bị cắt chữ ở DPI cao.
 - **Tương tác hai chiều với AutoCAD Canvas**:
   - Sử dụng `ed.StartUserInteraction(form)` khi người dùng bấm nút pick điểm / chọn đối tượng trên bản vẽ để tạm ẩn Form.
   - Hiển thị Form bằng `Application.ShowModalDialog(form)` trong phương thức lệnh.
@@ -25,7 +28,8 @@
 
 ## 3. ⚙️ QUY CHUẨN KỸ THUẬT, TRANSACTION & BẮT BUỘC BUILD KIỂM TRA
 - **Transaction & OpenMode**: Luôn sử dụng `OpenMode.ForWrite` khi sửa đổi đối tượng Civil 3D/AutoCAD trong `Transaction`.
-- **Tránh xung đột namespace**: Sử dụng alias chuẩn (`Application = Autodesk.AutoCAD.ApplicationServices.Application`, `ATable = Autodesk.AutoCAD.DatabaseServices.Table`, `WinFormsLabel = System.Windows.Forms.Label`...).
+- **Tránh xung đột namespace**: Sử dụng alias chuẩn (`Application = Autodesk.AutoCAD.ApplicationServices.Application`, `ATable = Autodesk.AutoCAD.DatabaseServices.Table`, `WinFormsLabel = System.Windows.Forms.Label`, `WinFormsComboBox = System.Windows.Forms.ComboBox`, `FlowDirection = System.Windows.Forms.FlowDirection`...).
+- **Lưu ý khi gọi `autocad_execute_lisp` qua MCP**: Không viết comment `;` bên trong chuỗi `lisp_code` nhiều dòng vì trình nạp một dòng sẽ biến phần code phía sau dấu `;` thành chú thích.
 - 🚨 **BẮT BUỘC BUILD KIỂM TRA SAU MỌI LẦN SỬA CODE**:
   - Sau **BẤT KỲ** thao tác chỉnh sửa, tạo mới, sửa lỗi, đổi tên hoặc refactor code nào, AI **BẮT BUỘC** phải tự động chạy lệnh build để xác nhận kết quả `0 Error(s)` trước khi hoàn thành phản hồi:
     `powershell -ExecutionPolicy Bypass -NoProfile -File "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\BuildProject.ps1"`
@@ -94,3 +98,19 @@
     - `CTA_Kiem_Tra_Tam_Nhin`
     - `CTC_Xoa_Region_Bi_Tat`
     - `CTS_Doi_Ten_Coc_Quy_Tac`
+
+---
+
+## 8. 📐 QUY CHUẨN BẢN VẼ MẪU (`MAU CAD-V2.dwt.dwg` - KHÔNG DÙNG ANNOTATIVE) & ĐỘ DÀY NÉT VẼ
+- **Không sử dụng Annotative**: Toàn bộ `TextStyle`, `DimStyle`, `MLeaderStyle` đều tắt `Annotative` (`ANNOTATIVEDWG = 0`).
+- **Chuẩn gốc `1:1000` (Hệ mét `INSUNITS = 6`, `DIMLFAC = 1.0`, `DIMDEC = 2`)**:
+  - Hệ số tỷ lệ cho bản vẽ `1:N` là $k = \frac{N}{1000.0}$.
+  - **`TextStyle`**: Duy nhất kiểu `Standard` (`tahoma.ttf`, `WidthFactor = 0.9`, `Height = 0.0`). Chiều cao chữ thường (`01_TEXT`) $= 2.0 \times k$, chữ tiêu đề (`02_TEXT_TO`) $= 3.5 \times k$.
+  - **`DimStyle`**: Bộ 15 kiểu chuẩn (`1-10` đến `1-10000`) nhân bản từ `1-1000` (`DIMTXT = 2.0`, `DIMASZ = 1.8`, `DIMSCALE = k`).
+  - **`MLeaderStyle`**: Kiểu `T27-LEADER` và `Standard` (`TextStyle = Standard`, `TextHeight = 2.0`, `ArrowSize = 1.8`, `ScaleFactor = k`).
+- **Bộ 15 Layer chuẩn & Quản lý độ dày nét theo `Lineweight ByLayer` (BẮT BUỘC)**:
+  - `01_TEXT` (Màu 7, 0.18mm), `02_TEXT_TO` (Màu 6, 0.18mm), `03_DIM` (Màu 11, 0.13mm), `04_BAO_BT` (Màu 3, 0.25mm), `05_BAO_COT_THEP` (Màu 4, 0.15mm), `06_THEP` (Màu 2, 0.35mm), `07_TRUC` (Màu 150, `DASHDOT2`, 0.13mm), `08_KHUAT` (Màu 25, `HIDDEN2`, 0.13mm), `09_HATCH` (Màu 144, 0.09mm), `10_RANH_GIOI` (Màu 1, `BORDER2`, 0.70mm), `11_VIEWPORT` (Màu 8, `No Plot`), `12_KY_HIEU_BLOCK` (Màu 4, 0.15mm), `13_MAT_DAT_TN` (Màu 8, `DAT`, 0.13mm), `14_HA_TANG_TALUY` (Màu 30, 0.15mm), `15_KHUNG_BANG` (Màu 7, 0.25mm).
+  - **Không gán `Global width` (`ConstantWidth > 0`) cho `Polyline` cốt thép / hình học**: Luôn giữ `Global width = 0.0` để độ dày nét vẽ tuân thủ hoàn toàn **`Lineweight = ByLayer`** của từng Layer (`06_THEP = 0.35mm`, `05_BAO_COT_THEP = 0.15mm`, `04_BAO_BT = 0.25mm`), tránh làm mất tác dụng `Lineweight ByLayer` và tránh biến dạng nét khi đổi tỷ lệ in.
+- **Quy tắc xử lý `Hatch`, `LTSCALE` và Mặt cắt BTCT**:
+  - Giữ `LTSCALE = 1.0` cố định; đặt `CELTSCALE = k`, `HPSCALE = k`, `MLEADERSCALE = k`. Khi đổi tỷ lệ đối tượng đã vẽ, nhân `Hatch.PatternScale` và `Curve.LinetypeScale` theo tỷ số $\text{ratio} = k_{\text{đích}} / k_{\text{nguồn}}$ (các mẫu Hatch trong bảng mẫu như `AR-CONC = 0.02`, `BT-01,_O = 0.05` được định nghĩa ở tỷ lệ `1:100` ứng với $k = 0.10$).
+  - Khi vẽ mặt cắt ngang kết cấu BTCT, không tô Hatch đè lên vùng lõi tiết diện chứa cốt đai và chấm cốt thép chủ; chỉ tô Hatch ở phần cánh sàn giao cắt hai bên.

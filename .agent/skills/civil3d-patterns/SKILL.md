@@ -263,6 +263,8 @@ Các alias thường dùng để tránh xung đột:
 // AutoCAD vs Windows Forms
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using DrawingFont = System.Drawing.Font;
+using WinFormsComboBox = System.Windows.Forms.ComboBox;
+using FlowDirection = System.Windows.Forms.FlowDirection;
 
 // AutoCAD vs Civil 3D
 using ATable = Autodesk.AutoCAD.DatabaseServices.Table;
@@ -403,8 +405,18 @@ string description = point.RawDescription;
 1. [ ] Tạo file với prefix và đặt tên phù hợp (VD: `35.CTS_TenLenh.cs`)
 2. [ ] Thêm `[assembly: CommandClass(...)]` ở đầu file
 3. [ ] Sử dụng namespace `Civil3DCsharp`
-4. [ ] Thêm các using cần thiết và alias tránh xung đột
+4. [ ] Thêm các using cần thiết và alias tránh xung đột (`Application`, `ATable`, `FlowDirection`, `WinFormsComboBox`...)
 5. [ ] Đặt tên method phù hợp với tên lệnh (VD: `CTSTenMethod`)
 6. [ ] Bọc code trong `using Transaction` và `try-catch`
 7. [ ] Sử dụng `A.Ed.WriteMessage()` để thông báo lỗi
-8. [ ] Build để kiểm tra lỗi: `dotnet build`
+8. [ ] Build để kiểm tra lỗi: `BuildProject.ps1` và tự động `git commit` + `git push` khi hoàn tất yêu cầu
+
+## 📐 Các Pattern Xử Lý Style, Độ Dày Nét (`Lineweight ByLayer`) & Quy Đổi Tỷ Lệ AutoCAD
+
+1. **Giữ `Global width = 0.0` cho `Polyline` cốt thép & hình học**:
+   - Tuyệt đối không gán `ConstantWidth > 0` (`Global width`) cho các `Polyline` cốt thép (`06_THEP`, `05_BAO_COT_THEP`) hoặc đường bao kết cấu (`04_BAO_BT`), vì `ConstantWidth > 0` sẽ làm AutoCAD bỏ qua `Lineweight ByLayer` của Layer (`06_THEP = 0.35mm`, `05_BAO_COT_THEP = 0.15mm`) và làm biến dạng nét khi đổi tỷ lệ.
+2. **Bảo toàn vị trí căn lề (`AlignmentPoint`) khi đổi chiều cao `DBText` / `AttributeReference`**:
+   - Lưu `Position` và `AlignmentPoint` trước khi gán `Height`, sau đó gán lại `AlignmentPoint` và gọi `dbText.AdjustAlignment(db)`.
+3. **Xóa triệt để `TextStyle` bị kẹt trong `ATTRIB` và thay thế `DimStyle Standard` gốc**:
+   - Duyệt thêm `blkRef.AttributeCollection` để đổi `StyleName` của mọi `AttributeReference` trước khi Purge.
+   - Để loại bỏ `DimStyle` `Standard` mặc định không cho xóa trực tiếp: chép dữ liệu của kiểu chuẩn (`1-1000`) đè lên bản ghi `Standard`, xóa bản ghi `1-1000` phụ và đổi tên bản ghi `Standard` thành `"1-1000"`.
