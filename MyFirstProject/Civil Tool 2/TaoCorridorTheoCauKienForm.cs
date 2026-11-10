@@ -16,6 +16,8 @@ using WinFormsLabel = System.Windows.Forms.Label;
 using WinFormsButton = System.Windows.Forms.Button;
 using WinFormsTextBox = System.Windows.Forms.TextBox;
 using WinFormsComboBox = System.Windows.Forms.ComboBox;
+using FlowDirection = System.Windows.Forms.FlowDirection;
+using ColumnStyle = System.Windows.Forms.ColumnStyle;
 using Font = System.Drawing.Font;
 using Point = System.Drawing.Point;
 using Size = System.Drawing.Size;
@@ -69,7 +71,7 @@ namespace MyFirstProject.Civil_Tool_2
         private static decimal _lastDefaultFreqTangent = 10m;
         private static decimal _lastDefaultFreqCurve = 5m;
         private static bool _lastAutoRebuild = true;
-        private static Size _lastFormSize = new Size(1180, 740);
+        private static Size _lastFormSize = new Size(1240, 720);
         private static List<CorridorComponentRowItem> _savedRows = new List<CorridorComponentRowItem>();
 
         private readonly Database _db;
@@ -200,57 +202,104 @@ namespace MyFirstProject.Civil_Tool_2
         private void InitializeComponent()
         {
             this.Text = "CTC_Tao_Corridor_Theo_Cau_Kien — Xây Dựng Corridor Theo Từng Cấu Kiện (Modular BIM)";
-            this.Size = _lastFormSize;
-            this.MinimumSize = new Size(1060, 660);
+            this.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+            this.MinimumSize = new Size(1050, 620);
+
+            // Giới hạn kích thước cửa sổ vừa khít màn hình làm việc (chống tràn đáy ở màn hình DPI 125%-150%)
+            Rectangle workArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1366, 768);
+            int initW = Math.Min(_lastFormSize.Width, workArea.Width - 40);
+            int initH = Math.Min(_lastFormSize.Height, workArea.Height - 40);
+            this.Size = new Size(Math.Max(1050, initW), Math.Max(620, initH));
+
             this.FormClosing += (s, e) => SaveCurrentSettings();
 
+            // ── BỐ CỤC CHÍNH (TableLayoutPanel 4 hàng: Header | Group 1 | Group 2 (Fill) | Footer) ──
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                Padding = new Padding(12, 8, 12, 10)
+            };
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // Hàng 0: Tiêu đề
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // Hàng 1: Group 1
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));     // Hàng 2: Group 2 (DataGridView giãn nở)
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // Hàng 3: Thanh nút thực thi dưới đáy
+
+            // ── HÀNG 0: Tiêu đề ──
             var lblHeader = new WinFormsLabel
             {
                 Text = "XÂY DỰNG CORRIDOR THEO TỪNG CẤU KIỆN (LÒNG ĐƯỜNG, DẢI PHÂN CÁCH, VỈA HÈ, RÃNH, NÚT GIAO)",
-                Location = new Point(16, 10),
-                Size = new Size(1130, 26),
-                Font = new Font("Segoe UI", 11.5F, FontStyle.Bold),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 11F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 70, 150),
                 UseMnemonic = false,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Margin = new Padding(2, 0, 2, 6)
             };
-            this.Controls.Add(lblHeader);
+            mainLayout.Controls.Add(lblHeader, 0, 0);
 
-            // ── GROUP 1: Cấu hình chung & Chế độ tổ chức Corridor ──
+            // ── HÀNG 1: GROUP 1 (Phương thức tổ chức Corridor và Thông số mặc định) ──
             var grpGeneral = new GroupBox
             {
-                Text = "1. Phương thức tổ chức Corridor & Thông số mặc định",
-                Location = new Point(16, 40),
-                Size = new Size(1132, 142),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Text = "1. Phương thức tổ chức Corridor && Thông số mặc định",
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Padding = new Padding(10, 6, 10, 8),
+                Margin = new Padding(0, 0, 0, 6)
             };
 
+            var grp1Layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                AutoSize = true
+            };
+            grp1Layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            grp1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grp1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grp1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            // Dòng 1: Radio tách riêng
             radSeparateCorridor = new RadioButton
             {
                 Text = "Tách riêng mỗi Cấu kiện thành 1 Corridor độc lập (Khuyên dùng cho BIM & kiểm soát từng phần)",
-                Location = new Point(16, 24),
-                Size = new Size(620, 24),
+                AutoSize = true,
                 Checked = true,
-                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+                UseMnemonic = false,
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                Margin = new Padding(3, 2, 3, 2)
             };
             radSeparateCorridor.CheckedChanged += (s, e) => UpdateModeUI();
+            grp1Layout.Controls.Add(radSeparateCorridor, 0, 0);
+
+            // Dòng 2: Radio gộp + ComboBox chọn Corridor + Nút Pick
+            var pnlSingleRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                Margin = new Padding(0, 2, 0, 4)
+            };
 
             radSingleOrExistingCorridor = new RadioButton
             {
-                Text = "Gộp tất cả cấu kiện vào 1 Corridor (Tạo mới hoặc thêm Baseline vào Corridor có sẵn):",
-                Location = new Point(16, 54),
-                Size = new Size(545, 24)
+                Text = "Gộp tất cả cấu kiện vào 1 Corridor (Tạo mới hoặc thêm vào Corridor có sẵn):",
+                AutoSize = true,
+                UseMnemonic = false,
+                Margin = new Padding(3, 6, 8, 2)
             };
             radSingleOrExistingCorridor.CheckedChanged += (s, e) => UpdateModeUI();
 
             cmbExistingCorridor = new WinFormsComboBox
             {
-                Location = new Point(565, 53),
-                Size = new Size(260, 25),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                Width = 260,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 3, 8, 2)
             };
             cmbExistingCorridor.Items.Add("(Tạo Corridor mới từ Tiền tố)");
             foreach (var c in _corridorList)
@@ -260,36 +309,54 @@ namespace MyFirstProject.Civil_Tool_2
             btnPickExistingCorridor = new WinFormsButton
             {
                 Text = "Pick Corridor...",
-                Location = new Point(832, 48),
-                Size = new Size(125, 34),
-                UseMnemonic = false
+                Size = new Size(130, 32),
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 0, 0)
             };
             btnPickExistingCorridor.Click += BtnPickExistingCorridor_Click;
+
+            pnlSingleRow.Controls.AddRange(new Control[]
+            {
+                radSingleOrExistingCorridor, cmbExistingCorridor, btnPickExistingCorridor
+            });
+            grp1Layout.Controls.Add(pnlSingleRow, 0, 1);
+
+            // Dòng 3: Tiền tố + Code Set Style + Bề mặt tự nhiên + Bước cọc
+            var pnlParamsRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                AutoSize = true,
+                Margin = new Padding(0, 2, 0, 0)
+            };
 
             var lblPrefix = new WinFormsLabel
             {
                 Text = "Tiền tố tên Corridor:",
-                Location = new Point(16, 94),
-                Size = new Size(125, 22)
+                AutoSize = true,
+                UseMnemonic = false,
+                Margin = new Padding(3, 6, 4, 2)
             };
             txtCorridorPrefix = new WinFormsTextBox
             {
                 Text = "COR_",
-                Location = new Point(142, 91),
-                Size = new Size(115, 25)
+                Width = 95,
+                Margin = new Padding(0, 3, 14, 2)
             };
 
             var lblCodeSet = new WinFormsLabel
             {
                 Text = "Code Set Style:",
-                Location = new Point(270, 94),
-                Size = new Size(92, 22)
+                AutoSize = true,
+                UseMnemonic = false,
+                Margin = new Padding(0, 6, 4, 2)
             };
             cmbCodeSetStyle = new WinFormsComboBox
             {
-                Location = new Point(364, 91),
-                Size = new Size(175, 25),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                Width = 175,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 3, 14, 2)
             };
             foreach (var css in _codeSetStyleList)
                 cmbCodeSetStyle.Items.Add(css.Name);
@@ -299,14 +366,15 @@ namespace MyFirstProject.Civil_Tool_2
             var lblDefSurface = new WinFormsLabel
             {
                 Text = "Bề mặt tự nhiên (EG):",
-                Location = new Point(552, 94),
-                Size = new Size(130, 22)
+                AutoSize = true,
+                UseMnemonic = false,
+                Margin = new Padding(0, 6, 4, 2)
             };
             cmbDefaultSurface = new WinFormsComboBox
             {
-                Location = new Point(684, 91),
-                Size = new Size(155, 25),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                Width = 155,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 3, 14, 2)
             };
             cmbDefaultSurface.Items.Add("(Không gán Surface)");
             foreach (var s in _surfaceList)
@@ -317,118 +385,153 @@ namespace MyFirstProject.Civil_Tool_2
             var lblFreqT = new WinFormsLabel
             {
                 Text = "Bước cọc Thẳng / Cong (m):",
-                Location = new Point(850, 94),
-                Size = new Size(162, 22)
+                AutoSize = true,
+                UseMnemonic = false,
+                Margin = new Padding(0, 6, 4, 2)
             };
             numFreqTangent = new NumericUpDown
             {
-                Location = new Point(1014, 91),
-                Size = new Size(52, 25),
+                Width = 60,
                 Minimum = 1m,
                 Maximum = 200m,
                 DecimalPlaces = 1,
-                Value = 10m
+                Value = 10m,
+                Margin = new Padding(0, 3, 4, 2)
             };
             numFreqCurve = new NumericUpDown
             {
-                Location = new Point(1070, 91),
-                Size = new Size(52, 25),
+                Width = 60,
                 Minimum = 0.5m,
                 Maximum = 200m,
                 DecimalPlaces = 1,
-                Value = 5m
+                Value = 5m,
+                Margin = new Padding(0, 3, 0, 2)
             };
 
-            grpGeneral.Controls.AddRange(new Control[]
+            pnlParamsRow.Controls.AddRange(new Control[]
             {
-                radSeparateCorridor, radSingleOrExistingCorridor,
-                cmbExistingCorridor, btnPickExistingCorridor,
                 lblPrefix, txtCorridorPrefix,
                 lblCodeSet, cmbCodeSetStyle,
                 lblDefSurface, cmbDefaultSurface,
                 lblFreqT, numFreqTangent, numFreqCurve
             });
-            this.Controls.Add(grpGeneral);
+            grp1Layout.Controls.Add(pnlParamsRow, 0, 2);
 
-            // ── GROUP 2: Bảng danh sách các Cấu kiện Corridor ──
+            grpGeneral.Controls.Add(grp1Layout);
+            mainLayout.Controls.Add(grpGeneral, 0, 1);
+
+            // ── HÀNG 2: GROUP 2 (Bảng danh sách các Cấu kiện Corridor) ──
             var grpComponents = new GroupBox
             {
                 Text = "2. Danh sách các Cấu kiện xây dựng Corridor (Mỗi dòng là 1 cấu kiện độc lập)",
-                Location = new Point(16, 190),
-                Size = new Size(1132, 475),
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10, 6, 10, 8),
+                Margin = new Padding(0, 0, 0, 6)
             };
 
-            // Thanh nút công cụ thao tác nhanh trên CAD
+            var grp2Layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3
+            };
+            grp2Layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            grp2Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Thanh nút trên
+            grp2Layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // Bảng DataGridView
+            grp2Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Thanh nút Target & Rebuild dưới bảng
+
+            // Thanh nút công cụ phía trên bảng
+            var pnlToolbar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                AutoSize = true,
+                Margin = new Padding(0, 2, 0, 6)
+            };
+
             btnAutoPopulateFromDrawing = new WinFormsButton
             {
-                Text = "Nạp mẫu Cấu kiện từ Bản vẽ hiện hành",
-                Location = new Point(14, 24),
-                Size = new Size(255, 42),
+                Text = "Nạp mẫu Cấu kiện từ Bản vẽ",
+                Size = new Size(220, 40),
                 BackColor = Color.FromArgb(228, 242, 255),
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-                UseMnemonic = false
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 6, 2)
             };
             btnAutoPopulateFromDrawing.Click += BtnAutoPopulateFromDrawing_Click;
 
             btnAddAlignmentComponent = new WinFormsButton
             {
-                Text = "+ Thêm Cấu kiện (Chọn Alignment)",
-                Location = new Point(275, 24),
-                Size = new Size(220, 42),
-                UseMnemonic = false
+                Text = "+ Thêm Cấu kiện (Alignment)",
+                Size = new Size(205, 40),
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 6, 2)
             };
             btnAddAlignmentComponent.Click += BtnAddAlignmentComponent_Click;
 
             btnAddFeatureLineComponent = new WinFormsButton
             {
-                Text = "+ Thêm Cấu kiện (Chọn FeatureLine)",
-                Location = new Point(501, 24),
-                Size = new Size(225, 42),
-                UseMnemonic = false
+                Text = "+ Thêm Cấu kiện (FeatureLine)",
+                Size = new Size(210, 40),
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 6, 2)
             };
             btnAddFeatureLineComponent.Click += BtnAddFeatureLineComponent_Click;
 
             btnPickBaselineForRow = new WinFormsButton
             {
                 Text = "Đổi Đường dẫn dòng chọn",
-                Location = new Point(732, 24),
-                Size = new Size(175, 42),
-                UseMnemonic = false
+                Size = new Size(190, 40),
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 6, 2)
             };
             btnPickBaselineForRow.Click += BtnPickBaselineForRow_Click;
 
             btnPickAssemblyForRow = new WinFormsButton
             {
                 Text = "Pick Assembly trên CAD",
-                Location = new Point(913, 24),
-                Size = new Size(155, 42),
-                UseMnemonic = false
+                Size = new Size(175, 40),
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 6, 2)
             };
             btnPickAssemblyForRow.Click += BtnPickAssemblyForRow_Click;
 
             btnRemoveSelectedRow = new WinFormsButton
             {
-                Text = "Xóa",
-                Location = new Point(1072, 24),
-                Size = new Size(48, 42),
+                Text = "Xóa dòng",
+                Size = new Size(85, 40),
                 ForeColor = Color.DarkRed,
-                UseMnemonic = false
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 0, 2)
             };
             btnRemoveSelectedRow.Click += BtnRemoveSelectedRow_Click;
 
+            pnlToolbar.Controls.AddRange(new Control[]
+            {
+                btnAutoPopulateFromDrawing,
+                btnAddAlignmentComponent,
+                btnAddFeatureLineComponent,
+                btnPickBaselineForRow,
+                btnPickAssemblyForRow,
+                btnRemoveSelectedRow
+            });
+            grp2Layout.Controls.Add(pnlToolbar, 0, 0);
+
+            // Bảng DataGridView
             dgvComponents = new DataGridView
             {
-                Location = new Point(14, 74),
-                Size = new Size(1106, 342),
+                Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
-                RowHeadersWidth = 28,
+                RowHeadersWidth = 26,
+                RowTemplate = { Height = 28 },
+                ColumnHeadersHeight = 32,
                 BackgroundColor = Color.White,
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Margin = new Padding(0, 0, 0, 6)
             };
             SetupDataGridViewColumns();
             dgvComponents.CellValueChanged += (s, e) =>
@@ -442,74 +545,90 @@ namespace MyFirstProject.Civil_Tool_2
                     dgvComponents.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
             dgvComponents.DataError += (s, e) => { e.ThrowException = false; };
+            grp2Layout.Controls.Add(dgvComponents, 0, 1);
+
+            // Dòng dưới bảng: Gán Target & CheckBox AutoRebuild
+            var pnlSubActions = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                AutoSize = true,
+                Margin = new Padding(0)
+            };
+            pnlSubActions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            pnlSubActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
             btnPickOffsetTargetsForRow = new WinFormsButton
             {
-                Text = "Gán Target Mở rộng / Cao độ (Alignment, FeatureLine, Polyline) cho dòng đang chọn...",
-                Location = new Point(14, 422),
-                Size = new Size(560, 42),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                UseMnemonic = false
+                Text = "Gán Target Mở rộng / Cao độ (Alignment, FeatureLine, Polyline) cho dòng chọn...",
+                Size = new Size(540, 40),
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 16, 0)
             };
             btnPickOffsetTargetsForRow.Click += BtnPickOffsetTargetsForRow_Click;
 
             chkAutoRebuild = new CheckBox
             {
                 Text = "Tự động Rebuild Corridor ngay sau khi lắp ghép các cấu kiện",
-                Location = new Point(600, 432),
-                Size = new Size(510, 24),
+                AutoSize = true,
                 Checked = true,
+                UseMnemonic = false,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(4, 8, 0, 0)
             };
 
-            grpComponents.Controls.AddRange(new Control[]
-            {
-                btnAutoPopulateFromDrawing,
-                btnAddAlignmentComponent,
-                btnAddFeatureLineComponent,
-                btnPickBaselineForRow,
-                btnPickAssemblyForRow,
-                btnRemoveSelectedRow,
-                dgvComponents,
-                btnPickOffsetTargetsForRow,
-                chkAutoRebuild
-            });
-            this.Controls.Add(grpComponents);
+            pnlSubActions.Controls.Add(btnPickOffsetTargetsForRow, 0, 0);
+            pnlSubActions.Controls.Add(chkAutoRebuild, 1, 0);
+            grp2Layout.Controls.Add(pnlSubActions, 0, 2);
 
-            // ── FOOTER: Summary + Execute / Cancel ──
+            grpComponents.Controls.Add(grp2Layout);
+            mainLayout.Controls.Add(grpComponents, 0, 2);
+
+            // ── HÀNG 3: FOOTER (Summary + Nút Thực Thi & Đóng — Luôn hiển thị 100%) ──
+            var pnlFooter = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                AutoSize = true,
+                Margin = new Padding(0, 2, 0, 0)
+            };
+            pnlFooter.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            pnlFooter.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            pnlFooter.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
             lblSummary = new WinFormsLabel
             {
                 Text = "Sẵn sàng.",
-                Location = new Point(16, 676),
-                Size = new Size(760, 26),
+                AutoSize = true,
                 Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 100, 60),
                 UseMnemonic = false,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(2, 8, 8, 0)
             };
 
             btnExecute = new WinFormsButton
             {
                 Text = "Xây Dựng Corridor Theo Cấu Kiện",
-                Location = new Point(795, 670),
-                Size = new Size(235, 42),
+                Size = new Size(255, 42),
                 BackColor = Color.FromArgb(0, 120, 215),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 UseMnemonic = false,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Margin = new Padding(0, 0, 8, 0)
             };
             btnExecute.Click += BtnExecute_Click;
 
             btnCancel = new WinFormsButton
             {
                 Text = "Đóng",
-                Location = new Point(1038, 670),
                 Size = new Size(110, 42),
                 UseMnemonic = false,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Margin = new Padding(0)
             };
             btnCancel.Click += (s, e) =>
             {
@@ -518,9 +637,14 @@ namespace MyFirstProject.Civil_Tool_2
                 this.Close();
             };
 
+            pnlFooter.Controls.Add(lblSummary, 0, 0);
+            pnlFooter.Controls.Add(btnExecute, 1, 0);
+            pnlFooter.Controls.Add(btnCancel, 2, 0);
+            mainLayout.Controls.Add(pnlFooter, 0, 3);
+
             this.AcceptButton = btnExecute;
             this.CancelButton = btnCancel;
-            this.Controls.AddRange(new Control[] { lblSummary, btnExecute, btnCancel });
+            this.Controls.Add(mainLayout);
 
             UpdateModeUI();
         }
@@ -533,14 +657,16 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 Name = "colEnable",
                 HeaderText = "Bật",
-                Width = 45
+                FillWeight = 38,
+                MinimumWidth = 42
             };
 
             var colCategory = new DataGridViewComboBoxColumn
             {
                 Name = "colCategory",
                 HeaderText = "Nhóm Cấu Kiện",
-                Width = 155,
+                FillWeight = 135,
+                MinimumWidth = 125,
                 FlatStyle = FlatStyle.Flat
             };
             colCategory.Items.AddRange(ComponentCategories);
@@ -549,14 +675,16 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 Name = "colName",
                 HeaderText = "Tên Cấu Kiện / Corridor",
-                Width = 140
+                FillWeight = 130,
+                MinimumWidth = 120
             };
 
             var colSourceType = new DataGridViewComboBoxColumn
             {
                 Name = "colSourceType",
                 HeaderText = "Loại Đường Dẫn",
-                Width = 130,
+                FillWeight = 115,
+                MinimumWidth = 110,
                 FlatStyle = FlatStyle.Flat
             };
             colSourceType.Items.AddRange(SourceTypeNames);
@@ -565,7 +693,8 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 Name = "colBaseline",
                 HeaderText = "Đường Dẫn (Alignment / FeatureLine)",
-                Width = 185,
+                FillWeight = 195,
+                MinimumWidth = 160,
                 ReadOnly = true
             };
 
@@ -573,7 +702,8 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 Name = "colAssembly",
                 HeaderText = "Mặt Cắt Cấu Kiện (Assembly)",
-                Width = 175,
+                FillWeight = 155,
+                MinimumWidth = 140,
                 FlatStyle = FlatStyle.Flat
             };
             foreach (var asm in _assemblyList)
@@ -583,28 +713,32 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 Name = "colStartSta",
                 HeaderText = "Lý Trình Đầu",
-                Width = 85
+                FillWeight = 75,
+                MinimumWidth = 75
             };
 
             var colEndSta = new DataGridViewTextBoxColumn
             {
                 Name = "colEndSta",
                 HeaderText = "Lý Trình Cuối (0=Hết)",
-                Width = 105
+                FillWeight = 95,
+                MinimumWidth = 90
             };
 
             var colFreq = new DataGridViewTextBoxColumn
             {
                 Name = "colFreq",
                 HeaderText = "Bước Cọc (m)",
-                Width = 80
+                FillWeight = 72,
+                MinimumWidth = 70
             };
 
             var colTargets = new DataGridViewTextBoxColumn
             {
                 Name = "colTargets",
-                HeaderText = "Target Mở Rộng/Cao Độ",
-                Width = 140,
+                HeaderText = "Target Mở Rộng / Cao Độ",
+                FillWeight = 115,
+                MinimumWidth = 105,
                 ReadOnly = true
             };
 
@@ -705,10 +839,21 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 CivilDocument cdoc = CivilDocument.GetCivilDocument(_db);
 
-                // 1. Tìm tuyến chính & Assembly lòng đường chính
+                // 1. Tìm đúng tuyến tim chính (ưu tiên tên chứa 'TUYEN CHINH' và không phải đường Offset Left/Right)
                 var mainAlign = _alignmentList.FirstOrDefault(a =>
-                    a.Name.Contains("TUYEN CHINH", StringComparison.OrdinalIgnoreCase) ||
-                    !a.Name.Contains("Connected", StringComparison.OrdinalIgnoreCase));
+                    a.Name.Contains("TUYEN CHINH", StringComparison.OrdinalIgnoreCase) &&
+                    !a.Name.Contains("Left", StringComparison.OrdinalIgnoreCase) &&
+                    !a.Name.Contains("Right", StringComparison.OrdinalIgnoreCase));
+
+                if (mainAlign.Id.IsNull)
+                {
+                    mainAlign = _alignmentList.FirstOrDefault(a =>
+                        !a.Name.Contains("Connected", StringComparison.OrdinalIgnoreCase) &&
+                        !a.Name.Contains("Left", StringComparison.OrdinalIgnoreCase) &&
+                        !a.Name.Contains("Right", StringComparison.OrdinalIgnoreCase));
+                }
+                if (mainAlign.Id.IsNull && _alignmentList.Count > 0)
+                    mainAlign = _alignmentList[0];
 
                 var mainAsm = _assemblyList.FirstOrDefault(a =>
                     !a.Name.Contains("nhanh", StringComparison.OrdinalIgnoreCase) &&
@@ -735,13 +880,13 @@ namespace MyFirstProject.Civil_Tool_2
                     });
                 }
 
-                // 2. Tìm Assembly Dải phân cách & các FeatureLine trong bản vẽ (hoặc từ Corridor 'Phan cach')
+                // 2. Tìm Assembly Dải phân cách & các FeatureLine từ Corridor 'Phan cach'
                 var medianAsm = _assemblyList.FirstOrDefault(a =>
                     a.Name.Contains("Phân cách", StringComparison.OrdinalIgnoreCase) ||
                     a.Name.Contains("Phan cach", StringComparison.OrdinalIgnoreCase));
                 if (!medianAsm.Id.IsNull)
                 {
-                    var flIds = CollectFeatureLinesFromCorridorOrDrawing(tr, cdoc, "Phan cach");
+                    var flIds = CollectFeatureLinesFromCorridor(tr, cdoc, "Phan cach");
                     AddRowToGrid(new CorridorComponentRowItem
                     {
                         IsEnabled = flIds.Count > 0,
@@ -759,20 +904,21 @@ namespace MyFirstProject.Civil_Tool_2
                     });
                 }
 
-                // 3. Tìm Assembly Vỉa hè trái / phải
+                // 3. Tìm Assembly Vỉa hè trái / phải & các FeatureLine vỉa hè (nếu có trong Đoạn 1)
                 var sidewalkAsm = _assemblyList.FirstOrDefault(a =>
                     a.Name.Contains("via he", StringComparison.OrdinalIgnoreCase) ||
                     a.Name.Contains("vỉa hè", StringComparison.OrdinalIgnoreCase));
                 if (!sidewalkAsm.Id.IsNull)
                 {
+                    var swFlIds = CollectFeatureLinesFromCorridor(tr, cdoc, "Đoạn 1");
                     AddRowToGrid(new CorridorComponentRowItem
                     {
-                        IsEnabled = false,
+                        IsEnabled = swFlIds.Count > 0,
                         ComponentCategory = "Vỉa hè & Bó vỉa Trái",
                         ComponentName = "ViaHe_Trai",
                         SourceType = ComponentBaselineSourceType.FeatureLine,
-                        BaselineEntityIds = new List<ObjectId>(),
-                        BaselineDisplayText = "(Bấm Đổi Đường dẫn để chọn FeatureLine/Alignment)",
+                        BaselineEntityIds = swFlIds,
+                        BaselineDisplayText = swFlIds.Count > 0 ? $"[{swFlIds.Count} FeatureLine] Vỉa hè trái" : "(Bấm Đổi Đường dẫn để chọn FeatureLine)",
                         AssemblyId = sidewalkAsm.Id,
                         AssemblyName = sidewalkAsm.Name,
                         StartStation = 0.0,
@@ -816,7 +962,7 @@ namespace MyFirstProject.Civil_Tool_2
             UpdateSummaryLabel();
         }
 
-        private List<ObjectId> CollectFeatureLinesFromCorridorOrDrawing(Transaction tr, CivilDocument cdoc, string corridorNameHint)
+        private List<ObjectId> CollectFeatureLinesFromCorridor(Transaction tr, CivilDocument cdoc, string corridorNameHint)
         {
             var result = new List<ObjectId>();
             foreach (ObjectId corrId in cdoc.CorridorCollection)
@@ -1221,7 +1367,6 @@ namespace MyFirstProject.Civil_Tool_2
             }
             else
             {
-                // Lần đầu mở trong phiên: tự động quét bản vẽ để gợi ý bộ cấu kiện
                 BtnAutoPopulateFromDrawing_Click(null, EventArgs.Empty);
             }
         }
