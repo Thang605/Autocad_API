@@ -108,6 +108,7 @@ namespace MyFirstProject
             AddMenuItem(subMenuCorridor, "Tạo Corridor Surface", "CTSV_TaoCorridorSurface ");
             AddHeader(subMenuCorridor, "--- Xuất 3D Solid / Body / Ranh giới ---");
             AddMenuItem(subMenuCorridor, "Xuất Solid Từ Corridor", "CTC_Xuat_Solid_Tu_Corridor ");
+            AddMenuItem(subMenuCorridor, "Ngắt Liên Kết & Xóa Solid/Body Corridor", "CTC_Ngat_Lien_Ket_Solid_Corridor ");
             AddMenuItem(subMenuCorridor, "Trích Xuất Ranh Giới Corridor", "CTC_Trich_Xuat_Ranh_Gioi_Corridor ");
             AddHeader(subMenuCorridor, "--- Subassembly .NET ---");
             AddMenuItem(subMenuCorridor, "Quản Lý & Tạo Subassembly .NET (C# / Stock)", "CTC_Quan_Ly_Subassembly_DotNet ");

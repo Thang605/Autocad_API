@@ -61,6 +61,9 @@
 
 ## 6. 📦 GIT WORKFLOW & GOOGLE JULES TỰ ĐỘNG HẰNG NGÀY
 - **Remote**: `https://github.com/Thang605/Autocad_API.git`, branch `master`.
+- **Tự động Commit & Push cuối mỗi yêu cầu (Không làm chậm tiến độ)**:
+  - Không commit lắt nhắt ở các bước sửa nháp trung gian để tránh làm chậm tiến độ.
+  - Ngay sau khi **hoàn tất một yêu cầu/tính năng** và chạy `BuildProject.ps1` đạt `0 Error(s)`, AI **BẮT BUỘC** tự động chạy `git add` + `git commit` (mất `< 0.2s`) và `git push` cho các file mã nguồn đã sửa/tạo mới để thanh **Review** của Antigravity luôn sạch (`0 Uncommitted`) ở mọi phiên làm việc.
 - Commit message bằng tiếng Việt không dấu, prefix theo conventional commits (`fix:`, `feat:`, `refactor:`...).
 - Chỉ commit các file source code đã sửa, **KHÔNG** commit output build (`C:\CadBuild\`), file tạm (`last_dll.txt`, `last_reload.lsp`).
 - **Quy trình Tự động Check Code với Google Jules (`https://jules.google.com/repo/github/Thang605/Autocad_API/overview`):**
