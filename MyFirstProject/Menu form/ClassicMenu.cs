@@ -93,6 +93,7 @@ namespace MyFirstProject
             dynamic subMenuCorridor = menu.AddSubMenu(menu.Count + 1, "Corridor");
             AddHeader(subMenuCorridor, "--- Tạo Corridor ---");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Cho Tuyến Đường", "CTC_TaoCorridor_ChoTuyenDuong ");
+            AddMenuItem(subMenuCorridor, "Tạo Corridor Theo Từng Cấu Kiện (Modular)", "CTC_Tao_Corridor_Theo_Cau_Kien ");
             AddMenuItem(subMenuCorridor, "Tạo Corridor Đường Đô Thị Rẽ Phải", "CAC_TaoCooridor_DuongDoThi_RePhai ");
             AddHeader(subMenuCorridor, "--- Thiết lập Section ---");
             AddMenuItem(subMenuCorridor, "Thêm Section Cho Tất Cả Region", "CTC_ThemSection_TatCaRegion ");
