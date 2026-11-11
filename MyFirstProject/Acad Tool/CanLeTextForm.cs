@@ -50,7 +50,7 @@ namespace MyFirstProject.Acad_Tool
         public CanLeTextForm()
         {
             InitializeComponent();
-            RestoreLastValues();
+            RestoreLastSettings();
         }
 
         private void InitializeComponent()
@@ -183,15 +183,26 @@ namespace MyFirstProject.Acad_Tool
                 btnCancel
             });
 
+            // Form events
+            this.FormClosing += (s, e) => SaveCurrentSettings();
+
             this.ResumeLayout(false);
         }
 
-        private void RestoreLastValues()
+        private void RestoreLastSettings()
         {
             cboAlignX.SelectedIndex = _lastAlignX;
             cboAlignY.SelectedIndex = _lastAlignY;
             cboJustify.SelectedIndex = _lastJustify;
             chkPickPoint.Checked = _lastPickPoint;
+        }
+
+        private void SaveCurrentSettings()
+        {
+            if (cboAlignX.SelectedIndex != -1) _lastAlignX = cboAlignX.SelectedIndex;
+            if (cboAlignY.SelectedIndex != -1) _lastAlignY = cboAlignY.SelectedIndex;
+            if (cboJustify.SelectedIndex != -1) _lastJustify = cboJustify.SelectedIndex;
+            _lastPickPoint = chkPickPoint.Checked;
         }
 
         private void BtnOK_Click(object? sender, EventArgs e)
@@ -209,11 +220,7 @@ namespace MyFirstProject.Acad_Tool
                 return;
             }
 
-            // Save
-            _lastAlignX = AlignX;
-            _lastAlignY = AlignY;
-            _lastJustify = JustifyIndex;
-            _lastPickPoint = PickPoint;
+            // Save settings handled in FormClosing/SaveCurrentSettings
 
             FormAccepted = true;
             this.DialogResult = DialogResult.OK;
