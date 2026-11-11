@@ -62,6 +62,21 @@ namespace MyFirstProject.Civil_Tool_2
         public double AutoCloseTolerance { get; set; } = 0.10;
         public bool TreatNestedClosedAsHole { get; set; } = false;
         public bool AutoRebuild { get; set; } = true;
+
+        /// <summary>
+        /// Khi bổ sung vào mặt phẳng TIN có sẵn:
+        /// true  = Đắp đè cao độ mới tại vùng chồng lấn (thay thế điểm/lưới cũ bên dưới Feature Line mới, 0 mặt phẳng phụ).
+        /// false = Giữ nguyên cao độ mặt phẳng cũ tại vùng chồng lấn, chỉ nối mở rộng thêm phần diện tích mới bên ngoài.
+        /// </summary>
+        public bool OverwriteOverlapOnExisting { get; set; } = true;
+
+        /// <summary>
+        /// Khi mặt phẳng đích có nguồn gốc trực tiếp từ Corridor / Grading (FromCorridor / FromGrading):
+        /// Tự động tạo hoặc cập nhật mặt phẳng tổng hợp '&lt;Tên&gt;_Gop' kế thừa động mặt phẳng gốc + ghép phần Feature Line mới,
+        /// giúp không bị cắt bởi Corridor Extents và không mất dữ liệu khi Rebuild Corridor.
+        /// </summary>
+        public bool CreateCombinedForCorridorSurface { get; set; } = true;
+        public string CombinedSurfaceName { get; set; } = string.Empty;
     }
 
     public class SurfaceCreationResult
@@ -70,6 +85,8 @@ namespace MyFirstProject.Civil_Tool_2
         public string Message { get; set; } = string.Empty;
         public ObjectId MasterSurfaceId { get; set; } = ObjectId.Null;
         public string FinalSurfaceName { get; set; } = string.Empty;
+        public bool IsSupplementedIntoExisting { get; set; }
+        public int PreviousTriangleCount { get; set; }
         public int SubSurfaceCount { get; set; }
         public int ProcessedCurveCount { get; set; }
         public int OpenCurveCount { get; set; }
@@ -203,60 +220,63 @@ namespace MyFirstProject.Civil_Tool_2
                         };
                     }
 
-                    // 2. Xác định hoặc khởi tạo TIN Surface đích (DUY NHẤT 1 MẶT PHẲNG - KHÔNG TẠO MẶT PHẲNG PHỤ)
-                    ObjectId targetSurfaceId = ObjectId.Null;
-                    string finalSurfaceName;
-                    HashSet<QuantizedPoint2D> preExistingVertices = new HashSet<QuantizedPoint2D>();
-                    bool isAppendingToExisting = false;
-
+                    // 2. Nhánh BỔ SUNG / GHÉP VÀO MẶT PHẲNG TIN ĐÃ CÓ SẴN (0 mặt phẳng phụ!)
                     if (!options.CreateNewSurface && !options.ExistingSurfaceId.IsNull &&
                         options.ExistingSurfaceId.IsValid && !options.ExistingSurfaceId.IsErased)
                     {
-                        targetSurfaceId = options.ExistingSurfaceId;
-                        isAppendingToExisting = true;
+                        return SupplementFeatureLinesIntoExistingSurface(
+                            civDoc,
+                            tr,
+                            ed,
+                            options,
+                            sourceCurves,
+                            openCount,
+                            closedCount,
+                            midOrd,
+                            suppDist,
+                            closeTol);
+                    }
+
+                    // 3. Nhánh TẠO MỚI TIN SURFACE DUY NHẤT (0 mặt phẳng phụ!)
+                    ObjectId styleId = FindSurfaceStyleId(civDoc, tr, options.SurfaceStyleName);
+                    if (styleId == ObjectId.Null)
+                    {
+                        return new SurfaceCreationResult
+                        {
+                            Success = false,
+                            Message = "Bản vẽ không có Surface Style hợp lệ để tạo mặt phẳng."
+                        };
+                    }
+
+                    string reqName = string.IsNullOrWhiteSpace(options.SurfaceName)
+                        ? $"MatPhang_FL_{DateTime.Now:yyyyMMdd_HHmm}"
+                        : options.SurfaceName.Trim();
+
+                    string finalSurfaceName;
+                    if (options.OverwriteExistingIfNameMatches)
+                    {
+                        ObjectId existingSameName = FindSurfaceByName(civDoc, tr, reqName);
+                        if (!existingSameName.IsNull && existingSameName.IsValid && !existingSameName.IsErased)
+                        {
+                            if (tr.GetObject(existingSameName, OpenMode.ForWrite) is CivSurface oldSurf)
+                            {
+                                oldSurf.Erase(true);
+                            }
+                        }
+                        finalSurfaceName = reqName;
                     }
                     else
                     {
-                        ObjectId styleId = FindSurfaceStyleId(civDoc, tr, options.SurfaceStyleName);
-                        if (styleId == ObjectId.Null)
-                        {
-                            return new SurfaceCreationResult
-                            {
-                                Success = false,
-                                Message = "Bản vẽ không có Surface Style hợp lệ để tạo mặt phẳng."
-                            };
-                        }
-
-                        string reqName = string.IsNullOrWhiteSpace(options.SurfaceName)
-                            ? $"MatPhang_FL_{DateTime.Now:yyyyMMdd_HHmm}"
-                            : options.SurfaceName.Trim();
-
-                        if (options.OverwriteExistingIfNameMatches)
-                        {
-                            ObjectId existingSameName = FindSurfaceByName(civDoc, tr, reqName);
-                            if (!existingSameName.IsNull && existingSameName.IsValid && !existingSameName.IsErased)
-                            {
-                                if (tr.GetObject(existingSameName, OpenMode.ForWrite) is CivSurface oldSurf)
-                                {
-                                    oldSurf.Erase(true);
-                                }
-                            }
-                            finalSurfaceName = reqName;
-                        }
-                        else
-                        {
-                            finalSurfaceName = EnsureUniqueSurfaceName(civDoc, tr, reqName);
-                        }
-
-                        targetSurfaceId = TinSurface.Create(finalSurfaceName, styleId);
+                        finalSurfaceName = EnsureUniqueSurfaceName(civDoc, tr, reqName);
                     }
 
+                    ObjectId targetSurfaceId = TinSurface.Create(finalSurfaceName, styleId);
                     if (targetSurfaceId.IsNull || !targetSurfaceId.IsValid)
                     {
                         return new SurfaceCreationResult
                         {
                             Success = false,
-                            Message = "Không thể khởi tạo hoặc truy cập TIN Surface đích."
+                            Message = "Không thể khởi tạo TIN Surface mới."
                         };
                     }
 
@@ -266,65 +286,32 @@ namespace MyFirstProject.Civil_Tool_2
                         return new SurfaceCreationResult
                         {
                             Success = false,
-                            Message = "Không thể mở TIN Surface đích ở chế độ ghi (OpenMode.ForWrite)."
+                            Message = "Không thể mở TIN Surface mới ở chế độ ghi (OpenMode.ForWrite)."
                         };
                     }
 
                     finalSurfaceName = targetSurface.Name;
 
-                    // Nếu thêm vào mặt phẳng đã có sẵn, ghi nhận tập đỉnh cũ để bảo vệ các tam giác hiện hữu
-                    if (isAppendingToExisting)
-                    {
-                        try
-                        {
-                            foreach (TinSurfaceVertex v in targetSurface.Vertices)
-                            {
-                                preExistingVertices.Add(QuantizedPoint2D.From(v.Location.X, v.Location.Y));
-                            }
-                        }
-                        catch { }
-                    }
-
-                    // 3. Cấu hình BuildOptions an toàn cho Breaklines giao nhau/chạm đầu mút
-                    try
-                    {
-                        targetSurface.BuildOptions.CrossingBreaklinesElevationOption = CrossingBreaklinesElevationType.UseAverage;
-                        if (options.BoundaryMode == FeatureLineBoundaryMode.BreaklinesOnly)
-                        {
-                            targetSurface.BuildOptions.UseMaximumTriangleLength = options.LimitMaxEdgeLength;
-                            if (options.LimitMaxEdgeLength)
-                            {
-                                targetSurface.BuildOptions.MaximumTriangleLength = Math.Max(0.5, options.MaxEdgeLength);
-                            }
-                        }
-                        else
-                        {
-                            // Tắt lọc thô của Civil 3D để không vô tình xóa cạnh Breakline dài;
-                            // bộ lọc thông minh bên dưới sẽ chỉ cắt cạnh tam giác KHÔNG thuộc Breakline!
-                            if (!isAppendingToExisting)
-                            {
-                                targetSurface.BuildOptions.UseMaximumTriangleLength = false;
-                            }
-                        }
-                    }
-                    catch { }
-
                     ed.WriteMessage($"\n══════════════════════════════════════════════════════════════════");
                     ed.WriteMessage($"\n🚀 TẠO MẶT PHẲNG TIN TỪ FEATURE LINE (0 MẶT PHẲNG PHỤ)");
-                    ed.WriteMessage($"\n  • Mặt phẳng đích : '{finalSurfaceName}' ({(isAppendingToExisting ? "Cập nhật mặt phẳng có sẵn" : "Tạo mới")})");
+                    ed.WriteMessage($"\n  • Mặt phẳng đích : '{finalSurfaceName}' (Tạo mới)");
                     ed.WriteMessage($"\n  • Nguồn dữ liệu  : {sourceCurves.Count} đối tượng ({openCount} đường hở, {closedCount} đường kín)");
 
-                    // 4. Nạp toàn bộ Breaklines vào TIN Surface duy nhất
-                    int addedBreaklineCount = 0;
-                    foreach (SourceCurveInfo curve in sourceCurves)
-                    {
-                        if (AddCurveToSurfaceBreaklines(targetSurface, curve, midOrd, suppDist))
-                        {
-                            addedBreaklineCount++;
-                        }
-                    }
+                    bool populatedOk = PopulateCleanFeatureLineSurface(
+                        targetSurface,
+                        options,
+                        tr,
+                        ed,
+                        sourceCurves,
+                        midOrd,
+                        suppDist,
+                        closeTol,
+                        usePointsOnlyBreaklines: false,
+                        out int addedBreaklineCount,
+                        out int trimmedTriangles,
+                        out _);
 
-                    if (addedBreaklineCount == 0)
+                    if (!populatedOk || addedBreaklineCount == 0)
                     {
                         tr.Abort();
                         return new SurfaceCreationResult
@@ -332,153 +319,6 @@ namespace MyFirstProject.Civil_Tool_2
                             Success = false,
                             Message = "Không thể thêm Breakline nào vào mặt phẳng TIN."
                         };
-                    }
-
-                    // Nếu chọn biên bao riêng trên CAD, thêm luôn các đường biên làm Non-Destructive / Standard Breakline
-                    // hoặc chuẩn bị đa giác biên 2D để đảm bảo lưới tam giác cắt phẳng tuyệt đối theo đường biên
-                    List<Polygon2D> customOuterPolys = new List<Polygon2D>();
-                    List<Polygon2D> customHidePolys = new List<Polygon2D>();
-
-                    if (options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities)
-                    {
-                        customOuterPolys = ExtractPolygonsFromBoundaryIds(options.CustomOuterBoundaryIds, tr, midOrd);
-                        customHidePolys = ExtractPolygonsFromBoundaryIds(options.CustomHideBoundaryIds, tr, midOrd);
-
-                        // Trường hợp có đúng 1 Outer Boundary (và >=0 Hide Boundary) trên mặt phẳng mới:
-                        // sử dụng trực tiếp BoundariesDefinition chuẩn của Civil 3D!
-                        if (!isAppendingToExisting && customOuterPolys.Count == 1)
-                        {
-                            AddNativeBoundaryPolygon(targetSurface, customOuterPolys[0], midOrd, SurfaceBoundaryType.Outer);
-                            foreach (Polygon2D hidePoly in customHidePolys)
-                            {
-                                AddNativeBoundaryPolygon(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide);
-                            }
-                            targetSurface.Rebuild();
-                            SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
-                            int finalTriCustom1 = CountVisibleTriangles(targetSurface);
-                            tr.Commit();
-
-                            ed.WriteMessage($"\n✅ Đã áp dụng trực tiếp Outer/Hide Boundary chuẩn Civil 3D ({finalTriCustom1} tam giác).");
-                            return new SurfaceCreationResult
-                            {
-                                Success = true,
-                                Message = $"Đã tạo thành công mặt phẳng '{finalSurfaceName}' (0 mặt phẳng phụ)!",
-                                MasterSurfaceId = targetSurfaceId,
-                                FinalSurfaceName = finalSurfaceName,
-                                SubSurfaceCount = 0,
-                                ProcessedCurveCount = addedBreaklineCount,
-                                OpenCurveCount = openCount,
-                                ClosedCurveCount = closedCount,
-                                TrimmedTriangleCount = 0,
-                                FinalTriangleCount = finalTriCustom1
-                            };
-                        }
-                        else if (customOuterPolys.Count > 1)
-                        {
-                            // Với nhiều Outer Boundary rời nhau: nạp biên vào Non-Destructive Breaklines để cạnh biên khớp tuyệt đối
-                            foreach (Polygon2D poly in customOuterPolys)
-                            {
-                                AddPolygon2DAsNonDestructiveBreakline(targetSurface, poly, midOrd);
-                            }
-                            foreach (Polygon2D hidePoly in customHidePolys)
-                            {
-                                AddPolygon2DAsNonDestructiveBreakline(targetSurface, hidePoly, midOrd);
-                            }
-                        }
-                    }
-
-                    // 5. Xây dựng danh sách vùng đa giác đóng (từ đường kín + chuỗi đường hở nối đầu-cuối khép vòng)
-                    List<Polygon2D> closedRegions = new List<Polygon2D>();
-                    List<Polygon2D> holeRegions = new List<Polygon2D>();
-                    HashSet<int> curvesInClosedLoops = new HashSet<int>();
-
-                    if (options.BoundaryMode == FeatureLineBoundaryMode.AutoSmart)
-                    {
-                        BuildClosedAndChainedRegions(
-                            sourceCurves,
-                            closeTol,
-                            options.TreatNestedClosedAsHole,
-                            out closedRegions,
-                            out holeRegions,
-                            out curvesInClosedLoops);
-
-                        bool allCurvesFormClosedRegions = curvesInClosedLoops.Count == sourceCurves.Count && closedRegions.Count > 0;
-
-                        // Tối ưu đặc biệt: Nếu TẤT CẢ đối tượng nguồn tạo thành ĐÚNG 1 vùng bao ngoài khép kín
-                        // trên mặt phẳng mới -> dùng trực tiếp Outer (+ Hide) Boundary gốc của Civil 3D!
-                        if (!isAppendingToExisting && allCurvesFormClosedRegions && closedRegions.Count == 1)
-                        {
-                            AddNativeBoundaryPolygon(targetSurface, closedRegions[0], midOrd, SurfaceBoundaryType.Outer);
-                            foreach (Polygon2D hole in holeRegions)
-                            {
-                                AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
-                            }
-
-                            targetSurface.Rebuild();
-                            SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
-                            int finalTriSingleClosed = CountVisibleTriangles(targetSurface);
-                            tr.Commit();
-
-                            ed.WriteMessage($"\n✅ Đã áp dụng Outer Boundary khép kín trực tiếp ({finalTriSingleClosed} tam giác, 0 mặt phẳng phụ).");
-                            return new SurfaceCreationResult
-                            {
-                                Success = true,
-                                Message = $"Đã tạo thành công mặt phẳng '{finalSurfaceName}' (0 mặt phẳng phụ)!",
-                                MasterSurfaceId = targetSurfaceId,
-                                FinalSurfaceName = finalSurfaceName,
-                                SubSurfaceCount = 0,
-                                ProcessedCurveCount = addedBreaklineCount,
-                                OpenCurveCount = openCount,
-                                ClosedCurveCount = closedCount,
-                                TrimmedTriangleCount = 0,
-                                FinalTriangleCount = finalTriSingleClosed
-                            };
-                        }
-
-                        // Thêm trước các lỗ khoét (Hide Boundary) nếu có
-                        foreach (Polygon2D hole in holeRegions)
-                        {
-                            AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
-                        }
-                    }
-                    else if (options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities)
-                    {
-                        foreach (Polygon2D hidePoly in customHidePolys)
-                        {
-                            AddNativeBoundaryPolygon(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide);
-                        }
-                    }
-
-                    // 6. Rebuild lần 1 để Civil 3D tạo lưới tam giác Constrained Delaunay đầy đủ
-                    targetSurface.Rebuild();
-
-                    int trimmedTriangles = 0;
-
-                    // 7. Cắt lọc tam giác thừa trực tiếp trên 1 Surface (DeleteLines + Hide Pocket, 0 mặt phẳng phụ!)
-                    if (options.BoundaryMode == FeatureLineBoundaryMode.AutoSmart)
-                    {
-                        bool allClosed = curvesInClosedLoops.Count == sourceCurves.Count && closedRegions.Count > 0;
-                        trimmedTriangles = TrimUnwantedTrianglesOnSingleSurface(
-                            targetSurface,
-                            sourceCurves,
-                            curvesInClosedLoops,
-                            closedRegions,
-                            holeRegions,
-                            allClosed,
-                            isAppendingToExisting ? preExistingVertices : null,
-                            midOrd,
-                            options.LimitMaxEdgeLength,
-                            Math.Max(0.5, options.MaxEdgeLength),
-                            ed);
-                    }
-                    else if (options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities && customOuterPolys.Count > 0)
-                    {
-                        trimmedTriangles = TrimTrianglesByCustomPolygons(
-                            targetSurface,
-                            customOuterPolys,
-                            customHidePolys,
-                            midOrd,
-                            ed);
                     }
 
                     SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
@@ -494,9 +334,11 @@ namespace MyFirstProject.Civil_Tool_2
                     return new SurfaceCreationResult
                     {
                         Success = true,
-                        Message = $"Đã tạo thành công mặt phẳng '{finalSurfaceName}' ({finalTriangleCount} tam giác, 0 mặt phẳng phụ)!",
+                        Message = $"Đã tạo thành công mặt phẳng '{finalSurfaceName}' ({finalTriangleCount:N0} tam giác, 0 mặt phẳng phụ)!",
                         MasterSurfaceId = targetSurfaceId,
                         FinalSurfaceName = finalSurfaceName,
+                        IsSupplementedIntoExisting = false,
+                        PreviousTriangleCount = 0,
                         SubSurfaceCount = 0,
                         ProcessedCurveCount = addedBreaklineCount,
                         OpenCurveCount = openCount,
@@ -516,6 +358,1257 @@ namespace MyFirstProject.Civil_Tool_2
                 };
             }
         }
+
+        /// <summary>
+        /// Tạo lưới TIN sạch cho 1 tập Feature Line trên một mặt phẳng trống (dùng chung cho Tạo mới,
+        /// Mặt phẳng có sẵn đang rỗng, hoặc tính toán hình học tạm trong bộ nhớ trước khi gộp).
+        /// </summary>
+        private static bool PopulateCleanFeatureLineSurface(
+            CivSurface targetSurface,
+            TaoMatPhangOptions options,
+            Transaction tr,
+            Editor ed,
+            List<SourceCurveInfo> sourceCurves,
+            double midOrd,
+            double suppDist,
+            double closeTol,
+            bool usePointsOnlyBreaklines,
+            out int addedBreaklineCount,
+            out int trimmedTriangles,
+            out List<Polygon2D> appliedHolePolys)
+        {
+            addedBreaklineCount = 0;
+            trimmedTriangles = 0;
+            appliedHolePolys = new List<Polygon2D>();
+
+            try
+            {
+                targetSurface.BuildOptions.CrossingBreaklinesElevationOption = CrossingBreaklinesElevationType.UseAverage;
+                if (options.BoundaryMode == FeatureLineBoundaryMode.BreaklinesOnly)
+                {
+                    targetSurface.BuildOptions.UseMaximumTriangleLength = options.LimitMaxEdgeLength;
+                    if (options.LimitMaxEdgeLength)
+                    {
+                        targetSurface.BuildOptions.MaximumTriangleLength = Math.Max(0.5, options.MaxEdgeLength);
+                    }
+                }
+                else
+                {
+                    targetSurface.BuildOptions.UseMaximumTriangleLength = false;
+                }
+            }
+            catch { }
+
+            foreach (SourceCurveInfo curve in sourceCurves)
+            {
+                if (AddCurveToSurfaceBreaklines(
+                    targetSurface,
+                    curve,
+                    midOrd,
+                    suppDist,
+                    usePointsOnly: usePointsOnlyBreaklines,
+                    allowDirectCurvedEntity: !usePointsOnlyBreaklines))
+                {
+                    addedBreaklineCount++;
+                }
+            }
+
+            if (addedBreaklineCount == 0)
+            {
+                return false;
+            }
+
+            List<Polygon2D> customOuterPolys = new List<Polygon2D>();
+            List<Polygon2D> customHidePolys = new List<Polygon2D>();
+
+            if (options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities)
+            {
+                customOuterPolys = ExtractPolygonsFromBoundaryIds(options.CustomOuterBoundaryIds, tr, midOrd);
+                customHidePolys = ExtractPolygonsFromBoundaryIds(options.CustomHideBoundaryIds, tr, midOrd);
+                appliedHolePolys.AddRange(customHidePolys);
+
+                if (customOuterPolys.Count == 1)
+                {
+                    AddNativeBoundaryPolygon(targetSurface, customOuterPolys[0], midOrd, SurfaceBoundaryType.Outer);
+                    foreach (Polygon2D hidePoly in customHidePolys)
+                    {
+                        AddNativeBoundaryPolygon(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide);
+                    }
+                    targetSurface.Rebuild();
+                    return true;
+                }
+                else if (customOuterPolys.Count > 1)
+                {
+                    foreach (Polygon2D poly in customOuterPolys)
+                    {
+                        AddPolygon2DAsNonDestructiveBreakline(targetSurface, poly, midOrd);
+                    }
+                    foreach (Polygon2D hidePoly in customHidePolys)
+                    {
+                        AddPolygon2DAsNonDestructiveBreakline(targetSurface, hidePoly, midOrd);
+                    }
+                    foreach (Polygon2D hidePoly in customHidePolys)
+                    {
+                        AddNativeBoundaryPolygon(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide);
+                    }
+                }
+            }
+
+            List<Polygon2D> closedRegions = new List<Polygon2D>();
+            List<Polygon2D> holeRegions = new List<Polygon2D>();
+            HashSet<int> curvesInClosedLoops = new HashSet<int>();
+
+            if (options.BoundaryMode == FeatureLineBoundaryMode.AutoSmart)
+            {
+                BuildClosedAndChainedRegions(
+                    sourceCurves,
+                    closeTol,
+                    options.TreatNestedClosedAsHole,
+                    out closedRegions,
+                    out holeRegions,
+                    out curvesInClosedLoops);
+
+                appliedHolePolys.AddRange(holeRegions);
+                bool allCurvesFormClosedRegions = curvesInClosedLoops.Count == sourceCurves.Count && closedRegions.Count > 0;
+
+                if (allCurvesFormClosedRegions && closedRegions.Count == 1)
+                {
+                    AddNativeBoundaryPolygon(targetSurface, closedRegions[0], midOrd, SurfaceBoundaryType.Outer);
+                    foreach (Polygon2D hole in holeRegions)
+                    {
+                        AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
+                    }
+                    targetSurface.Rebuild();
+                    return true;
+                }
+
+                foreach (Polygon2D hole in holeRegions)
+                {
+                    AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
+                }
+            }
+
+            targetSurface.Rebuild();
+
+            if (options.BoundaryMode == FeatureLineBoundaryMode.AutoSmart)
+            {
+                bool allClosed = curvesInClosedLoops.Count == sourceCurves.Count && closedRegions.Count > 0;
+                trimmedTriangles = TrimUnwantedTrianglesOnSingleSurface(
+                    targetSurface,
+                    sourceCurves,
+                    curvesInClosedLoops,
+                    closedRegions,
+                    holeRegions,
+                    allClosed,
+                    null,
+                    midOrd,
+                    options.LimitMaxEdgeLength,
+                    Math.Max(0.5, options.MaxEdgeLength),
+                    ed);
+            }
+            else if (options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities && customOuterPolys.Count > 0)
+            {
+                trimmedTriangles = TrimTrianglesByCustomPolygons(
+                    targetSurface,
+                    customOuterPolys,
+                    customHidePolys,
+                    midOrd,
+                    ed);
+            }
+
+            return true;
+        }
+
+        #region SUPPLEMENT / MERGE INTO EXISTING SURFACE (ZERO SUB-SURFACES)
+
+        /// <summary>
+        /// Bổ sung mảng mặt phẳng mới tạo bởi Feature Line vào một mặt phẳng TIN ĐÃ CÓ SẴN mà không để lại mặt phẳng phụ:
+        /// - Tự xử lý mặt phẳng gốc từ Corridor/Grading (gộp an toàn sang '&lt;Tên&gt;_Gop' nếu bật bảo vệ Corridor).
+        /// - Gỡ bỏ bẫy Outer Boundary cũ cắt mất vùng mới mở rộng bên ngoài, đồng thời khóa nguyên vẹn đường biên cũ.
+        /// - Xử lý chính xác vùng chồng lấn (Đắp đè cao độ mới thay thế điểm cũ, hoặc Giữ nguyên mặt phẳng cũ chỉ nối phần mới).
+        /// - Xóa sạch 100% tam giác bắc cầu nối ngang qua khe hở giữa mặt phẳng cũ và mặt phẳng mới.
+        /// </summary>
+        private static SurfaceCreationResult SupplementFeatureLinesIntoExistingSurface(
+            CivilDocument civDoc,
+            Transaction tr,
+            Editor ed,
+            TaoMatPhangOptions options,
+            List<SourceCurveInfo> sourceCurves,
+            int openCount,
+            int closedCount,
+            double midOrd,
+            double suppDist,
+            double closeTol)
+        {
+            ObjectId targetSurfaceId = options.ExistingSurfaceId;
+            CivSurface? origSurface = tr.GetObject(targetSurfaceId, OpenMode.ForWrite) as CivSurface;
+            if (origSurface == null)
+            {
+                return new SurfaceCreationResult
+                {
+                    Success = false,
+                    Message = "Không thể mở mặt phẳng TIN có sẵn ở chế độ ghi (OpenMode.ForWrite)."
+                };
+            }
+
+            // Nếu mặt phẳng có sẵn sinh trực tiếp từ Corridor / Grading và người dùng bật chế độ gộp bảo vệ:
+            SurfaceOriginationType origType = SurfaceOriginationType.None;
+            try { origType = origSurface.OriginationType; } catch { }
+
+            if (origType != SurfaceOriginationType.None && options.CreateCombinedForCorridorSurface)
+            {
+                string desiredCombinedName = !string.IsNullOrWhiteSpace(options.CombinedSurfaceName)
+                    ? options.CombinedSurfaceName.Trim()
+                    : $"{origSurface.Name}_Gop";
+
+                ObjectId existingCombinedId = FindSurfaceByName(civDoc, tr, desiredCombinedName);
+                if (!existingCombinedId.IsNull && existingCombinedId.IsValid && !existingCombinedId.IsErased &&
+                    existingCombinedId != options.ExistingSurfaceId)
+                {
+                    targetSurfaceId = existingCombinedId;
+                }
+                else
+                {
+                    ObjectId styleId = origSurface.StyleId;
+                    if (styleId.IsNull || !styleId.IsValid || styleId.IsErased)
+                    {
+                        styleId = FindSurfaceStyleId(civDoc, tr, options.SurfaceStyleName);
+                    }
+
+                    string uniqueCombinedName = EnsureUniqueSurfaceName(civDoc, tr, desiredCombinedName);
+                    targetSurfaceId = TinSurface.Create(uniqueCombinedName, styleId);
+                    if (tr.GetObject(targetSurfaceId, OpenMode.ForWrite) is CivSurface newCombinedSurf)
+                    {
+                        newCombinedSurf.PasteSurface(options.ExistingSurfaceId);
+                        newCombinedSurf.Rebuild();
+                    }
+                }
+            }
+
+            CivSurface? targetSurface = tr.GetObject(targetSurfaceId, OpenMode.ForWrite) as CivSurface;
+            if (targetSurface == null)
+            {
+                return new SurfaceCreationResult
+                {
+                    Success = false,
+                    Message = "Không thể truy cập mặt phẳng TIN đích để bổ sung dữ liệu."
+                };
+            }
+
+            string finalSurfaceName = targetSurface.Name;
+            bool wasLocked = false;
+            try
+            {
+                wasLocked = targetSurface.Lock;
+                if (wasLocked) targetSurface.Lock = false;
+            }
+            catch { }
+
+            try
+            {
+                int prevTriangleCount = CountVisibleTriangles(targetSurface);
+
+                ed.WriteMessage($"\n══════════════════════════════════════════════════════════════════");
+                ed.WriteMessage($"\n➕ BỔ SUNG MẶT PHẲNG TỪ FEATURE LINE VÀO SURFACE CÓ SẴN (0 MẶT PHẲNG PHỤ)");
+                ed.WriteMessage($"\n  • Mặt phẳng đích : '{finalSurfaceName}' (Hiện có: {prevTriangleCount:N0} tam giác)");
+                ed.WriteMessage($"\n  • Chế độ chồng lấn: {(options.OverwriteOverlapOnExisting ? "Đắp đè cao độ mới tại vùng chồng lấn" : "Giữ nguyên mặt phẳng cũ, chỉ nối mở rộng vùng mới")}");
+                ed.WriteMessage($"\n  • Nguồn bổ sung  : {sourceCurves.Count} đối tượng ({openCount} đường hở, {closedCount} đường kín)");
+
+                // Trường hợp 1: Mặt phẳng có sẵn đang rỗng (0 tam giác) -> nạp trực tiếp như mặt phẳng mới
+                if (prevTriangleCount == 0)
+                {
+                    RemoveRestrictiveOuterBoundaries(targetSurface);
+                    RemoveDeleteLineOperations(targetSurface);
+
+                    bool emptyOk = PopulateCleanFeatureLineSurface(
+                        targetSurface,
+                        options,
+                        tr,
+                        ed,
+                        sourceCurves,
+                        midOrd,
+                        suppDist,
+                        closeTol,
+                        usePointsOnlyBreaklines: false,
+                        out int emptyAddedBkl,
+                        out int emptyTrimmed,
+                        out _);
+
+                    if (!emptyOk || emptyAddedBkl == 0)
+                    {
+                        tr.Abort();
+                        return new SurfaceCreationResult
+                        {
+                            Success = false,
+                            Message = "Không thể thêm Breakline vào mặt phẳng đích."
+                        };
+                    }
+
+                    SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
+                    int emptyFinalTris = CountVisibleTriangles(targetSurface);
+                    if (wasLocked) { try { targetSurface.Lock = true; } catch { } }
+                    tr.Commit();
+
+                    return new SurfaceCreationResult
+                    {
+                        Success = true,
+                        Message = $"Đã bổ sung thành công vào mặt phẳng '{finalSurfaceName}' ({emptyFinalTris:N0} tam giác, 0 mặt phẳng phụ)!",
+                        MasterSurfaceId = targetSurfaceId,
+                        FinalSurfaceName = finalSurfaceName,
+                        IsSupplementedIntoExisting = true,
+                        PreviousTriangleCount = 0,
+                        SubSurfaceCount = 0,
+                        ProcessedCurveCount = emptyAddedBkl,
+                        OpenCurveCount = openCount,
+                        ClosedCurveCount = closedCount,
+                        TrimmedTriangleCount = emptyTrimmed,
+                        FinalTriangleCount = emptyFinalTris
+                    };
+                }
+
+                // Trường hợp 2: Người dùng chủ động chọn "Chỉ thêm Breaklines thuần túy (Không cắt biên tam giác)"
+                if (options.BoundaryMode == FeatureLineBoundaryMode.BreaklinesOnly)
+                {
+                    try
+                    {
+                        targetSurface.BuildOptions.CrossingBreaklinesElevationOption =
+                            options.OverwriteOverlapOnExisting
+                                ? CrossingBreaklinesElevationType.UseLast
+                                : CrossingBreaklinesElevationType.UseFirst;
+                        targetSurface.BuildOptions.UseMaximumTriangleLength = options.LimitMaxEdgeLength;
+                        if (options.LimitMaxEdgeLength)
+                        {
+                            targetSurface.BuildOptions.MaximumTriangleLength = Math.Max(0.5, options.MaxEdgeLength);
+                        }
+                    }
+                    catch { }
+
+                    int rawAddedCount = 0;
+                    foreach (SourceCurveInfo curve in sourceCurves)
+                    {
+                        if (AddCurveToSurfaceBreaklines(targetSurface, curve, midOrd, suppDist))
+                            rawAddedCount++;
+                    }
+
+                    targetSurface.Rebuild();
+                    SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
+                    int rawFinalTris = CountVisibleTriangles(targetSurface);
+                    if (wasLocked) { try { targetSurface.Lock = true; } catch { } }
+                    tr.Commit();
+
+                    return new SurfaceCreationResult
+                    {
+                        Success = true,
+                        Message = $"Đã thêm {rawAddedCount} Breakline vào mặt phẳng '{finalSurfaceName}' ({prevTriangleCount:N0} -> {rawFinalTris:N0} tam giác)!",
+                        MasterSurfaceId = targetSurfaceId,
+                        FinalSurfaceName = finalSurfaceName,
+                        IsSupplementedIntoExisting = true,
+                        PreviousTriangleCount = prevTriangleCount,
+                        SubSurfaceCount = 0,
+                        ProcessedCurveCount = rawAddedCount,
+                        OpenCurveCount = openCount,
+                        ClosedCurveCount = closedCount,
+                        TrimmedTriangleCount = 0,
+                        FinalTriangleCount = rawFinalTris
+                    };
+                }
+
+                // Trường hợp 3: BỔ SUNG THÔNG MINH VÀO MẶT PHẲNG ĐÃ CÓ LƯỚI TAM GIÁC (AutoSmart / CustomBoundaryEntities)
+                // Bước 3A: Tính toán chính xác hình học 3D của mảng mặt phẳng mới R_new trên biến tạm và XÓA NGAY trong cùng Transaction (0 mặt phẳng phụ!)
+                TinTopologyGraph patchGraph;
+                List<Polygon2D> newHolePolys;
+                int patchTrimmedCount;
+
+                ObjectId calcStyleId = targetSurface.StyleId;
+                if (calcStyleId.IsNull || !calcStyleId.IsValid || calcStyleId.IsErased)
+                {
+                    calcStyleId = FindSurfaceStyleId(civDoc, tr, options.SurfaceStyleName);
+                }
+
+                string tempPatchName = EnsureUniqueSurfaceName(civDoc, tr, $"__TMP_FL_{Guid.NewGuid():N}".Substring(0, 22));
+                ObjectId tempSurfId = TinSurface.Create(tempPatchName, calcStyleId);
+                CivSurface? tempSurf = tr.GetObject(tempSurfId, OpenMode.ForWrite) as CivSurface;
+                if (tempSurf == null)
+                {
+                    tr.Abort();
+                    return new SurfaceCreationResult
+                    {
+                        Success = false,
+                        Message = "Không thể khởi tạo bộ đệm tính toán lưới tam giác tạm thời."
+                    };
+                }
+
+                try
+                {
+                    bool patchOk = PopulateCleanFeatureLineSurface(
+                        tempSurf,
+                        options,
+                        tr,
+                        ed,
+                        sourceCurves,
+                        midOrd,
+                        suppDist,
+                        closeTol,
+                        usePointsOnlyBreaklines: true,
+                        out _,
+                        out patchTrimmedCount,
+                        out newHolePolys);
+
+                    if (!patchOk)
+                    {
+                        tempSurf.Erase(true);
+                        tr.Abort();
+                        return new SurfaceCreationResult
+                        {
+                            Success = false,
+                            Message = "Không thể tạo lưới tam giác từ các đường Feature Line bổ sung."
+                        };
+                    }
+
+                    patchGraph = BuildTinTopologyGraph(tempSurf);
+                    // Ngắt tham chiếu cạnh COM/Mgd trước khi giải phóng biến tạm
+                    for (int i = 0; i < patchGraph.Edges.Count; i++)
+                    {
+                        patchGraph.Edges[i].RawEdge = null;
+                    }
+                }
+                finally
+                {
+                    if (!tempSurf.IsErased)
+                    {
+                        try { tempSurf.Erase(true); } catch { }
+                    }
+                }
+
+                if (patchGraph.Triangles.Count == 0)
+                {
+                    tr.Abort();
+                    return new SurfaceCreationResult
+                    {
+                        Success = false,
+                        Message = "Mảng mặt phẳng mới tạo từ Feature Line có 0 tam giác hợp lệ sau khi lọc biên (hãy kiểm tra lại chiều dài cạnh tối đa hoặc đường biên)."
+                    };
+                }
+
+                var newPatchGrid = new SpatialTriangleGrid2D(patchGraph);
+                var newExactTriKeys = BuildTriangleVertexKeySet(patchGraph);
+                var newPatchBorderGrid = BuildBorderSegmentGrid(patchGraph);
+                var newPatchVertexLookup = new SpatialVertexLookup2D(patchGraph.Vertices);
+
+                // Bước 3B: Chụp trạng thái hình học hiện hữu R_old của mặt phẳng có sẵn trước khi can thiệp
+                TinTopologyGraph oldGraph = BuildTinTopologyGraph(targetSurface);
+                var oldTriGrid = new SpatialTriangleGrid2D(oldGraph);
+                var oldExactTriKeys = BuildTriangleVertexKeySet(oldGraph);
+                var oldBorderGrid = BuildBorderSegmentGrid(oldGraph);
+                var oldVertexLookup = new SpatialVertexLookup2D(oldGraph.Vertices);
+
+                bool patchExtendsOutsideOld = DoesGraphExtendOutsideGrid(patchGraph, oldTriGrid);
+
+                // Bước 3C: Gỡ bỏ Outer/DataClip Boundary cũ nếu vùng bổ sung vươn ra ngoài mặt phẳng cũ,
+                // và gỡ các lệnh DeleteLines cũ để tái tạo 1 lệnh cắt biên hợp nhất sạch sẽ ở cuối
+                bool removedOuterBoundary = false;
+                if (patchExtendsOutsideOld)
+                {
+                    removedOuterBoundary = RemoveRestrictiveOuterBoundaries(targetSurface);
+                }
+                RemoveDeleteLineOperations(targetSurface);
+
+                // Bước 3D: Khóa toàn bộ đường biên hợp lệ của mặt phẳng cũ (ngoài vùng bị đắp đè) để bảo vệ tuyệt đối R_old
+                List<(Point3d A, Point3d B)> oldBorderSegmentsToLock = new List<(Point3d A, Point3d B)>();
+                for (int eIdx = 0; eIdx < oldGraph.Edges.Count; eIdx++)
+                {
+                    TinEdgeNode edge = oldGraph.Edges[eIdx];
+                    bool isBnd = (edge.TriA >= 0) != (edge.TriB >= 0);
+                    if (!isBnd) continue;
+                    if (!removedOuterBoundary && edge.IsLocked) continue;
+
+                    Point3d pA = oldGraph.Vertices[edge.U].Pos;
+                    Point3d pB = oldGraph.Vertices[edge.V].Pos;
+
+                    if (options.OverwriteOverlapOnExisting)
+                    {
+                        AppendClippedSegmentsOutsideRegion(pA, pB, newPatchGrid, newPatchBorderGrid, oldBorderSegmentsToLock);
+                    }
+                    else
+                    {
+                        oldBorderSegmentsToLock.Add((pA, pB));
+                    }
+                }
+
+                List<Point3dCollection> oldBorderChains = ChainSegmentsToPolylines(oldBorderSegmentsToLock);
+                foreach (Point3dCollection chain in oldBorderChains)
+                {
+                    try
+                    {
+                        targetSurface.BreaklinesDefinition.AddStandardBreaklines(chain, midOrd, 100000.0, 0.0, 0.0);
+                    }
+                    catch { }
+                }
+
+                // Bước 3E: Cấu hình ưu tiên giao cắt & nạp Breaklines mới + khóa biên R_new
+                try
+                {
+                    targetSurface.BuildOptions.UseMaximumTriangleLength = false;
+                    targetSurface.BuildOptions.CrossingBreaklinesElevationOption =
+                        options.OverwriteOverlapOnExisting
+                            ? CrossingBreaklinesElevationType.UseLast
+                            : CrossingBreaklinesElevationType.UseFirst;
+                }
+                catch { }
+
+                int addedBreaklineCount = 0;
+                if (options.OverwriteOverlapOnExisting)
+                {
+                    foreach (SourceCurveInfo curve in sourceCurves)
+                    {
+                        if (AddCurveToSurfaceBreaklines(
+                            targetSurface,
+                            curve,
+                            midOrd,
+                            suppDist,
+                            usePointsOnly: false,
+                            allowDirectCurvedEntity: false))
+                        {
+                            addedBreaklineCount++;
+                        }
+                    }
+
+                    // Khóa các cạnh biên hở (cap đầu-cuối / cạnh cắt biên tùy chọn) của mảng mới R_new
+                    List<(Point3d A, Point3d B)> patchCapSegments = new List<(Point3d A, Point3d B)>();
+                    bool lockAllPatchBorders = options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities;
+                    for (int eIdx = 0; eIdx < patchGraph.Edges.Count; eIdx++)
+                    {
+                        TinEdgeNode edge = patchGraph.Edges[eIdx];
+                        bool isBnd = (edge.TriA >= 0) != (edge.TriB >= 0);
+                        if (!isBnd) continue;
+                        if (!lockAllPatchBorders && edge.IsLocked) continue;
+
+                        patchCapSegments.Add((patchGraph.Vertices[edge.U].Pos, patchGraph.Vertices[edge.V].Pos));
+                    }
+
+                    foreach (Point3dCollection capChain in ChainSegmentsToPolylines(patchCapSegments))
+                    {
+                        try
+                        {
+                            targetSurface.BreaklinesDefinition.AddStandardBreaklines(capChain, midOrd, 100000.0, 0.0, 0.0);
+                        }
+                        catch { }
+                    }
+
+                    foreach (Polygon2D hole in newHolePolys)
+                    {
+                        AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
+                    }
+                }
+                else
+                {
+                    // Chế độ giữ nguyên mặt phẳng cũ tại vùng chồng lấn: cắt các đoạn mới dừng êm ngay tại biên R_old
+                    List<(Point3d A, Point3d B)> clippedNewSegments = new List<(Point3d A, Point3d B)>();
+                    foreach (SourceCurveInfo curve in sourceCurves)
+                    {
+                        bool anySegAdded = false;
+                        for (int i = 0; i < curve.Points3D.Count - 1; i++)
+                        {
+                            int before = clippedNewSegments.Count;
+                            AppendClippedSegmentsOutsideRegion(curve.Points3D[i], curve.Points3D[i + 1], oldTriGrid, oldBorderGrid, clippedNewSegments);
+                            if (clippedNewSegments.Count > before) anySegAdded = true;
+                        }
+                        if (anySegAdded) addedBreaklineCount++;
+                    }
+
+                    for (int eIdx = 0; eIdx < patchGraph.Edges.Count; eIdx++)
+                    {
+                        TinEdgeNode edge = patchGraph.Edges[eIdx];
+                        bool isBnd = (edge.TriA >= 0) != (edge.TriB >= 0);
+                        if (!isBnd) continue;
+                        AppendClippedSegmentsOutsideRegion(
+                            patchGraph.Vertices[edge.U].Pos,
+                            patchGraph.Vertices[edge.V].Pos,
+                            oldTriGrid,
+                            oldBorderGrid,
+                            clippedNewSegments);
+                    }
+
+                    foreach (Point3dCollection extChain in ChainSegmentsToPolylines(clippedNewSegments))
+                    {
+                        try
+                        {
+                            targetSurface.BreaklinesDefinition.AddStandardBreaklines(extChain, midOrd, suppDist, 0.0, 0.0);
+                        }
+                        catch { }
+                    }
+
+                    foreach (Polygon2D hole in newHolePolys)
+                    {
+                        if (hole.Vertices3D.Count > 0 && !oldTriGrid.ContainsPoint(hole.Vertices3D[0].X, hole.Vertices3D[0].Y, 1e-4))
+                        {
+                            AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
+                        }
+                    }
+
+                    if (addedBreaklineCount == 0 && sourceCurves.Count > 0)
+                    {
+                        addedBreaklineCount = sourceCurves.Count;
+                    }
+                }
+
+                // Bước 3F: Rebuild & Đồng bộ đỉnh / cao độ vùng chồng lấn (xử lý triệt để cả PointGroup, Contour, PasteSurface, Snapshot)
+                targetSurface.Rebuild();
+
+                ReconcileMergedVerticesAndElevations(
+                    targetSurface,
+                    patchGraph,
+                    newPatchGrid,
+                    newPatchBorderGrid,
+                    newPatchVertexLookup,
+                    oldTriGrid,
+                    oldBorderGrid,
+                    oldVertexLookup,
+                    options.OverwriteOverlapOnExisting);
+
+                // Bước 3G: Cắt lọc tam giác hợp nhất (giữ trọn R_old U R_new, xóa sạch 100% tam giác bắc cầu & dây cung thừa)
+                TinTopologyGraph mergedGraph = BuildTinTopologyGraph(targetSurface);
+                bool[] removed = new bool[mergedGraph.Triangles.Count];
+
+                for (int t = 0; t < mergedGraph.Triangles.Count; t++)
+                {
+                    TinTriangleNode tri = mergedGraph.Triangles[t];
+                    Point2d c = tri.Centroid2D;
+
+                    // Kiểm tra lỗ khoét của phần mới bổ sung
+                    bool inNewHole = false;
+                    for (int h = 0; h < newHolePolys.Count; h++)
+                    {
+                        if (newHolePolys[h].Contains(c.X, c.Y))
+                        {
+                            if (options.OverwriteOverlapOnExisting || !oldTriGrid.ContainsPoint(c.X, c.Y, 1e-5))
+                            {
+                                inNewHole = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (inNewHole)
+                    {
+                        removed[t] = true;
+                        continue;
+                    }
+
+                    bool keep = newPatchGrid.ContainsPoint(c.X, c.Y, 1e-5) || oldTriGrid.ContainsPoint(c.X, c.Y, 1e-5);
+                    if (!keep)
+                    {
+                        TriangleVertexKey tKey = TriangleVertexKey.From(mergedGraph, tri);
+                        if (newExactTriKeys.Contains(tKey))
+                        {
+                            keep = true;
+                        }
+                        else if (oldExactTriKeys.Contains(tKey) &&
+                                 !(options.OverwriteOverlapOnExisting && newPatchGrid.ContainsPoint(c.X, c.Y, 1e-5)))
+                        {
+                            keep = true;
+                        }
+                    }
+
+                    if (!keep)
+                    {
+                        removed[t] = true;
+                    }
+                }
+
+                int mergedTrimmedCount = ApplyRemovedTrianglesToSurface(targetSurface, mergedGraph, removed, midOrd, ed);
+                int totalTrimmedReport = mergedTrimmedCount + patchTrimmedCount;
+
+                SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
+                int finalTriangleCount = CountVisibleTriangles(targetSurface);
+
+                if (wasLocked)
+                {
+                    try { targetSurface.Lock = true; } catch { }
+                }
+
+                tr.Commit();
+
+                ed.WriteMessage($"\n  • Đã cắt lọc     : {mergedTrimmedCount:N0} tam giác bắc cầu/ngoài biên khi ghép (tổng lọc: {totalTrimmedReport:N0})");
+                ed.WriteMessage($"\n  • Lưới hoàn thiện: {prevTriangleCount:N0} -> {finalTriangleCount:N0} tam giác hợp lệ | Số mặt phẳng phụ = 0");
+                ed.WriteMessage($"\n🎉 Đã bổ sung thành công vào mặt phẳng '{finalSurfaceName}'!");
+                ed.WriteMessage($"\n══════════════════════════════════════════════════════════════════\n");
+
+                return new SurfaceCreationResult
+                {
+                    Success = true,
+                    Message = $"Đã bổ sung thành công vào mặt phẳng '{finalSurfaceName}' ({prevTriangleCount:N0} → {finalTriangleCount:N0} tam giác, 0 mặt phẳng phụ)!",
+                    MasterSurfaceId = targetSurfaceId,
+                    FinalSurfaceName = finalSurfaceName,
+                    IsSupplementedIntoExisting = true,
+                    PreviousTriangleCount = prevTriangleCount,
+                    SubSurfaceCount = 0,
+                    ProcessedCurveCount = addedBreaklineCount,
+                    OpenCurveCount = openCount,
+                    ClosedCurveCount = closedCount,
+                    TrimmedTriangleCount = totalTrimmedReport,
+                    FinalTriangleCount = finalTriangleCount
+                };
+            }
+            catch
+            {
+                if (wasLocked)
+                {
+                    try { targetSurface.Lock = true; } catch { }
+                }
+                throw;
+            }
+        }
+
+        private static bool DoesGraphExtendOutsideGrid(TinTopologyGraph patchGraph, SpatialTriangleGrid2D oldTriGrid)
+        {
+            for (int i = 0; i < patchGraph.Vertices.Count; i++)
+            {
+                Point3d p = patchGraph.Vertices[i].Pos;
+                if (!oldTriGrid.ContainsPoint(p.X, p.Y, -1e-4))
+                    return true;
+            }
+            for (int t = 0; t < patchGraph.Triangles.Count; t++)
+            {
+                Point2d c = patchGraph.Triangles[t].Centroid2D;
+                if (!oldTriGrid.ContainsPoint(c.X, c.Y, -1e-4))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool RemoveRestrictiveOuterBoundaries(CivSurface surface)
+        {
+            bool removedAny = false;
+            try
+            {
+                for (int i = surface.BoundariesDefinition.Count - 1; i >= 0; i--)
+                {
+                    try
+                    {
+                        SurfaceBoundaryType bType = surface.BoundariesDefinition[i].BoundaryType;
+                        if (bType == SurfaceBoundaryType.Outer || bType == SurfaceBoundaryType.DataClip)
+                        {
+                            surface.BoundariesDefinition.RemoveAt(i);
+                            removedAny = true;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return removedAny;
+        }
+
+        private static bool RemoveDeleteLineOperations(CivSurface surface)
+        {
+            bool removedAny = false;
+            try
+            {
+                for (int i = surface.Operations.Count - 1; i >= 0; i--)
+                {
+                    try
+                    {
+                        SurfaceOperation op = surface.Operations[i];
+                        if (op is SurfaceOperationDeleteMultipleLines || op is SurfaceOperationDeleteLine)
+                        {
+                            surface.Operations.RemoveAt(i);
+                            removedAny = true;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return removedAny;
+        }
+
+        /// <summary>
+        /// Cắt đoạn thẳng 3D (pA -> pB) chỉ giữ phần nằm BÊN NGOÀI vùng regionGrid (khớp cao độ êm tại điểm giao biên).
+        /// </summary>
+        private static void AppendClippedSegmentsOutsideRegion(
+            Point3d pA,
+            Point3d pB,
+            SpatialTriangleGrid2D regionGrid,
+            SpatialBorderSegmentGrid2D regionBorderGrid,
+            List<(Point3d A, Point3d B)> outSegments)
+        {
+            bool aStrictIn = regionGrid.ContainsPoint(pA.X, pA.Y, -1e-4) && !regionBorderGrid.IsNearAnySegment(pA.X, pA.Y, 0.012);
+            bool bStrictIn = regionGrid.ContainsPoint(pB.X, pB.Y, -1e-4) && !regionBorderGrid.IsNearAnySegment(pB.X, pB.Y, 0.012);
+
+            if (aStrictIn && bStrictIn)
+            {
+                return;
+            }
+
+            if (!aStrictIn && !bStrictIn)
+            {
+                double mx = 0.5 * (pA.X + pB.X);
+                double my = 0.5 * (pA.Y + pB.Y);
+                bool midStrictIn = regionGrid.ContainsPoint(mx, my, -1e-4) && !regionBorderGrid.IsNearAnySegment(mx, my, 0.012);
+                if (!midStrictIn)
+                {
+                    outSegments.Add((pA, pB));
+                    return;
+                }
+
+                // Đoạn thẳng xuyên qua vùng ở giữa: tách làm 2 đoạn hai đầu ngoài biên
+                Point3d midPt = new Point3d(mx, my, 0.5 * (pA.Z + pB.Z));
+                Point3d hit1 = BisectRegionBorderCrossing(pA, midPt, regionGrid);
+                Point3d hit2 = BisectRegionBorderCrossing(pB, midPt, regionGrid);
+                if (pA.DistanceTo(hit1) > 1e-3) outSegments.Add((pA, hit1));
+                if (hit2.DistanceTo(pB) > 1e-3) outSegments.Add((hit2, pB));
+                return;
+            }
+
+            if (!aStrictIn && bStrictIn)
+            {
+                Point3d hit = BisectRegionBorderCrossing(pA, pB, regionGrid);
+                if (pA.DistanceTo(hit) > 1e-3)
+                {
+                    outSegments.Add((pA, hit));
+                }
+            }
+            else
+            {
+                Point3d hit = BisectRegionBorderCrossing(pB, pA, regionGrid);
+                if (hit.DistanceTo(pB) > 1e-3)
+                {
+                    outSegments.Add((hit, pB));
+                }
+            }
+        }
+
+        private static Point3d BisectRegionBorderCrossing(Point3d outsidePt, Point3d insidePt, SpatialTriangleGrid2D regionGrid)
+        {
+            double lo = 0.0;
+            double hi = 1.0;
+            for (int iter = 0; iter < 11; iter++)
+            {
+                double mid = 0.5 * (lo + hi);
+                double x = outsidePt.X + mid * (insidePt.X - outsidePt.X);
+                double y = outsidePt.Y + mid * (insidePt.Y - outsidePt.Y);
+                if (regionGrid.ContainsPoint(x, y, 0.0))
+                    hi = mid;
+                else
+                    lo = mid;
+            }
+
+            double t = hi;
+            double hx = outsidePt.X + t * (insidePt.X - outsidePt.X);
+            double hy = outsidePt.Y + t * (insidePt.Y - outsidePt.Y);
+            double hz = outsidePt.Z + t * (insidePt.Z - outsidePt.Z);
+            if (regionGrid.TryInterpolateZ(hx, hy, out double regionZ, 0.02))
+            {
+                hz = regionZ;
+            }
+            return new Point3d(hx, hy, hz);
+        }
+
+        private static List<Point3dCollection> ChainSegmentsToPolylines(List<(Point3d A, Point3d B)> segments)
+        {
+            var result = new List<Point3dCollection>();
+            if (segments == null || segments.Count == 0) return result;
+
+            var cleanSegs = new List<(Point3d A, Point3d B, QuantizedPoint2D QA, QuantizedPoint2D QB)>(segments.Count);
+            var seenUndirected = new HashSet<(QuantizedPoint2D, QuantizedPoint2D)>();
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                Point3d a = segments[i].A;
+                Point3d b = segments[i].B;
+                QuantizedPoint2D qa = QuantizedPoint2D.From(a.X, a.Y);
+                QuantizedPoint2D qb = QuantizedPoint2D.From(b.X, b.Y);
+                if (qa.Equals(qb)) continue;
+
+                var key = qa.QX < qb.QX || (qa.QX == qb.QX && qa.QY <= qb.QY) ? (qa, qb) : (qb, qa);
+                if (!seenUndirected.Add(key)) continue;
+
+                cleanSegs.Add((a, b, qa, qb));
+            }
+
+            if (cleanSegs.Count == 0) return result;
+
+            var adj = new Dictionary<QuantizedPoint2D, List<int>>();
+            for (int i = 0; i < cleanSegs.Count; i++)
+            {
+                var s = cleanSegs[i];
+                if (!adj.TryGetValue(s.QA, out var la)) { la = new List<int>(2); adj[s.QA] = la; }
+                if (!adj.TryGetValue(s.QB, out var lb)) { lb = new List<int>(2); adj[s.QB] = lb; }
+                la.Add(i);
+                lb.Add(i);
+            }
+
+            bool[] used = new bool[cleanSegs.Count];
+
+            void TraceFrom(int startSegIdx, bool startForward)
+            {
+                used[startSegIdx] = true;
+                var seg0 = cleanSegs[startSegIdx];
+                var pts = new Point3dCollection();
+                Point3d firstPt = startForward ? seg0.A : seg0.B;
+                Point3d curPt = startForward ? seg0.B : seg0.A;
+                QuantizedPoint2D curKey = startForward ? seg0.QB : seg0.QA;
+
+                pts.Add(firstPt);
+                pts.Add(curPt);
+
+                while (adj.TryGetValue(curKey, out var inc))
+                {
+                    int nextIdx = -1;
+                    for (int k = 0; k < inc.Count; k++)
+                    {
+                        if (!used[inc[k]])
+                        {
+                            nextIdx = inc[k];
+                            break;
+                        }
+                    }
+                    if (nextIdx < 0) break;
+
+                    used[nextIdx] = true;
+                    var nextSeg = cleanSegs[nextIdx];
+                    if (nextSeg.QA.Equals(curKey))
+                    {
+                        curPt = nextSeg.B;
+                        curKey = nextSeg.QB;
+                    }
+                    else
+                    {
+                        curPt = nextSeg.A;
+                        curKey = nextSeg.QA;
+                    }
+                    pts.Add(curPt);
+                }
+
+                if (pts.Count >= 2)
+                {
+                    result.Add(pts);
+                }
+            }
+
+            // Ưu tiên lần theo các nút bậc != 2 (đầu mút hở hoặc ngã ba) trước, sau đó mới quét các chu trình kín bậc 2
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < cleanSegs.Count; i++)
+                {
+                    if (used[i]) continue;
+                    var s = cleanSegs[i];
+                    if (pass == 0)
+                    {
+                        int degA = adj[s.QA].Count;
+                        int degB = adj[s.QB].Count;
+                        if (degA != 2)
+                            TraceFrom(i, startForward: true);
+                        else if (degB != 2)
+                            TraceFrom(i, startForward: false);
+                    }
+                    else
+                    {
+                        TraceFrom(i, startForward: true);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Đồng bộ đỉnh & cao độ tại vùng giao chồng sau Rebuild():
+        /// - Chế độ Đắp đè (OverwriteOverlapOnExisting = true): Xóa toàn bộ đỉnh cũ nằm lọt trong lòng R_new,
+        ///   bổ sung đỉnh R_new bị thiếu (nếu mặt phẳng đích có PasteSurface/Snapshot) và ép khớp chuẩn xác cao độ Z của R_new.
+        /// - Chế độ Giữ nguyên mặt cũ (OverwriteOverlapOnExisting = false): Bổ sung đỉnh trong R_new nằm ngoài R_old nếu thiếu,
+        ///   và xóa đỉnh mới vô tình lọt vào lòng R_old.
+        /// </summary>
+        private static void ReconcileMergedVerticesAndElevations(
+            CivSurface targetSurface,
+            TinTopologyGraph patchGraph,
+            SpatialTriangleGrid2D newPatchGrid,
+            SpatialBorderSegmentGrid2D newPatchBorderGrid,
+            SpatialVertexLookup2D newPatchVertexLookup,
+            SpatialTriangleGrid2D oldTriGrid,
+            SpatialBorderSegmentGrid2D oldBorderGrid,
+            SpatialVertexLookup2D oldVertexLookup,
+            bool overwriteOverlap)
+        {
+            if (overwriteOverlap)
+            {
+                double minX = newPatchGrid.MinX - 0.10;
+                double maxX = newPatchGrid.MaxX + 0.10;
+                double minY = newPatchGrid.MinY - 0.10;
+                double maxY = newPatchGrid.MaxY + 0.10;
+
+                List<TinSurfaceVertex> staleInteriorVertices = new List<TinSurfaceVertex>();
+                try
+                {
+                    foreach (TinSurfaceVertex v in targetSurface.Vertices)
+                    {
+                        if (v == null || !v.IsValid) continue;
+                        Point3d loc = v.Location;
+                        if (loc.X < minX || loc.X > maxX || loc.Y < minY || loc.Y > maxY)
+                            continue;
+
+                        if (newPatchVertexLookup.TryFindNearestZ(loc.X, loc.Y, 0.015, out _))
+                            continue;
+
+                        if (newPatchGrid.ContainsPoint(loc.X, loc.Y, -1e-4) &&
+                            !newPatchBorderGrid.IsNearAnySegment(loc.X, loc.Y, 0.008))
+                        {
+                            staleInteriorVertices.Add(v);
+                        }
+                    }
+                }
+                catch { }
+
+                DeleteVerticesSafe(targetSurface, staleInteriorVertices);
+
+                // Quét lại tập đỉnh hiện hành trong khung bao R_new để kiểm tra đỉnh thiếu (do PasteSurface/Snapshot) & cao độ Z
+                var liveVerticesInPatchBox = new Dictionary<QuantizedPoint2D, TinSurfaceVertex>();
+                var survivingNonPatchVertices = new List<TinSurfaceVertex>();
+
+                try
+                {
+                    foreach (TinSurfaceVertex v in targetSurface.Vertices)
+                    {
+                        if (v == null || !v.IsValid) continue;
+                        Point3d loc = v.Location;
+                        if (loc.X < minX || loc.X > maxX || loc.Y < minY || loc.Y > maxY)
+                            continue;
+
+                        liveVerticesInPatchBox[QuantizedPoint2D.From(loc.X, loc.Y)] = v;
+
+                        if (!newPatchVertexLookup.TryFindNearestZ(loc.X, loc.Y, 0.015, out _) &&
+                            newPatchGrid.ContainsPoint(loc.X, loc.Y, 0.005))
+                        {
+                            survivingNonPatchVertices.Add(v);
+                        }
+                    }
+                }
+                catch { }
+
+                Point3dCollection missingPatchPts = new Point3dCollection();
+                HashSet<int> missingPatchVertexIndices = new HashSet<int>();
+
+                for (int i = 0; i < patchGraph.Vertices.Count; i++)
+                {
+                    Point3d pv = patchGraph.Vertices[i].Pos;
+                    TinSurfaceVertex? matchedLive = FindLiveVertexNear(liveVerticesInPatchBox, pv.X, pv.Y);
+                    if (matchedLive != null)
+                    {
+                        if (Math.Abs(matchedLive.Location.Z - pv.Z) > 0.002)
+                        {
+                            try { targetSurface.SetVertexElevation(matchedLive, pv.Z); } catch { }
+                        }
+                    }
+                    else
+                    {
+                        missingPatchPts.Add(pv);
+                        missingPatchVertexIndices.Add(i);
+                    }
+                }
+
+                // Nếu còn đỉnh giao cắt cũ không xóa được nằm trong R_new -> ép phẳng cao độ Z theo mặt phẳng R_new
+                foreach (TinSurfaceVertex sv in survivingNonPatchVertices)
+                {
+                    try
+                    {
+                        if (sv.IsValid && newPatchGrid.TryInterpolateZ(sv.Location.X, sv.Location.Y, out double interpZ, 0.01))
+                        {
+                            if (Math.Abs(sv.Location.Z - interpZ) > 0.003)
+                            {
+                                targetSurface.SetVertexElevation(sv, interpZ);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (missingPatchPts.Count > 0)
+                {
+                    try
+                    {
+                        targetSurface.AddVertices(missingPatchPts);
+                    }
+                    catch
+                    {
+                        foreach (Point3d pt in missingPatchPts)
+                        {
+                            try { targetSurface.AddVertex(pt); } catch { }
+                        }
+                    }
+
+                    // Đảo cạnh (SwapEdge) nếu cạnh Breakline của R_new trong vùng PasteSurface bị Delaunay quay chéo
+                    EnforceMissingPatchLockedEdges(targetSurface, patchGraph, missingPatchVertexIndices);
+                }
+            }
+            else
+            {
+                double minX = newPatchGrid.MinX - 0.10;
+                double maxX = newPatchGrid.MaxX + 0.10;
+                double minY = newPatchGrid.MinY - 0.10;
+                double maxY = newPatchGrid.MaxY + 0.10;
+
+                var liveVerticesInPatchBox = new Dictionary<QuantizedPoint2D, TinSurfaceVertex>();
+                var unwantedIntrudingVertices = new List<TinSurfaceVertex>();
+
+                try
+                {
+                    foreach (TinSurfaceVertex v in targetSurface.Vertices)
+                    {
+                        if (v == null || !v.IsValid) continue;
+                        Point3d loc = v.Location;
+                        if (loc.X < minX || loc.X > maxX || loc.Y < minY || loc.Y > maxY)
+                            continue;
+
+                        liveVerticesInPatchBox[QuantizedPoint2D.From(loc.X, loc.Y)] = v;
+
+                        if (!oldVertexLookup.TryFindNearestZ(loc.X, loc.Y, 0.015, out _) &&
+                            oldTriGrid.ContainsPoint(loc.X, loc.Y, -1e-4) &&
+                            !oldBorderGrid.IsNearAnySegment(loc.X, loc.Y, 0.012))
+                        {
+                            unwantedIntrudingVertices.Add(v);
+                        }
+                    }
+                }
+                catch { }
+
+                DeleteVerticesSafe(targetSurface, unwantedIntrudingVertices);
+
+                Point3dCollection missingExteriorPts = new Point3dCollection();
+                for (int i = 0; i < patchGraph.Vertices.Count; i++)
+                {
+                    Point3d pv = patchGraph.Vertices[i].Pos;
+                    if (oldTriGrid.ContainsPoint(pv.X, pv.Y, -1e-4) && !oldBorderGrid.IsNearAnySegment(pv.X, pv.Y, 0.012))
+                        continue;
+
+                    if (FindLiveVertexNear(liveVerticesInPatchBox, pv.X, pv.Y) == null)
+                    {
+                        missingExteriorPts.Add(pv);
+                    }
+                }
+
+                if (missingExteriorPts.Count > 0)
+                {
+                    try { targetSurface.AddVertices(missingExteriorPts); } catch { }
+                }
+            }
+        }
+
+        private static TinSurfaceVertex? FindLiveVertexNear(
+            Dictionary<QuantizedPoint2D, TinSurfaceVertex> map,
+            double x,
+            double y)
+        {
+            long qx = (long)Math.Round(x * 1000.0);
+            long qy = (long)Math.Round(y * 1000.0);
+
+            if (map.TryGetValue(new QuantizedPoint2D(qx, qy), out TinSurfaceVertex? exact) && exact.IsValid)
+                return exact;
+
+            // Tìm lân cận +/- 15mm phòng sai số lượng tử hóa
+            for (int dx = -15; dx <= 15; dx += 5)
+            {
+                for (int dy = -15; dy <= 15; dy += 5)
+                {
+                    if (map.TryGetValue(new QuantizedPoint2D(qx + dx, qy + dy), out TinSurfaceVertex? near) && near.IsValid)
+                        return near;
+                }
+            }
+
+            // Fallback quét chính xác nếu cần
+            foreach (var kvp in map)
+            {
+                if (Math.Abs(kvp.Key.QX - qx) <= 15 && Math.Abs(kvp.Key.QY - qy) <= 15 && kvp.Value.IsValid)
+                    return kvp.Value;
+            }
+            return null;
+        }
+
+        private static void DeleteVerticesSafe(CivSurface surface, List<TinSurfaceVertex> verticesToDelete)
+        {
+            if (verticesToDelete == null || verticesToDelete.Count == 0) return;
+
+            try
+            {
+                surface.DeleteVertices(verticesToDelete);
+            }
+            catch
+            {
+                foreach (TinSurfaceVertex v in verticesToDelete)
+                {
+                    try
+                    {
+                        if (v != null && v.IsValid)
+                            surface.DeleteVertex(v);
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private static void EnforceMissingPatchLockedEdges(
+            CivSurface surface,
+            TinTopologyGraph patchGraph,
+            HashSet<int> missingVertexIndices)
+        {
+            for (int eIdx = 0; eIdx < patchGraph.Edges.Count; eIdx++)
+            {
+                TinEdgeNode edge = patchGraph.Edges[eIdx];
+                bool isBnd = (edge.TriA >= 0) != (edge.TriB >= 0);
+                if (!edge.IsLocked && !isBnd) continue;
+                if (!missingVertexIndices.Contains(edge.U) && !missingVertexIndices.Contains(edge.V))
+                    continue;
+
+                Point3d pu = patchGraph.Vertices[edge.U].Pos;
+                Point3d pv = patchGraph.Vertices[edge.V].Pos;
+                double mx = 0.5 * (pu.X + pv.X);
+                double my = 0.5 * (pu.Y + pv.Y);
+
+                try
+                {
+                    TinSurfaceEdge? curEdge = surface.FindEdgeAtXY(mx, my);
+                    if (curEdge != null && curEdge.IsValid)
+                    {
+                        Point3d e1 = curEdge.Vertex1.Location;
+                        Point3d e2 = curEdge.Vertex2.Location;
+                        bool matchesForward = Hypot2D(e1.X - pu.X, e1.Y - pu.Y) < 0.03 && Hypot2D(e2.X - pv.X, e2.Y - pv.Y) < 0.03;
+                        bool matchesReverse = Hypot2D(e1.X - pv.X, e1.Y - pv.Y) < 0.03 && Hypot2D(e2.X - pu.X, e2.Y - pu.Y) < 0.03;
+                        if (!matchesForward && !matchesReverse)
+                        {
+                            surface.SwapEdge(curEdge);
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static double Hypot2D(double dx, double dy) => Math.Sqrt(dx * dx + dy * dy);
+
+        public static SurfaceOriginationType GetSurfaceOriginationType(Database db, ObjectId surfaceId)
+        {
+            if (surfaceId.IsNull || !surfaceId.IsValid || surfaceId.IsErased)
+                return SurfaceOriginationType.None;
+
+            try
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    SurfaceOriginationType result = SurfaceOriginationType.None;
+                    if (tr.GetObject(surfaceId, OpenMode.ForRead) is CivSurface surf)
+                    {
+                        result = surf.OriginationType;
+                    }
+                    tr.Commit();
+                    return result;
+                }
+            }
+            catch
+            {
+                return SurfaceOriginationType.None;
+            }
+        }
+
+        #endregion
 
         #region CORE ZERO-SUBSURFACE TRIANGLE TRIMMING ENGINE
 
@@ -1453,6 +2546,374 @@ namespace MyFirstProject.Civil_Tool_2
             }
         }
 
+        private readonly struct TriangleVertexKey : IEquatable<TriangleVertexKey>
+        {
+            public readonly QuantizedPoint2D A;
+            public readonly QuantizedPoint2D B;
+            public readonly QuantizedPoint2D C;
+
+            public TriangleVertexKey(QuantizedPoint2D a, QuantizedPoint2D b, QuantizedPoint2D c)
+            {
+                // Sắp xếp tăng dần từ điển để không phụ thuộc thứ tự đỉnh (CW / CCW)
+                if (Compare(a, b) > 0) (a, b) = (b, a);
+                if (Compare(b, c) > 0) (b, c) = (c, b);
+                if (Compare(a, b) > 0) (a, b) = (b, a);
+                A = a;
+                B = b;
+                C = c;
+            }
+
+            private static int Compare(QuantizedPoint2D p1, QuantizedPoint2D p2)
+            {
+                int cmp = p1.QX.CompareTo(p2.QX);
+                return cmp != 0 ? cmp : p1.QY.CompareTo(p2.QY);
+            }
+
+            public static TriangleVertexKey From(TinTopologyGraph graph, TinTriangleNode tri)
+            {
+                return new TriangleVertexKey(
+                    graph.Vertices[tri.V0].QKey,
+                    graph.Vertices[tri.V1].QKey,
+                    graph.Vertices[tri.V2].QKey);
+            }
+
+            public bool Equals(TriangleVertexKey other) => A.Equals(other.A) && B.Equals(other.B) && C.Equals(other.C);
+            public override bool Equals(object? obj) => obj is TriangleVertexKey other && Equals(other);
+            public override int GetHashCode() => HashCode.Combine(A, B, C);
+        }
+
+        private static HashSet<TriangleVertexKey> BuildTriangleVertexKeySet(TinTopologyGraph graph)
+        {
+            var set = new HashSet<TriangleVertexKey>(graph.Triangles.Count);
+            for (int t = 0; t < graph.Triangles.Count; t++)
+            {
+                set.Add(TriangleVertexKey.From(graph, graph.Triangles[t]));
+            }
+            return set;
+        }
+
+        /// <summary>
+        /// Lưới ô vuông 2D tra cứu tam giác tốc độ O(1) cho mặt phẳng lớn (40,000+ tam giác),
+        /// hỗ trợ kiểm tra điểm thuộc vùng và nội suy phẳng cao độ Z chính xác từng milimét.
+        /// </summary>
+        private sealed class SpatialTriangleGrid2D
+        {
+            private readonly struct TriRecord
+            {
+                public readonly double Ax, Ay, Az;
+                public readonly double Bx, By, Bz;
+                public readonly double Cx, Cy, Cz;
+                public readonly double MinX, MinY, MaxX, MaxY;
+                public readonly double LenAB, LenBC, LenCA;
+                public readonly double OrientSign;
+                public readonly double InvAbsTwiceArea;
+
+                public TriRecord(Point3d a, Point3d b, Point3d c, double sign, double absTwiceArea)
+                {
+                    Ax = a.X; Ay = a.Y; Az = a.Z;
+                    Bx = b.X; By = b.Y; Bz = b.Z;
+                    Cx = c.X; Cy = c.Y; Cz = c.Z;
+                    MinX = Math.Min(Ax, Math.Min(Bx, Cx));
+                    MinY = Math.Min(Ay, Math.Min(By, Cy));
+                    MaxX = Math.Max(Ax, Math.Max(Bx, Cx));
+                    MaxY = Math.Max(Ay, Math.Max(By, Cy));
+                    LenAB = Math.Sqrt((Bx - Ax) * (Bx - Ax) + (By - Ay) * (By - Ay));
+                    LenBC = Math.Sqrt((Cx - Bx) * (Cx - Bx) + (Cy - By) * (Cy - By));
+                    LenCA = Math.Sqrt((Ax - Cx) * (Ax - Cx) + (Ay - Cy) * (Ay - Cy));
+                    OrientSign = sign;
+                    InvAbsTwiceArea = 1.0 / absTwiceArea;
+                }
+            }
+
+            private readonly List<TriRecord> _tris;
+            private readonly Dictionary<(int GX, int GY), List<int>> _cells = new Dictionary<(int GX, int GY), List<int>>();
+            private readonly double _cellSize;
+            public readonly double MinX, MinY, MaxX, MaxY;
+
+            public SpatialTriangleGrid2D(TinTopologyGraph graph)
+            {
+                _tris = new List<TriRecord>(graph.Triangles.Count);
+                double gMinX = double.MaxValue, gMinY = double.MaxValue;
+                double gMaxX = double.MinValue, gMaxY = double.MinValue;
+                double sumSpan = 0.0;
+
+                for (int t = 0; t < graph.Triangles.Count; t++)
+                {
+                    TinTriangleNode node = graph.Triangles[t];
+                    Point3d a = graph.Vertices[node.V0].Pos;
+                    Point3d b = graph.Vertices[node.V1].Pos;
+                    Point3d c = graph.Vertices[node.V2].Pos;
+
+                    double twiceArea = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+                    double absTwiceArea = Math.Abs(twiceArea);
+                    if (absTwiceArea <= 1e-10) continue;
+
+                    var rec = new TriRecord(a, b, c, twiceArea >= 0.0 ? 1.0 : -1.0, absTwiceArea);
+                    _tris.Add(rec);
+
+                    if (rec.MinX < gMinX) gMinX = rec.MinX;
+                    if (rec.MinY < gMinY) gMinY = rec.MinY;
+                    if (rec.MaxX > gMaxX) gMaxX = rec.MaxX;
+                    if (rec.MaxY > gMaxY) gMaxY = rec.MaxY;
+                    sumSpan += (rec.MaxX - rec.MinX) + (rec.MaxY - rec.MinY);
+                }
+
+                if (_tris.Count == 0)
+                {
+                    MinX = MinY = 0.0;
+                    MaxX = MaxY = -1.0;
+                    _cellSize = 10.0;
+                    return;
+                }
+
+                MinX = gMinX; MinY = gMinY;
+                MaxX = gMaxX; MaxY = gMaxY;
+                _cellSize = Math.Max(2.0, (sumSpan / (2.0 * _tris.Count)) * 2.0);
+
+                const double pad = 0.05;
+                for (int idx = 0; idx < _tris.Count; idx++)
+                {
+                    TriRecord rec = _tris[idx];
+                    int x0 = (int)Math.Floor((rec.MinX - pad) / _cellSize);
+                    int x1 = (int)Math.Floor((rec.MaxX + pad) / _cellSize);
+                    int y0 = (int)Math.Floor((rec.MinY - pad) / _cellSize);
+                    int y1 = (int)Math.Floor((rec.MaxY + pad) / _cellSize);
+
+                    for (int gx = x0; gx <= x1; gx++)
+                    {
+                        for (int gy = y0; gy <= y1; gy++)
+                        {
+                            var key = (gx, gy);
+                            if (!_cells.TryGetValue(key, out var bucket))
+                            {
+                                bucket = new List<int>(4);
+                                _cells[key] = bucket;
+                            }
+                            bucket.Add(idx);
+                        }
+                    }
+                }
+            }
+
+            /// <summary>
+            /// Kiểm tra điểm (px, py) có nằm trong hợp các tam giác không.
+            /// edgeDistTol > 0: nới nhẹ ra ngoài biên; edgeDistTol &lt; 0: yêu cầu nằm sâu bên trong cạnh tam giác.
+            /// </summary>
+            public bool ContainsPoint(double px, double py, double edgeDistTol)
+            {
+                if (_tris.Count == 0) return false;
+                double boxPad = Math.Max(0.0, edgeDistTol);
+                if (px < MinX - boxPad || px > MaxX + boxPad || py < MinY - boxPad || py > MaxY + boxPad)
+                    return false;
+
+                int gx = (int)Math.Floor(px / _cellSize);
+                int gy = (int)Math.Floor(py / _cellSize);
+                if (!_cells.TryGetValue((gx, gy), out var bucket))
+                    return false;
+
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    TriRecord tri = _tris[bucket[i]];
+                    if (px < tri.MinX - boxPad || px > tri.MaxX + boxPad ||
+                        py < tri.MinY - boxPad || py > tri.MaxY + boxPad)
+                        continue;
+
+                    double c0 = ((tri.Bx - tri.Ax) * (py - tri.Ay) - (tri.By - tri.Ay) * (px - tri.Ax)) * tri.OrientSign;
+                    if (c0 < -edgeDistTol * tri.LenAB) continue;
+
+                    double c1 = ((tri.Cx - tri.Bx) * (py - tri.By) - (tri.Cy - tri.By) * (px - tri.Bx)) * tri.OrientSign;
+                    if (c1 < -edgeDistTol * tri.LenBC) continue;
+
+                    double c2 = ((tri.Ax - tri.Cx) * (py - tri.Cy) - (tri.Ay - tri.Cy) * (px - tri.Cx)) * tri.OrientSign;
+                    if (c2 < -edgeDistTol * tri.LenCA) continue;
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            public bool TryInterpolateZ(double px, double py, out double z, double edgeDistTol)
+            {
+                z = 0.0;
+                if (_tris.Count == 0) return false;
+                double boxPad = Math.Max(0.0, edgeDistTol);
+                if (px < MinX - boxPad || px > MaxX + boxPad || py < MinY - boxPad || py > MaxY + boxPad)
+                    return false;
+
+                int gx = (int)Math.Floor(px / _cellSize);
+                int gy = (int)Math.Floor(py / _cellSize);
+                if (!_cells.TryGetValue((gx, gy), out var bucket))
+                    return false;
+
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    TriRecord tri = _tris[bucket[i]];
+                    if (px < tri.MinX - boxPad || px > tri.MaxX + boxPad ||
+                        py < tri.MinY - boxPad || py > tri.MaxY + boxPad)
+                        continue;
+
+                    double c0 = ((tri.Bx - tri.Ax) * (py - tri.Ay) - (tri.By - tri.Ay) * (px - tri.Ax)) * tri.OrientSign;
+                    if (c0 < -edgeDistTol * tri.LenAB) continue;
+
+                    double c1 = ((tri.Cx - tri.Bx) * (py - tri.By) - (tri.Cy - tri.By) * (px - tri.Bx)) * tri.OrientSign;
+                    if (c1 < -edgeDistTol * tri.LenBC) continue;
+
+                    double c2 = ((tri.Ax - tri.Cx) * (py - tri.Cy) - (tri.Ay - tri.Cy) * (px - tri.Cx)) * tri.OrientSign;
+                    if (c2 < -edgeDistTol * tri.LenCA) continue;
+
+                    double wA = c1 * tri.InvAbsTwiceArea;
+                    double wB = c2 * tri.InvAbsTwiceArea;
+                    double wC = c0 * tri.InvAbsTwiceArea;
+                    z = wA * tri.Az + wB * tri.Bz + wC * tri.Cz;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        private sealed class SpatialBorderSegmentGrid2D
+        {
+            private readonly List<(double X0, double Y0, double X1, double Y1)> _segs = new List<(double, double, double, double)>();
+            private readonly Dictionary<(int GX, int GY), List<int>> _cells = new Dictionary<(int GX, int GY), List<int>>();
+            private readonly double _cellSize;
+
+            public SpatialBorderSegmentGrid2D(List<(Point3d A, Point3d B)> borderSegments, double maxQueryRadius = 0.15)
+            {
+                double sumLen = 0.0;
+                for (int i = 0; i < borderSegments.Count; i++)
+                {
+                    var (a, b) = borderSegments[i];
+                    double len = Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+                    if (len <= 1e-6) continue;
+                    _segs.Add((a.X, a.Y, b.X, b.Y));
+                    sumLen += len;
+                }
+
+                _cellSize = _segs.Count > 0 ? Math.Max(1.0, (sumLen / _segs.Count) * 2.0) : 5.0;
+
+                for (int idx = 0; idx < _segs.Count; idx++)
+                {
+                    var s = _segs[idx];
+                    int x0 = (int)Math.Floor((Math.Min(s.X0, s.X1) - maxQueryRadius) / _cellSize);
+                    int x1 = (int)Math.Floor((Math.Max(s.X0, s.X1) + maxQueryRadius) / _cellSize);
+                    int y0 = (int)Math.Floor((Math.Min(s.Y0, s.Y1) - maxQueryRadius) / _cellSize);
+                    int y1 = (int)Math.Floor((Math.Max(s.Y0, s.Y1) + maxQueryRadius) / _cellSize);
+
+                    for (int gx = x0; gx <= x1; gx++)
+                    {
+                        for (int gy = y0; gy <= y1; gy++)
+                        {
+                            var key = (gx, gy);
+                            if (!_cells.TryGetValue(key, out var bucket))
+                            {
+                                bucket = new List<int>(4);
+                                _cells[key] = bucket;
+                            }
+                            bucket.Add(idx);
+                        }
+                    }
+                }
+            }
+
+            public bool IsNearAnySegment(double px, double py, double tol)
+            {
+                if (_segs.Count == 0) return false;
+                int gx = (int)Math.Floor(px / _cellSize);
+                int gy = (int)Math.Floor(py / _cellSize);
+                if (!_cells.TryGetValue((gx, gy), out var bucket))
+                    return false;
+
+                double tolSq = tol * tol;
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    var s = _segs[bucket[i]];
+                    double dx = s.X1 - s.X0;
+                    double dy = s.Y1 - s.Y0;
+                    double lenSq = dx * dx + dy * dy;
+                    double t = lenSq > 1e-12 ? ((px - s.X0) * dx + (py - s.Y0) * dy) / lenSq : 0.0;
+                    if (t < 0.0) t = 0.0;
+                    else if (t > 1.0) t = 1.0;
+
+                    double rx = px - (s.X0 + t * dx);
+                    double ry = py - (s.Y0 + t * dy);
+                    if (rx * rx + ry * ry <= tolSq)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        private static SpatialBorderSegmentGrid2D BuildBorderSegmentGrid(TinTopologyGraph graph)
+        {
+            var borderSegs = new List<(Point3d A, Point3d B)>();
+            for (int eIdx = 0; eIdx < graph.Edges.Count; eIdx++)
+            {
+                TinEdgeNode edge = graph.Edges[eIdx];
+                if ((edge.TriA >= 0) != (edge.TriB >= 0))
+                {
+                    borderSegs.Add((graph.Vertices[edge.U].Pos, graph.Vertices[edge.V].Pos));
+                }
+            }
+            return new SpatialBorderSegmentGrid2D(borderSegs);
+        }
+
+        private sealed class SpatialVertexLookup2D
+        {
+            private readonly Dictionary<(int GX, int GY), List<Point3d>> _cells = new Dictionary<(int GX, int GY), List<Point3d>>();
+            private const double CellSize = 1.0;
+
+            public SpatialVertexLookup2D(List<TinVertexNode> vertices)
+            {
+                for (int i = 0; i < vertices.Count; i++)
+                {
+                    Point3d p = vertices[i].Pos;
+                    int gx = (int)Math.Floor(p.X / CellSize);
+                    int gy = (int)Math.Floor(p.Y / CellSize);
+                    var key = (gx, gy);
+                    if (!_cells.TryGetValue(key, out var list))
+                    {
+                        list = new List<Point3d>(2);
+                        _cells[key] = list;
+                    }
+                    list.Add(p);
+                }
+            }
+
+            public bool TryFindNearestZ(double x, double y, double tol2D, out double nearestZ)
+            {
+                nearestZ = 0.0;
+                double bestDistSq = tol2D * tol2D;
+                bool found = false;
+
+                int gx0 = (int)Math.Floor((x - tol2D) / CellSize);
+                int gx1 = (int)Math.Floor((x + tol2D) / CellSize);
+                int gy0 = (int)Math.Floor((y - tol2D) / CellSize);
+                int gy1 = (int)Math.Floor((y + tol2D) / CellSize);
+
+                for (int gx = gx0; gx <= gx1; gx++)
+                {
+                    for (int gy = gy0; gy <= gy1; gy++)
+                    {
+                        if (!_cells.TryGetValue((gx, gy), out var list)) continue;
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            Point3d p = list[i];
+                            double dSq = (p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y);
+                            if (dSq <= bestDistSq)
+                            {
+                                bestDistSq = dSq;
+                                nearestZ = p.Z;
+                                found = true;
+                            }
+                        }
+                    }
+                }
+                return found;
+            }
+        }
+
         #endregion
 
         #region POLYGON & CURVE EXTRACTION HELPERS
@@ -1466,6 +2927,7 @@ namespace MyFirstProject.Civil_Tool_2
             public List<Point3d> Points3D = new List<Point3d>();
             public bool IsClosed;
             public bool WasAutoClosedGap;
+            public bool HasTrueArcs;
             public double TotalLength2D;
             public int AttachedTinVertexCount;
         }
@@ -1738,11 +3200,15 @@ namespace MyFirstProject.Civil_Tool_2
             CivSurface surface,
             SourceCurveInfo curve,
             double midOrdDistance,
-            double supplementingDistance)
+            double supplementingDistance,
+            bool usePointsOnly = false,
+            bool allowDirectCurvedEntity = true)
         {
-            // Thử liên kết trực tiếp ObjectId nếu là FeatureLine chuẩn (không phải AutoCorridorFeatureLine và không cần tự đóng hở)
+            // Thử liên kết trực tiếp ObjectId nếu là FeatureLine chuẩn (không gắn reactor vào surface tạm khi usePointsOnly = true)
             bool canTryDirectEntity =
+                !usePointsOnly &&
                 !curve.WasAutoClosedGap &&
+                (allowDirectCurvedEntity || !curve.HasTrueArcs) &&
                 (curve.EntityTypeName == "FeatureLine" || curve.EntityTypeName == "Polyline3D");
 
             if (canTryDirectEntity)
@@ -1909,6 +3375,7 @@ namespace MyFirstProject.Civil_Tool_2
                     ? (!string.IsNullOrWhiteSpace(corr) ? $"{code} ({corr})" : code)
                     : (acfl.Name ?? acfl.Handle.ToString());
                 info.IsClosed = SafeGetClosed(acfl);
+                try { info.HasTrueArcs = acfl.CurvesCount > 0; } catch { }
                 pts = ExtractFeatureLine3DPoints(acfl, sampleMidOrd);
             }
             else if (ent is FeatureLine fl)
@@ -1916,6 +3383,7 @@ namespace MyFirstProject.Civil_Tool_2
                 info.EntityTypeName = "FeatureLine";
                 info.DisplayName = !string.IsNullOrWhiteSpace(fl.Name) ? fl.Name : $"FL_{fl.Handle}";
                 info.IsClosed = SafeGetClosed(fl);
+                try { info.HasTrueArcs = fl.CurvesCount > 0; } catch { }
                 pts = ExtractFeatureLine3DPoints(fl, sampleMidOrd);
             }
             else if (ent is Polyline pl)
@@ -1923,6 +3391,7 @@ namespace MyFirstProject.Civil_Tool_2
                 info.EntityTypeName = "2D Polyline";
                 info.DisplayName = $"PL_{pl.Handle}";
                 info.IsClosed = pl.Closed;
+                info.HasTrueArcs = pl.HasBulges;
                 pts = SampleLwPolyline3D(pl, sampleMidOrd);
             }
             else if (ent is Polyline3d p3d)
