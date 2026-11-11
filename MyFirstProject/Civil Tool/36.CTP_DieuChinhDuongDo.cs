@@ -659,9 +659,10 @@ namespace Civil3DCsharp
             BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
             BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
 
+            var profileViewClass = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(ProfileView));
             foreach (ObjectId id in btr)
             {
-                if (id.ObjectClass.IsDerivedFrom(Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(ProfileView))))
+                if (id.ObjectClass.IsDerivedFrom(profileViewClass))
                 {
                     ProfileView pv = tr.GetObject(id, OpenMode.ForRead) as ProfileView;
                     if (pv != null && pv.AlignmentId == alignId)
