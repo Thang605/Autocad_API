@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Autodesk.Civil.ApplicationServices;
 using Autodesk.Civil.DatabaseServices;
 using Autodesk.Civil.DatabaseServices.Styles;
@@ -30,7 +31,7 @@ namespace Civil3DCsharp
             var ed = doc.Editor;
 
             ed.WriteMessage("\n==================================================================");
-            ed.WriteMessage("\n  CTC_Tao_Corridor_Theo_Cau_Kien: XÂY DỰNG CORRIDOR THEO CẤU KIỆN");
+            ed.WriteMessage("\n  CTC_Tao_Corridor_Theo_Cau_Kien: XÂY DỰNG & GỘP CORRIDOR THEO CẤU KIỆN");
             ed.WriteMessage("\n==================================================================\n");
 
             using (var form = new TaoCorridorTheoCauKienForm(db, ed))
@@ -56,17 +57,20 @@ namespace Civil3DCsharp
                         Corridor? sharedCorridor = null;
                         if (form.BuildMode == CorridorComponentBuildMode.SingleOrExistingCorridor)
                         {
+                            string prefix = string.IsNullOrWhiteSpace(form.CorridorNamePrefix) ? "COR_" : form.CorridorNamePrefix.Trim();
+                            string mergedName = prefix.EndsWith("_") ? $"{prefix}Gop_CauKien" : prefix;
+
                             sharedCorridor = GetOrCreateCorridor(
                                 tr,
                                 cdoc,
                                 form.ExistingCorridorId,
-                                $"{form.CorridorNamePrefix}Modular",
+                                mergedName,
                                 form.SelectedCodeSetStyleId,
                                 ed);
 
                             if (sharedCorridor == null)
                             {
-                                ed.WriteMessage("\n❌ Không thể khởi tạo hoặc mở Corridor đích.");
+                                ed.WriteMessage("\n❌ Không thể khởi tạo hoặc mở Corridor đích để gộp.");
                                 tr.Abort();
                                 return;
                             }
@@ -100,7 +104,6 @@ namespace Civil3DCsharp
 
                             ed.WriteMessage($"\n▶ Cấu kiện [{row.ComponentCategory}] '{row.ComponentName}' → Corridor '{targetCorridor.Name}' (Assembly: '{row.AssemblyName}'):");
 
-                            int compBaselines = 0;
                             int compRegions = 0;
 
                             foreach (ObjectId entityId in row.BaselineEntityIds)
@@ -112,15 +115,68 @@ namespace Civil3DCsharp
                                 {
                                     Baseline? baseline = null;
                                     string entityDisplayName = "";
+                                    ObjectId resolvedFlId = ObjectId.Null;
+                                    ObjectId resolvedAlignId = ObjectId.Null;
+                                    ObjectId resolvedProfId = ObjectId.Null;
 
                                     if (row.SourceType == ComponentBaselineSourceType.FeatureLine)
                                     {
                                         if (tr.GetObject(entityId, OpenMode.ForRead) is not FeatureLine fl)
                                             continue;
 
-                                        entityDisplayName = string.IsNullOrWhiteSpace(fl.Name) ? $"FL_{fl.Handle}" : fl.Name;
-                                        string blName = GetUniqueBaselineName(targetCorridor, $"BL_{row.ComponentName}_{entityDisplayName}");
-                                        baseline = targetCorridor.Baselines.Add(blName, fl.ObjectId);
+                                        EnsureFeatureLineHasName(tr, fl);
+                                        entityDisplayName = fl.Name;
+                                        resolvedFlId = fl.ObjectId;
+
+                                        double flStart = 0.0;
+                                        double flEnd = fl.Length2D;
+                                        double reqStart = row.StartStation > flStart && row.StartStation < flEnd ? row.StartStation : flStart;
+                                        double reqEnd = row.EndStation > reqStart && row.EndStation <= flEnd + 0.05
+                                            ? Math.Min(flEnd, row.EndStation)
+                                            : flEnd;
+
+                                        // Kiểm tra nếu đã tồn tại Region trùng khớp hoàn toàn trong Corridor đích
+                                        if (TryFindExistingMatchingRegion(targetCorridor, true, resolvedFlId, ObjectId.Null, row.AssemblyId, reqStart, reqEnd, out Baseline? matchedBl, out BaselineRegion? matchedRg) &&
+                                            matchedBl != null && matchedRg != null)
+                                        {
+                                            ApplyRegionFrequency(
+                                                matchedRg,
+                                                row.FrequencyTangent > 0 ? row.FrequencyTangent : form.DefaultFreqTangent,
+                                                row.FrequencyCurve > 0 ? row.FrequencyCurve : form.DefaultFreqCurve);
+                                            ObjectId surfTargetId = !row.TargetSurfaceId.IsNull ? row.TargetSurfaceId : form.DefaultTargetSurfaceId;
+                                            ApplyComponentTargets(matchedRg, surfTargetId, row.OffsetElevationTargetIds, ed);
+                                            compRegions++;
+                                            ed.WriteMessage($"\n  ✓ Đã cập nhật Region hiện có '{matchedRg.Name}' trên Baseline '{matchedBl.Name}'");
+                                            continue;
+                                        }
+
+                                        // Tìm Baseline cùng FeatureLine chưa bị giao cắt khoảng lý trình, nếu không có thì thêm Baseline mới
+                                        baseline = FindReusableBaseline(targetCorridor, true, resolvedFlId, ObjectId.Null, reqStart, reqEnd);
+                                        if (baseline == null)
+                                        {
+                                            string blName = GetUniqueBaselineName(targetCorridor, $"BL_{row.ComponentName}_{entityDisplayName}");
+                                            try
+                                            {
+                                                baseline = targetCorridor.Baselines.Add(blName, resolvedFlId);
+                                            }
+                                            catch
+                                            {
+                                                // Trường hợp FeatureLine là AutoCorridorFeatureLine thuộc chính Corridor đích (tự tham chiếu)
+                                                // → Tạo bản sao FeatureLine độc lập từ tọa độ 3D để cho phép gộp chung vào 1 Corridor
+                                                ObjectId clonedFlId = CloneFeatureLineAsIndependent(tr, db, fl, $"FL_{row.ComponentName}_{fl.Handle}");
+                                                if (!clonedFlId.IsNull)
+                                                {
+                                                    resolvedFlId = clonedFlId;
+                                                    baseline = targetCorridor.Baselines.Add(blName, resolvedFlId);
+                                                    ed.WriteMessage($"\n  ℹ Đã chuyển đổi FeatureLine phụ thuộc '{entityDisplayName}' thành FeatureLine độc lập để gộp vào Corridor '{targetCorridor.Name}'.");
+                                                }
+                                                else
+                                                {
+                                                    throw;
+                                                }
+                                            }
+                                            totalBaselinesAdded++;
+                                        }
                                     }
                                     else
                                     {
@@ -136,18 +192,47 @@ namespace Civil3DCsharp
 
                                         var prof = tr.GetObject(profileId, OpenMode.ForRead) as Profile;
                                         entityDisplayName = align.Name;
-                                        string blName = GetUniqueBaselineName(targetCorridor, $"BL_{row.ComponentName}_{align.Name}_{prof?.Name}");
-                                        baseline = targetCorridor.Baselines.Add(blName, align.ObjectId, profileId);
+                                        resolvedAlignId = align.ObjectId;
+                                        resolvedProfId = profileId;
+
+                                        double alStart = align.StartingStation;
+                                        double alEnd = align.EndingStation;
+                                        double reqStart = row.StartStation > alStart && row.StartStation < alEnd ? row.StartStation : alStart;
+                                        double reqEnd = row.EndStation > reqStart && row.EndStation <= alEnd + 0.05
+                                            ? Math.Min(alEnd, row.EndStation)
+                                            : alEnd;
+
+                                        if (TryFindExistingMatchingRegion(targetCorridor, false, resolvedAlignId, resolvedProfId, row.AssemblyId, reqStart, reqEnd, out Baseline? matchedBl, out BaselineRegion? matchedRg) &&
+                                            matchedBl != null && matchedRg != null)
+                                        {
+                                            ApplyRegionFrequency(
+                                                matchedRg,
+                                                row.FrequencyTangent > 0 ? row.FrequencyTangent : form.DefaultFreqTangent,
+                                                row.FrequencyCurve > 0 ? row.FrequencyCurve : form.DefaultFreqCurve);
+                                            ObjectId surfTargetId = !row.TargetSurfaceId.IsNull ? row.TargetSurfaceId : form.DefaultTargetSurfaceId;
+                                            ApplyComponentTargets(matchedRg, surfTargetId, row.OffsetElevationTargetIds, ed);
+                                            compRegions++;
+                                            ed.WriteMessage($"\n  ✓ Đã cập nhật Region hiện có '{matchedRg.Name}' trên Baseline '{matchedBl.Name}'");
+                                            continue;
+                                        }
+
+                                        baseline = FindReusableBaseline(targetCorridor, false, resolvedAlignId, resolvedProfId, reqStart, reqEnd);
+                                        if (baseline == null)
+                                        {
+                                            string blName = GetUniqueBaselineName(targetCorridor, $"BL_{row.ComponentName}_{align.Name}_{prof?.Name}");
+                                            baseline = targetCorridor.Baselines.Add(blName, resolvedAlignId, resolvedProfId);
+                                            totalBaselinesAdded++;
+                                        }
                                     }
 
                                     if (baseline == null) continue;
-                                    compBaselines++;
-                                    totalBaselinesAdded++;
 
                                     double blStart = baseline.StartStation;
                                     double blEnd = baseline.EndStation;
                                     double regStart = row.StartStation > blStart && row.StartStation < blEnd ? row.StartStation : blStart;
-                                    double regEnd = row.EndStation > regStart && row.EndStation <= blEnd ? row.EndStation : blEnd;
+                                    double regEnd = row.EndStation > regStart && row.EndStation <= blEnd + 0.05
+                                        ? Math.Min(blEnd, row.EndStation)
+                                        : blEnd;
 
                                     string regName = GetUniqueRegionName(baseline, $"RG_{row.ComponentName}_{entityDisplayName}_{regStart:F1}_{regEnd:F1}");
                                     BaselineRegion region = baseline.BaselineRegions.Add(regName, row.AssemblyId, regStart, regEnd);
@@ -164,7 +249,7 @@ namespace Civil3DCsharp
                                     ObjectId surfaceTargetId = !row.TargetSurfaceId.IsNull ? row.TargetSurfaceId : form.DefaultTargetSurfaceId;
                                     ApplyComponentTargets(region, surfaceTargetId, row.OffsetElevationTargetIds, ed);
 
-                                    ed.WriteMessage($"\n  ✓ Đã thêm Baseline '{baseline.Name}' & Region '{region.Name}' ({regStart:F2}m → {regEnd:F2}m)");
+                                    ed.WriteMessage($"\n  ✓ Đã gộp vào Corridor '{targetCorridor.Name}': Baseline '{baseline.Name}' & Region '{region.Name}' ({regStart:F2}m → {regEnd:F2}m)");
                                 }
                                 catch (Exception exBl)
                                 {
@@ -172,21 +257,52 @@ namespace Civil3DCsharp
                                 }
                             }
 
-                            if (compBaselines > 0)
+                            if (compRegions > 0)
                                 totalComponentsProcessed++;
+                        }
+
+                        // Xóa các Corridor nguồn đã gộp vào Corridor đích (nếu người dùng dùng chức năng Gộp các Corridor có sẵn)
+                        if (form.BuildMode == CorridorComponentBuildMode.SingleOrExistingCorridor &&
+                            form.DeleteMergedSourceCorridors &&
+                            sharedCorridor != null &&
+                            form.SourceCorridorsToMerge.Count > 0 &&
+                            totalComponentsProcessed > 0)
+                        {
+                            foreach (ObjectId srcCorrId in form.SourceCorridorsToMerge)
+                            {
+                                if (srcCorrId.IsNull || !srcCorrId.IsValid || srcCorrId.IsErased || srcCorrId == sharedCorridor.ObjectId)
+                                    continue;
+
+                                try
+                                {
+                                    if (tr.GetObject(srcCorrId, OpenMode.ForWrite) is Corridor srcCorr)
+                                    {
+                                        string oldName = srcCorr.Name;
+                                        srcCorr.Erase();
+                                        ed.WriteMessage($"\n  🗑 Đã xóa Corridor nguồn '{oldName}' sau khi gộp vào '{sharedCorridor.Name}'.");
+                                    }
+                                }
+                                catch (Exception exDel)
+                                {
+                                    ed.WriteMessage($"\n  ⚠ Không thể xóa Corridor nguồn ({srcCorrId.Handle}): {exDel.Message}");
+                                }
+                            }
                         }
 
                         // Tự động Rebuild các Corridor vừa tạo/cập nhật
                         if (form.AutoRebuild && touchedCorridors.Count > 0)
                         {
-                            ed.WriteMessage("\n\n🔄 Đang Rebuild các Corridor cấu kiện...");
+                            ed.WriteMessage("\n\n🔄 Đang Rebuild các Corridor...");
                             foreach (ObjectId corrId in touchedCorridors)
                             {
+                                if (corrId.IsNull || corrId.IsErased) continue;
                                 if (tr.GetObject(corrId, OpenMode.ForWrite) is Corridor corr)
                                 {
                                     try
                                     {
                                         corr.Rebuild();
+                                        if (corr.IsOutOfDate)
+                                            corr.Rebuild();
                                         ed.WriteMessage($"\n  ✓ Đã Rebuild Corridor '{corr.Name}' thành công.");
                                     }
                                     catch (Exception exReb)
@@ -200,11 +316,11 @@ namespace Civil3DCsharp
                         tr.Commit();
 
                         ed.WriteMessage("\n==================================================================");
-                        ed.WriteMessage($"\n✅ HOÀN TẤT XÂY DỰNG CORRIDOR THEO CẤU KIỆN:");
-                        ed.WriteMessage($"\n   • Số cấu kiện đã lắp ghép : {totalComponentsProcessed}");
+                        ed.WriteMessage($"\n✅ HOÀN TẤT XÂY DỰNG & GỘP CORRIDOR THEO CẤU KIỆN:");
+                        ed.WriteMessage($"\n   • Số cấu kiện đã xử lý    : {totalComponentsProcessed}");
                         ed.WriteMessage($"\n   • Số Corridor tạo/cập nhật: {touchedCorridors.Count}");
-                        ed.WriteMessage($"\n   • Tổng số Baseline mới    : {totalBaselinesAdded}");
-                        ed.WriteMessage($"\n   • Tổng số Region mới      : {totalRegionsAdded}");
+                        ed.WriteMessage($"\n   • Số Baseline mới thêm    : {totalBaselinesAdded}");
+                        ed.WriteMessage($"\n   • Số Region mới thêm      : {totalRegionsAdded}");
                         ed.WriteMessage("\n==================================================================\n");
                     }
                     catch (Autodesk.AutoCAD.Runtime.Exception aEx)
@@ -219,6 +335,142 @@ namespace Civil3DCsharp
                     }
                 }
             }
+        }
+
+        private static void EnsureFeatureLineHasName(Transaction tr, FeatureLine fl)
+        {
+            if (!string.IsNullOrWhiteSpace(fl.Name))
+                return;
+
+            try
+            {
+                fl.UpgradeOpen();
+                fl.Name = $"FL_{fl.Handle}";
+            }
+            catch { }
+        }
+
+        private static ObjectId CloneFeatureLineAsIndependent(Transaction tr, Database db, FeatureLine srcFl, string desiredName)
+        {
+            try
+            {
+                Point3dCollection pts = srcFl.GetPoints(Autodesk.Civil.FeatureLinePointType.AllPoints);
+                if (pts == null || pts.Count < 2)
+                    return ObjectId.Null;
+
+                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+
+                ObjectId poly3dId;
+                using (var poly3d = new Polyline3d(Poly3dType.SimplePoly, pts, false))
+                {
+                    poly3d.Layer = srcFl.Layer;
+                    poly3dId = ms.AppendEntity(poly3d);
+                    tr.AddNewlyCreatedDBObject(poly3d, true);
+                }
+
+                ObjectId newFlId = FeatureLine.Create(desiredName, poly3dId);
+                if (!poly3dId.IsNull && !poly3dId.IsErased)
+                {
+                    var tmpPoly = tr.GetObject(poly3dId, OpenMode.ForWrite, false);
+                    tmpPoly?.Erase();
+                }
+
+                if (!newFlId.IsNull && tr.GetObject(newFlId, OpenMode.ForWrite) is FeatureLine newFl)
+                {
+                    newFl.Layer = srcFl.Layer;
+                    EnsureFeatureLineHasName(tr, newFl);
+                }
+
+                return newFlId;
+            }
+            catch
+            {
+                return ObjectId.Null;
+            }
+        }
+
+        private static bool TryFindExistingMatchingRegion(
+            Corridor corridor,
+            bool isFeatureLine,
+            ObjectId primaryId,
+            ObjectId profileId,
+            ObjectId assemblyId,
+            double regStart,
+            double regEnd,
+            out Baseline? matchedBaseline,
+            out BaselineRegion? matchedRegion)
+        {
+            matchedBaseline = null;
+            matchedRegion = null;
+
+            foreach (Baseline bl in corridor.Baselines)
+            {
+                bool blIsFl = bl.IsFeatureLineBased();
+                if (blIsFl != isFeatureLine) continue;
+
+                if (isFeatureLine)
+                {
+                    if (bl.FeatureLineId != primaryId) continue;
+                }
+                else
+                {
+                    if (bl.AlignmentId != primaryId || bl.ProfileId != profileId) continue;
+                }
+
+                foreach (BaselineRegion rg in bl.BaselineRegions)
+                {
+                    if (rg.AssemblyId == assemblyId &&
+                        Math.Abs(rg.StartStation - regStart) < 0.05 &&
+                        Math.Abs(rg.EndStation - regEnd) < 0.05)
+                    {
+                        matchedBaseline = bl;
+                        matchedRegion = rg;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static Baseline? FindReusableBaseline(
+            Corridor corridor,
+            bool isFeatureLine,
+            ObjectId primaryId,
+            ObjectId profileId,
+            double reqStart,
+            double reqEnd)
+        {
+            foreach (Baseline bl in corridor.Baselines)
+            {
+                bool blIsFl = bl.IsFeatureLineBased();
+                if (blIsFl != isFeatureLine) continue;
+
+                if (isFeatureLine)
+                {
+                    if (bl.FeatureLineId != primaryId) continue;
+                }
+                else
+                {
+                    if (bl.AlignmentId != primaryId || bl.ProfileId != profileId) continue;
+                }
+
+                bool overlaps = false;
+                foreach (BaselineRegion rg in bl.BaselineRegions)
+                {
+                    if (reqStart < rg.EndStation - 1e-3 && reqEnd > rg.StartStation + 1e-3)
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                }
+
+                if (!overlaps)
+                    return bl;
+            }
+
+            return null;
         }
 
         private static Corridor? GetOrCreateCorridor(
