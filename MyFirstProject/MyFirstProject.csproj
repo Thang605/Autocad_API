@@ -98,4 +98,13 @@
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="ExcelNumberFormat" Version="1.1.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Acad Tool\CutSolidBodyToClipboardForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Acad Tool\CutSolidBodyToClipboardForm.Designer.cs">
+      <DependentUpon>CutSolidBodyToClipboardForm.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
 </Project>

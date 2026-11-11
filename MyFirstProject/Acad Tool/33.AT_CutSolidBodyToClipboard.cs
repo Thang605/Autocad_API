@@ -20,12 +20,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class AT_CutSolidBodyCmd
     {
-        [CommandMethod("CUTSB")]
-        [CommandMethod("CSB")]
-        [CommandMethod("AT_CutSolidBody")]
-        [CommandMethod("AT_CutSolidBodyToClipboard")]
-        [CommandMethod("CUT_SOLID_BODY")]
-        [CommandMethod("AT_CopySolidBody")] // Alias tương thích
+        [CommandMethod("AT_Cut_Solid_Body_To_Clipboard")]
         public static void CutSolidBodyToClipboard()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -36,6 +31,15 @@ namespace Civil3DCsharp
 
             try
             {
+                using (var form = new CutSolidBodyToClipboardForm())
+                {
+                    if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                    {
+                        ed.WriteMessage("\n[Thông báo] Lệnh đã bị hủy.");
+                        return;
+                    }
+                }
+
                 int solidCount = 0;
                 int bodyCount = 0;
                 int thawedLayersCount = 0;
