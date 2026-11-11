@@ -40,7 +40,7 @@ namespace Civil3DCsharp
         private static double _lastEndOffset = 25.0;
         private static bool _lastCreateSingleCorridor = false;
 
-        [CommandMethod("CTC_TaoCorridor_ChoTuyenDuong")]
+        [CommandMethod("CTC_Tao_Corridor_Cho_Tuyen_Duong")]
         public static void CTC_TaoCorridor_ChoTuyenDuong()
         {
             // start transaction

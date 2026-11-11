@@ -23,7 +23,7 @@ namespace Civil3DCsharp
     public class CTC_DieuChinh_PhanDoan_Commands
     {
         // Lệnh điều chỉnh phân đoạn corridor
-        [CommandMethod("CTC_DieuChinh_PhanDoan")]
+        [CommandMethod("CTC_Dieu_Chinh_Phan_Doan")]
         public static void CTC_DieuChinh_PhanDoan()
         {
             var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;

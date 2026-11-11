@@ -29,6 +29,7 @@ namespace Civil3DCsharp
         {
             EnsureResolverAttached();
             AT_McpBridgeServer.EnsureStarted();
+            MyFirstProject.ClassicMenu.EnsureMenuLoaded();
         }
 
         public void Terminate()

@@ -56,7 +56,7 @@ namespace Civil3DCsharp
         // Có thể chạy nhiều lần → mỗi lần thêm 1 polyline vào queue
         // Khi xong tất cả, chạy lệnh CTSU_DieuChinh_EG_TK_Apply
         // ═══════════════════════════════════════════════════════════════
-        [CommandMethod("CTSU_DieuChinh_EG_TK")]
+        [CommandMethod("CTT_Dieu_Chinh_EG_TK")]
         public static void CTSUDieuChinhEGTK()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();
@@ -194,7 +194,7 @@ namespace Civil3DCsharp
                 A.Ed.WriteMessage("\n\n══════════════════════════════════════");
                 A.Ed.WriteMessage($"\n✏️  Polyline #{_pendingEdits.Count} đã tạo (tổng: {_pendingEdits.Count} đang chờ).");
                 A.Ed.WriteMessage("\n   → Tiếp tục chọn section khác nếu muốn chỉnh thêm.");
-                A.Ed.WriteMessage("\n   → Khi xong hết, chạy lệnh: CTSU_DieuChinh_EG_TK_Apply");
+                A.Ed.WriteMessage("\n   → Khi xong hết, chạy lệnh: CTT_Dieu_Chinh_EG_TK_Apply");
                 A.Ed.WriteMessage("\n══════════════════════════════════════");
             }
             catch (Autodesk.AutoCAD.Runtime.Exception e)
@@ -212,13 +212,13 @@ namespace Civil3DCsharp
         // ═══════════════════════════════════════════════════════════════
         // LỆNH 2: Apply TẤT CẢ polyline đã chỉnh sửa vào surface
         // ═══════════════════════════════════════════════════════════════
-        [CommandMethod("CTSU_DieuChinh_EG_TK_Apply")]
+        [CommandMethod("CTT_Dieu_Chinh_EG_TK_Apply")]
         public static void CTSUDieuChinhEGTKApply()
         {
             if (_pendingEdits.Count == 0)
             {
                 A.Ed.WriteMessage("\n⚠ Chưa có polyline nào cần apply.");
-                A.Ed.WriteMessage("\n   Hãy chạy lệnh CTSU_DieuChinh_EG_TK trước.");
+                A.Ed.WriteMessage("\n   Hãy chạy lệnh CTT_Dieu_Chinh_EG_TK trước.");
                 return;
             }
 
@@ -343,7 +343,7 @@ namespace Civil3DCsharp
         // ═══════════════════════════════════════════════════════════════
         // LỆNH 3: Xem danh sách pending / Hủy tất cả
         // ═══════════════════════════════════════════════════════════════
-        [CommandMethod("CTSU_DieuChinh_EG_TK_Status")]
+        [CommandMethod("CTT_Dieu_Chinh_EG_TK_Status")]
         public static void CTSUDieuChinhEGTKStatus()
         {
             if (_pendingEdits.Count == 0)
@@ -360,14 +360,14 @@ namespace Civil3DCsharp
                 A.Ed.WriteMessage($"\n   #{i + 1}: Station {edit.Station:F3} | {edit.OldWorldPoints.Count} điểm");
             }
             A.Ed.WriteMessage("\n──────────────────────────────────");
-            A.Ed.WriteMessage("\n   Chạy CTSU_DieuChinh_EG_TK_Apply để apply tất cả.");
-            A.Ed.WriteMessage("\n   Chạy CTSU_DieuChinh_EG_TK_Cancel để hủy tất cả.");
+            A.Ed.WriteMessage("\n   Chạy CTT_Dieu_Chinh_EG_TK_Apply để apply tất cả.");
+            A.Ed.WriteMessage("\n   Chạy CTT_Dieu_Chinh_EG_TK_Cancel để hủy tất cả.");
         }
 
         // ═══════════════════════════════════════════════════════════════
         // LỆNH 4: Hủy tất cả pending edits + xóa polyline tạm
         // ═══════════════════════════════════════════════════════════════
-        [CommandMethod("CTSU_DieuChinh_EG_TK_Cancel")]
+        [CommandMethod("CTT_Dieu_Chinh_EG_TK_Cancel")]
         public static void CTSUDieuChinhEGTKCancel()
         {
             if (_pendingEdits.Count == 0)

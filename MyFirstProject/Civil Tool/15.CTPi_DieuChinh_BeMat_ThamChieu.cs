@@ -30,7 +30,7 @@ namespace Civil3DCsharp
 {
     public class CTPi_DieuChinh_BeMat_ThamChieu_Commands
     {
-        [CommandMethod("CTPi_DieuChinh_BeMat_ThamChieu")]
+        [CommandMethod("CT_Dieu_Chinh_Be_Mat_Tham_Chieu")]
         public static void CTPiDieuChinhBeMatThamChieu()
         {
             // start transaction

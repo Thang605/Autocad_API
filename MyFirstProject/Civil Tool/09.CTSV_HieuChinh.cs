@@ -30,7 +30,7 @@ namespace Civil3DCsharp
     public class CTSV_HieuChinh
     {
 
-        [CommandMethod("CTSV_HieuChinh_Section")]
+        [CommandMethod("CTS_Hieu_Chinh_Section")]
         public static void CTSVHieuChinhSectionStatic()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();
@@ -66,7 +66,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_HieuChinh_Section_Dynamic")]
+        [CommandMethod("CTS_Hieu_Chinh_Section_Dynamic")]
         public static void CTSVHieuChinhSectionDynamic()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

@@ -37,7 +37,7 @@ namespace Civil3DCsharp
 {
     public class AT_Surface_frompolyline_Commands
     {
-        [CommandMethod("AT_Surface_frompolyline")]
+        [CommandMethod("AT_Surface_From_Polyline")]
         public static void AT_Surface_frompolyline()
         {
             // start transaction

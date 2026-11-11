@@ -33,7 +33,7 @@ namespace Civil3DCsharp
         /// User chọn 2 điểm định nghĩa vùng hiển thị (bounding box) trong Model space
         /// Sau đó chọn điểm đặt viewport trong Layout
         /// </summary>
-        [CommandMethod("AT_BoTri_ViewPort_Theo2Diem")]
+        [CommandMethod("AT_Bo_Tri_Viewport_Theo_2_Diem")]
         public static void BoTri_ViewPort_Theo2Diem()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

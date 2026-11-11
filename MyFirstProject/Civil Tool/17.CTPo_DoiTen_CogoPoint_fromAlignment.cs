@@ -28,7 +28,7 @@ namespace Civil3DCsharp
 {
     class CTPo_DoiTen_CogoPoint_fromAlignment_Commands
     {
-        [CommandMethod("CTPo_DoiTen_CogoPoint_fromAlignment")]
+        [CommandMethod("CT_Doi_Ten_Cogo_Point_Tu_Alignment")]
         public static void CTPo_DoiTen_CogoPoint_fromAlignment()
         {
             // Start transaction

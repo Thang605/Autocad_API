@@ -115,7 +115,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh chính: Bố trí viewport theo hình polyline trong Model (hỗ trợ nhiều polyline)
         /// </summary>
-        [CommandMethod("AT_BoTri_ViewPort_TheoHinh")]
+        [CommandMethod("AT_Bo_Tri_Viewport_Theo_Hinh")]
         public static void BoTri_ViewPort_TheoHinh()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

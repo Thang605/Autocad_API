@@ -215,7 +215,7 @@ namespace Civil3DCsharp
 
     public partial class AT_ExportKmlCustom_Commands
     {
-        [CommandMethod("AT_ExportKmlCustom")]
+        [CommandMethod("AT_Export_Kml_Custom")]
         public static void AT_ExportKmlCustom()
         {
             Document doc = A.Doc;

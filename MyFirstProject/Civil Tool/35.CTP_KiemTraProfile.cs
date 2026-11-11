@@ -13,7 +13,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class CTP_KiemTraProfile_Cmd
     {
-        [CommandMethod("CTP_KiemTraProfile")]
+        [CommandMethod("CTP_Kiem_Tra_Profile")]
         public void KiemTraProfile()
         {
             try

@@ -19,7 +19,7 @@ namespace Civil3DCsharp
         /// Lệnh đổi tên Parcel theo mẫu prefix + số thứ tự
         /// Cho phép chọn từng Parcel và xem tên thay đổi ngay lập tức
         /// </summary>
-        [CommandMethod("CTPA_DoiTen_Parcel")]
+        [CommandMethod("CT_Doi_Ten_Parcel")]
         public static void CTPA_DoiTen_Parcel()
         {
             // Show the Name Template form

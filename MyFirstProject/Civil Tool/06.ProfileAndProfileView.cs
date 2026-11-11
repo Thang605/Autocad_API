@@ -24,7 +24,7 @@ namespace Civil3DCsharp
 {
     public class Profiles
     {
-        [CommandMethod("CTP_VeTracDoc_TuNhien")]
+        [CommandMethod("CTP_Ve_Trac_Doc_Tu_Nhien")]
         public static void ProfileAndProfileViewCreate()
         {
             // get the surface
@@ -79,7 +79,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTP_VeTracDoc_TuNhien_TatCaTuyen")]
+        [CommandMethod("CTP_Ve_Trac_Doc_Tu_Nhien_Tat_Ca_Tuyen")]
         public static void CTPVeTracDocTuNhienTatCaTuyen()
         {
             // Show form first
@@ -245,7 +245,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTP_Fix_DuongTuNhien_TheoCoc")]
+        [CommandMethod("CTP_Fix_Duong_Tu_Nhien_Theo_Coc")]
         public static void CTPFixDuongTuNhienTheoCoc()
         {
             var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
@@ -295,7 +295,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTP_GanNhanNutGiao_LenTracDoc")]
+        [CommandMethod("CTP_Gan_Nhan_Nut_Giao_Len_Trac_Doc")]
         public static void CTPGanNhanNutGiaoLenTracDoc()
         {
             // Show form first
@@ -500,7 +500,7 @@ namespace Civil3DCsharp
 
         /* lệnh tạo cogo point từ điểm PVI trên trắc dọc
          */
-        [CommandMethod("CTP_TaoCogoPointTuPVI")]
+        [CommandMethod("CTP_Tao_Cogo_Point_Tu_PVI")]
         public static void CTPTaoCogoPointTuPVI()
         {
             // start transantion

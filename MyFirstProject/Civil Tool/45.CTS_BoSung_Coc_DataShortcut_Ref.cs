@@ -34,7 +34,7 @@ namespace Civil3DCsharp
     {
         private const double STATION_TOLERANCE = 0.01;
 
-        [CommandMethod("CTS_BoSung_Coc_DataShortcut_Ref")]
+        [CommandMethod("CTS_Bo_Sung_Coc_Data_Shortcut_Ref")]
         public static void CTSBoSungCocDataShortcutRef()
         {
             try

@@ -33,7 +33,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh tính tổng chiều dài link trên cắt ngang từ dữ liệu Corridor
         /// </summary>
-        [CommandMethod("CTSV_TongChieuDai_CatNgang")]
+        [CommandMethod("CTS_Tong_Chieu_Dai_Cat_Ngang")]
         public static void CTSV_TongChieuDai_CatNgang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

@@ -31,20 +31,18 @@ namespace Civil3DCsharp
 {
     public class CTSV_TaoCorridorSurface_Commands
     {
-        [CommandMethod("CTSV_TaoCorridorSurface")]
+        [CommandMethod("CTC_Tao_Corridor_Surface")]
         public static void CTSV_TaoCorridorSurface()
         {
             CTSV_TaoCorridorSurfaceMultiple();
         }
 
-        [CommandMethod("CTSV_TaoCorridorSurfaceMultiple")]
         public static void CTSV_TaoCorridorSurfaceMultiple()
         {
-            Transaction? tr = null;
             try
             {
                 // Show form to get user inputs OUTSIDE of transaction
-                CorridorSurfaceForm form = new();
+                using CorridorSurfaceForm form = new();
 
                 var dialogResult = form.ShowDialog();
 
@@ -70,9 +68,10 @@ namespace Civil3DCsharp
                 }
 
                 // Start transaction for the main work
-                tr = A.Db.TransactionManager.StartTransaction();
-
-                List<ObjectId> allCreatedSurfaces = new List<ObjectId>();
+                using Transaction tr = A.Db.TransactionManager.StartTransaction();
+                try
+                {
+                    List<ObjectId> allCreatedSurfaces = new List<ObjectId>();
                 int processedCorridors = 0;
                 int successfulCorridors = 0;
 
@@ -192,27 +191,27 @@ namespace Civil3DCsharp
                 }
 
                 tr.Commit();
-            }
-            catch (Autodesk.AutoCAD.Runtime.Exception e)
-            {
-                A.Ed.WriteMessage($"\nLỗi AutoCAD khi thực hiện lệnh: {e.Message}");
-                tr?.Abort();
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception e)
+                {
+                    A.Ed.WriteMessage($"\nLỗi AutoCAD khi thực hiện lệnh: {e.Message}");
+                    tr.Abort();
+                }
+                catch (System.Exception e)
+                {
+                    A.Ed.WriteMessage($"\nLỗi khi thực hiện lệnh: {e.Message}");
+                    tr.Abort();
+                }
             }
             catch (System.Exception e)
             {
-                A.Ed.WriteMessage($"\nLỗi khi thực hiện lệnh: {e.Message}");
-                tr?.Abort();
-            }
-            finally
-            {
-                tr?.Dispose();
+                A.Ed.WriteMessage($"\nLỗi khởi tạo lệnh: {e.Message}");
             }
         }
 
-        [CommandMethod("CTSV_TaoCorridorSurfaceSingle")]
+        [CommandMethod("CTC_Tao_Corridor_Surface_Don")]
         public static void CTSV_TaoCorridorSurfaceSingle()
         {
-            Transaction? tr = null;
             try
             {
                 A.Ed.WriteMessage("\nChọn corridor để tạo surfaces...");
@@ -227,9 +226,10 @@ namespace Civil3DCsharp
                 }
 
                 // Start transaction
-                tr = A.Db.TransactionManager.StartTransaction();
-
-                Corridor? corridor = tr.GetObject(corridorId, OpenMode.ForWrite) as Corridor;
+                using Transaction tr = A.Db.TransactionManager.StartTransaction();
+                try
+                {
+                    Corridor? corridor = tr.GetObject(corridorId, OpenMode.ForWrite) as Corridor;
                 if (corridor == null)
                 {
                     A.Ed.WriteMessage("\nKhông thể mở corridor.");
@@ -284,20 +284,21 @@ namespace Civil3DCsharp
                 DisplayQuickInstructions(corridor.Name, createdSurfaces.Count);
 
                 tr.Commit();
-            }
-            catch (Autodesk.AutoCAD.Runtime.Exception e)
-            {
-                A.Ed.WriteMessage($"\nLỗi AutoCAD khi thực hiện lệnh: {e.Message}");
-                tr?.Abort();
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception e)
+                {
+                    A.Ed.WriteMessage($"\nLỗi AutoCAD khi thực hiện lệnh: {e.Message}");
+                    tr.Abort();
+                }
+                catch (System.Exception e)
+                {
+                    A.Ed.WriteMessage($"\nLỗi khi thực hiện lệnh: {e.Message}");
+                    tr.Abort();
+                }
             }
             catch (System.Exception e)
             {
-                A.Ed.WriteMessage($"\nLỗi khi thực hiện lệnh: {e.Message}");
-                tr?.Abort();
-            }
-            finally
-            {
-                tr?.Dispose();
+                A.Ed.WriteMessage($"\nLỗi khởi tạo lệnh: {e.Message}");
             }
         }
 

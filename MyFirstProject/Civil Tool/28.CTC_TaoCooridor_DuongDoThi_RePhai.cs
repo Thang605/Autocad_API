@@ -28,7 +28,7 @@ namespace Civil3DCsharp
         private static TargetMappingConfiguration? _savedTargetMapping = null;
         private static string? _savedSurfaceName = null;
 
-        [CommandMethod("CAC_TaoCooridor_DuongDoThi_RePhai")]
+        [CommandMethod("CTC_Tao_Corridor_Duong_Do_Thi_Re_Phai")]
         public static void CAC_TaoCooridor_DuongDoThi_RePhai()
         {
             if (A.Doc == null) return;

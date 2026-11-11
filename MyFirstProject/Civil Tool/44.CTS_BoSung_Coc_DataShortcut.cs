@@ -36,7 +36,7 @@ namespace Civil3DCsharp
         // Tolerance khi so sánh station (mét) - 1cm
         private const double STATION_TOLERANCE = 0.01;
 
-        [CommandMethod("CTS_BoSung_Coc_DataShortcut")]
+        [CommandMethod("CTS_Bo_Sung_Coc_Data_Shortcut")]
         public static void CTSBoSungCocDataShortcut()
         {
             try

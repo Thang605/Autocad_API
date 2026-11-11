@@ -23,7 +23,7 @@ namespace Civil3D_Csharp
 {
     public class PropertySets
     {
-        [CommandMethod("AT_Solid_Set_PropertySet")]
+        [CommandMethod("AT_Solid_Set_Property_Set")]
         public static void SetSolidPropertySet()
         {
             _ = new UserInput();
@@ -77,7 +77,7 @@ namespace Civil3D_Csharp
             }
         }
 
-        [CommandMethod("AT_Solid_Update_PropertySet")]
+        [CommandMethod("AT_Solid_Update_Property_Set")]
         public static void UpdateSolidPropertySet()
         {
             try

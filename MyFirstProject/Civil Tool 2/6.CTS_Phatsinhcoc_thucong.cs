@@ -34,7 +34,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh phát sinh cọc thủ công - chọn điểm trên ProfileView hoặc bình đồ
         /// </summary>
-        [CommandMethod("CTS_PhatSinhCoc_ThuCong")]
+        [CommandMethod("CTS_Phat_Sinh_Coc_Thu_Cong")]
         public static void CTSPhatSinhCocThuCong()
         {
             // 1. Chọn Alignment trước

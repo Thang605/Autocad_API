@@ -10,7 +10,7 @@ namespace Civil3DCsharp
 {
     public class CTA_KiemTraTimTuyen_Cmd
     {
-        [CommandMethod("CTA_KiemTraTimTuyen")]
+        [CommandMethod("CTA_Kiem_Tra_Tim_Tuyen")]
         public void KiemTraTimTuyen()
         {
             try

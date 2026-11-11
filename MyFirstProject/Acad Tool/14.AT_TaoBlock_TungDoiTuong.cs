@@ -229,7 +229,7 @@ namespace Civil3DCsharp
     {
         private static int _blockCounter = 1;
 
-        [CommandMethod("AT_TAOBLOCK_TUNGDOITUONG")]
+        [CommandMethod("AT_Tao_Block_Tung_Doi_Tuong")]
         public static void AT_TaoBlock_TungDoiTuong()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

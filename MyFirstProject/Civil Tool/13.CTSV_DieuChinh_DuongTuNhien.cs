@@ -32,7 +32,7 @@ namespace Civil3DCsharp
 {
     public class CTSV_DieuChinh_DuongTuNhien_Commands
     {
-        [CommandMethod("CTSV_DieuChinh_DuongTuNhien")]
+        [CommandMethod("CTS_Dieu_Chinh_Duong_Tu_Nhien")]
         public static void CTSVDieuChinhDuongTuNhien()
         {
             // start transaction

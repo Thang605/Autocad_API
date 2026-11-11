@@ -28,7 +28,7 @@ namespace Civil3DCsharp
     class Points
     {
         
-        [CommandMethod("CTPO_TaoCogoPoint_CaoDo_FromSurface")]
+        [CommandMethod("CT_Tao_Cogo_Point_Cao_Do_Tu_Surface")]
         public static void CTPO_TaoCogoPoint_CaoDo_FromSurface()
         {
             // start transantion
@@ -67,7 +67,7 @@ namespace Civil3DCsharp
             }
         }
         
-        [CommandMethod("CTPO_TaoCogoPoint_CaoDo_Elevationspot")]
+        [CommandMethod("CT_Tao_Cogo_Point_Tu_Elevation_Spot")]
         public static void TaoCogoPoint_Elevationspot()
         {
             // start transantion
@@ -114,7 +114,7 @@ namespace Civil3DCsharp
 
         }
 
-        [CommandMethod("CTPO_UpdateAllPointGroup")]
+        [CommandMethod("CT_Update_All_Point_Group")]
         public static void CTP_UpdateAllPointGroup()
         {
             // start transantion
@@ -135,7 +135,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTPO_CreateCogopointFromText")]
+        [CommandMethod("CT_Tao_Cogo_Point_Tu_Text")]
         public static void CTP_CreateCogopointFromText()
         {
             // start transantion
@@ -188,7 +188,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTPO_An_CogoPoint")]
+        [CommandMethod("CT_An_Cogo_Point")]
         public static void CTP_An_CogoPoint()
         {
             // start transantion

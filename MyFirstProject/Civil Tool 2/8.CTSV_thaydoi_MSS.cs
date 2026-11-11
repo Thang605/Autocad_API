@@ -35,7 +35,7 @@ namespace Civil3DCsharp
         /// Người dùng chọn 1 section view, sau đó pick điểm trên section view
         /// để xác định giá trị ElevationMin (MSS) mới.
         /// </summary>
-        [CommandMethod("CTSV_ThayDoi_MSS")]
+        [CommandMethod("CTS_Thay_Doi_MSS")]
         public static void CTSVThayDoiMSS()
         {
             // start transaction

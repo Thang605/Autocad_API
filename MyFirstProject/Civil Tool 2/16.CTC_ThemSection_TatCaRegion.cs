@@ -18,9 +18,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class CTC_ThemSection_TatCaRegion_Commands
     {
-        [CommandMethod("CTC_ThemSection_TatCaRegion")]
-        [CommandMethod("CTC_ThemSection")]
-        [CommandMethod("CTC_AddSection_AllRegions")]
+        [CommandMethod("CTC_Them_Section_Tat_Ca_Region")]
         public static void CTC_ThemSection_TatCaRegion()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

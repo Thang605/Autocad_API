@@ -15,7 +15,7 @@ namespace Civil3DCsharp
 {
     public class ATTXTEXP
     {
-        [CommandMethod("AT_TXTEXP")]
+        [CommandMethod("AT_Explode_Text")]
         public void ExplodeText()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

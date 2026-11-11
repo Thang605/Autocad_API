@@ -636,7 +636,7 @@ namespace Civil3DCsharp
         /// Lệnh đánh số thứ tự cho các Block cùng tên
         /// Số thứ tự được ghi vào attribute với format tùy chỉnh
         /// </summary>
-        [CommandMethod("AT_DanhSoThuTu_ChoBlock")]
+        [CommandMethod("AT_Danh_So_Thu_Tu_Cho_Block")]
         public static void DanhSoThuTuChoBlock()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

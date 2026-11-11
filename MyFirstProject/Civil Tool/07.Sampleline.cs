@@ -36,7 +36,7 @@ namespace Civil3DCsharp
     public class Sampleline
     {
 
-        [CommandMethod("CTS_DoiTenCoc")]
+        [CommandMethod("CTS_Doi_Ten_Coc")]
         public static void CTSDoiTenCoc()
         {
             // start transantion
@@ -99,7 +99,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DoiTenCoc3")]
+        [CommandMethod("CTS_Doi_Ten_Coc_3")]
         public static void CTSDoiTenCoc3()
         {
             // start transantion
@@ -169,7 +169,7 @@ namespace Civil3DCsharp
         }
 
 
-        [CommandMethod("CTS_DoiTenCoc2")]
+        [CommandMethod("CTS_Doi_Ten_Coc_2")]
         public static void CTSDoiTenCoc2()
         {
             // start transantion
@@ -234,7 +234,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_TaoBang_ToaDoCoc")]
+        [CommandMethod("CTS_Tao_Bang_Toa_Do_Coc")]
         public static void CTSTaoBangToaDoCoc()
         {
             // start transantion
@@ -299,7 +299,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_TaoBang_ToaDoCoc2")]
+        [CommandMethod("CTS_Tao_Bang_Toa_Do_Coc_2")]
         public static void CTSTaoBangToaDoCoc2()
         {
             // start transantion
@@ -366,7 +366,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_TaoBang_ToaDoCoc3")]
+        [CommandMethod("CTS_Tao_Bang_Toa_Do_Coc_3")]
         public static void CTSTaoBangToaDoCoc3()
         {
             // start transantion
@@ -439,7 +439,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_UPdate2Table")]
+        [CommandMethod("CTS_Cap_Nhat_2_Bang_Toa_Do_Coc")]
         public static void ATUPdate2Table()
         {
             // start transantion
@@ -532,7 +532,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_ChenCoc_TrenTracDoc")]
+        [CommandMethod("CTS_Chen_Coc_Tren_Trac_Doc")]
         public static void CTSChenCocTrenTracDoc()
         {
             // start transantion
@@ -603,7 +603,7 @@ namespace Civil3DCsharp
 
         }
 
-        [CommandMethod("CTS_CHENCOC_TRENTRACNGANG")]
+        [CommandMethod("CTS_Chen_Coc_Tren_Trac_Ngang")]
         public static void CTSCHENCOCTRENTRACNGANG()
         {
             // start transantion
@@ -662,7 +662,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DoiTenCoc_fromCogoPoint")]
+        [CommandMethod("CTS_Doi_Ten_Coc_Tu_Cogo_Point")]
         public static void CTSDoiTenCocFromCogoPoint()
         {
             // start transantion
@@ -693,7 +693,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_PhatSinhCoc")]
+        [CommandMethod("CTS_Phat_Sinh_Coc")]
         public static void CTSPhatSinhCoc()
         {
             // Show form first
@@ -939,7 +939,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_PhatSinhCoc_theoKhoangDelta")]
+        [CommandMethod("CTS_Phat_Sinh_Coc_Theo_Khoang_Delta")]
         public static void CTSPhatSinhCocTheoKhoangDelta()
         {
             // start transantion
@@ -991,7 +991,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_PhatSinhCoc_TuCogoPoint")]
+        [CommandMethod("CTS_Phat_Sinh_Coc_Tu_Cogo_Point")]
         public static void CTSPhatSinhCocTuCogoPoint()
         {
             // start transantion
@@ -1036,7 +1036,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DoiTenCoc_TheoThuTu")]
+        [CommandMethod("CTS_Doi_Ten_Coc_Theo_Thu_Tu")]
         public static void CTSDoiTenCocTheoThuTu()
         {
             // start transantion
@@ -1069,7 +1069,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DichCoc_TinhTien")]
+        [CommandMethod("CTS_Dich_Coc_Tinh_Tien")]
         public static void CTSDichCocTinhTien()
         {
             // start transantion
@@ -1180,7 +1180,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_Copy_NhomCoc")]
+        [CommandMethod("CTS_Copy_Nhom_Coc")]
         public static void CTSCopyNhomCoc()
         {
             // start transantion
@@ -1243,7 +1243,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DongBo_2_NhomCoc")]
+        [CommandMethod("CTS_Dong_Bo_2_Nhom_Coc")]
         public static void CTSDongBo2NhomCoc()
         {
             // start transantion
@@ -1329,7 +1329,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DongBo_2_NhomCoc_TheoDoan")]
+        [CommandMethod("CTS_Dong_Bo_2_Nhom_Coc_Theo_Doan")]
         public static void CTSDongBo2NhomCocTheoDoan()
         {
             // start transantion
@@ -1428,7 +1428,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DichCoc_TinhTien40")]
+        [CommandMethod("CTS_Dich_Coc_Tinh_Tien_40")]
         public static void CTSDichCocTinhTien40()
         {
             // start transantion
@@ -1461,7 +1461,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DichCoc_TinhTien_20")]
+        [CommandMethod("CTS_Dich_Coc_Tinh_Tien_20")]
         public static void CTSDichCocTinhTien20()
         {
             // start transantion
@@ -1494,7 +1494,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_DoiTenCoc_H")]
+        [CommandMethod("CTS_Doi_Ten_Coc_H")]
         public static void CTSDoiTenCocH()
         {
             // start transantion
@@ -1530,7 +1530,7 @@ namespace Civil3DCsharp
         // Civil Tool/46.CTS_PhatSinhCoc_TheoBang.cs kèm Form PhatSinhCocTheoBangForm.cs
 
 
-        [CommandMethod("CTS_Copy_BeRong_sampleLine")]
+        [CommandMethod("CTS_Copy_Be_Rong_Sample_Line")]
         public static void CTSCopyBeRongSampleLine()
         {
             // start transantion
@@ -1635,7 +1635,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTS_Offset_BeRong_sampleLine")]
+        [CommandMethod("CTS_Offset_Be_Rong_Sample_Line")]
         public static void CTSOffsetBeRongSampleLine()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

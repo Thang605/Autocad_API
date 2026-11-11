@@ -19,7 +19,7 @@ namespace Civil3DCsharp
         /// Lệnh tính và hiển thị độ dốc giữa 2 điểm so với trục X
         /// Độ dốc được tính theo phần trăm (%) và góc (độ)
         /// </summary>
-        [CommandMethod("AT_DoDoc")]
+        [CommandMethod("AT_Do_Doc")]
         public static void AT_DoDoc()
         {
             Document doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -132,7 +132,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh tính độ dốc đơn giản - chỉ hiển thị kết quả
         /// </summary>
-        [CommandMethod("AT_DoDoc_Simple")]
+        [CommandMethod("AT_Do_Doc_Simple")]
         public static void AT_DoDoc_Simple()
         {
             Document doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -334,7 +334,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh tính độ dốc từ một đường Line hoặc Polyline có sẵn
         /// </summary>
-        [CommandMethod("AT_DoDoc_Object")]
+        [CommandMethod("AT_Do_Doc_Object")]
         public static void AT_DoDoc_Object()
         {
             Document doc = AcadApp.DocumentManager.MdiActiveDocument;

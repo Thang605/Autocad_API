@@ -33,14 +33,13 @@ namespace Civil3DCsharp
 {
     public class CTSV_VeTracNgangThietKe_Commands
     {
-        [CommandMethod("CTSV_VeTracNgangThietKe")]
+        [CommandMethod("CTS_Ve_Trac_Ngang_Thiet_Ke")]
         public static void CTSV_VeTracNgangThietKe()
         {
-            Transaction? tr = null;
             try
             {
                 // Show form to get user inputs OUTSIDE of transaction
-                SectionViewDesignForm form = new();
+                using SectionViewDesignForm form = new();
 
                 // Use ShowDialog instead of Application.Run
                 var dialogResult = form.ShowDialog();
@@ -61,11 +60,12 @@ namespace Civil3DCsharp
                 }
 
                 // Now start transaction for the main work
-                tr = A.Db.TransactionManager.StartTransaction();
-
-                UserInput UI = new();
-                UtilitiesCAD CAD = new();
-                UtilitiesC3D C3D = new();
+                using Transaction tr = A.Db.TransactionManager.StartTransaction();
+                try
+                {
+                    UserInput UI = new();
+                    UtilitiesCAD CAD = new();
+                    UtilitiesC3D C3D = new();
 
                 // Get inputs from form
                 ObjectId alignmentId = form.AlignmentId;
@@ -283,20 +283,21 @@ namespace Civil3DCsharp
                 A.Ed.WriteMessage("\n💡 Lưu ý: Để tạo corridor surfaces, sử dụng lệnh riêng biệt: CTSV_TaoCorridorSurface");
 
                 tr.Commit();
-            }
-            catch (Autodesk.AutoCAD.Runtime.Exception e)
-            {
-                A.Ed.WriteMessage($"\n Lỗi AutoCAD khi thực hiện lệnh: {e.Message}");
-                tr?.Abort();
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception e)
+                {
+                    A.Ed.WriteMessage($"\n Lỗi AutoCAD khi thực hiện lệnh: {e.Message}");
+                    tr.Abort();
+                }
+                catch (System.Exception e)
+                {
+                    A.Ed.WriteMessage($"\n Lỗi khi thực hiện lệnh: {e.Message}");
+                    tr.Abort();
+                }
             }
             catch (System.Exception e)
             {
-                A.Ed.WriteMessage($"\n Lỗi khi thực hiện lệnh: {e.Message}");
-                tr?.Abort();
-            }
-            finally
-            {
-                tr?.Dispose();
+                A.Ed.WriteMessage($"\n Lỗi khởi tạo lệnh: {e.Message}");
             }
         }
 

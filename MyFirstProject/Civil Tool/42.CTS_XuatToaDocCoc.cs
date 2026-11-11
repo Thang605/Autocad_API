@@ -45,7 +45,7 @@ namespace Civil3DCsharp
     // ===================== COMMAND =====================
     public class CTS_XuatToaDocCoc_Commands
     {
-        [CommandMethod("CTS_XuatToaDocCoc")]
+        [CommandMethod("CTS_Xuat_Toa_Do_Coc")]
         public static void CTSXuatToaDocCoc()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

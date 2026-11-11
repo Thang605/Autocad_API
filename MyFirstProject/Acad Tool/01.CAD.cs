@@ -39,7 +39,7 @@ namespace Civil3DCsharp
         private static double _lastOffsetDistance = 1.0;
 
 
-        [CommandMethod("AT_TextLink")]
+        [CommandMethod("AT_Text_Link")]
         public static void AT_TextLink()
         {
             // start transantion
@@ -108,7 +108,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_DanhSoThuTu_Legacy")]
+        [CommandMethod("AT_Danh_So_Thu_Tu_Legacy")]
         public static void ET_DanhSoThuTu()
         {
             // start transantion
@@ -150,7 +150,7 @@ namespace Civil3DCsharp
         }
 
 
-        [CommandMethod("AT_XoayDoiTuong_Theo2Diem")]
+        [CommandMethod("AT_Xoay_Doi_Tuong_Theo_2_Diem")]
         public static void AT_XoayDoiTuong_Theo2Diem()
         {
             // start transantion
@@ -208,7 +208,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TextLayout")]
+        [CommandMethod("AT_Text_Layout")]
         public static void AT_TextLayout()
         {
             // start transantion
@@ -231,7 +231,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TaoMoi_TextLayout")]
+        [CommandMethod("AT_Tao_Moi_Text_Layout")]
         public static void ET_TaoMoi_TextLayout()
         {
             // start transantion
@@ -272,7 +272,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_DimLayout2")]
+        [CommandMethod("AT_Dim_Layout_2")]
         public static void ET_DimLayout2()
         {
             // start transantion
@@ -380,7 +380,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_DimLayout")]
+        [CommandMethod("AT_Dim_Layout")]
         public static void ET_DimLayout()
         {
             // start transantion
@@ -404,7 +404,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_BlockLayout")]
+        [CommandMethod("AT_Block_Layout")]
         public static void ET_BlockLayout()
         {
             // start transantion
@@ -431,7 +431,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_Label_FromText")]
+        [CommandMethod("AT_Label_From_Text")]
         public static void AT_Label_FromText()
         {
             // start transantion
@@ -491,7 +491,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_XoaDoiTuong_CungLayer")]
+        [CommandMethod("AT_Xoa_Doi_Tuong_Cung_Layer")]
         public static void AT_XoaDoiTuong_CungLayer()
         {
             // start transantion
@@ -544,7 +544,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_XoaDoiTuong_3DSolid_Body")]
+        [CommandMethod("AT_Xoa_Doi_Tuong_3d_Solid_Body")]
         public static void AT_XoaDoiTuong_3DSolid_Body()
         {
             // start transantion
@@ -587,7 +587,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_UpdateLayout")]
+        [CommandMethod("AT_Update_Layout")]
         public static void AT_UpdateLayout() 
         {
             // start transantion
@@ -618,7 +618,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_Offset_2Ben")]
+        [CommandMethod("AT_Offset_2_Ben")]
         public static void AT_Offset_2Ben()
         {
             // Lấy tài liệu và trình chỉnh sửa hiện tại
@@ -812,7 +812,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_annotive_scale_currentOnly")]
+        [CommandMethod("AT_Annotative_Scale_Current_Only")]
         public static void AT_annotive_scale_currentOnly()
         {
             // start transaction

@@ -35,7 +35,7 @@ namespace Civil3DCsharp
         /// Lệnh bổ sung cọc bằng cách chọn điểm trên Profile View (trắc dọc).
         /// User chọn ProfileView → Hiện form đặt tên cọc → Chọn điểm liên tục trên ProfileView.
         /// </summary>
-        [CommandMethod("CTP_BoSungCoc_TrenTracDoc")]
+        [CommandMethod("CTP_Bo_Sung_Coc_Tren_Trac_Doc")]
         public static void CTPBoSungCocTrenTracDoc()
         {
             // 1. Chọn Profile View

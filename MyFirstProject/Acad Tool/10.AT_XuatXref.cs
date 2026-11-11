@@ -24,7 +24,7 @@ namespace Civil3DCsharp
         /// Lệnh AT_XrefToBlock - Chuyển đổi Xref đã loaded thành Block (bỏ qua xref chưa load)
         /// Sử dụng Database.BindXrefs() để bind trực tiếp
         /// </summary>
-        [CommandMethod("AT_XrefToBlock")]
+        [CommandMethod("AT_Xref_To_Block")]
         public static void AT_XrefToBlock()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

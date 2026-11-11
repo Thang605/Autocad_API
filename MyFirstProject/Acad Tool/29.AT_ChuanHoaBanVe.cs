@@ -20,9 +20,7 @@ namespace Civil3DCsharp
 {
     public class ChuanHoaBanVeCmd
     {
-        [CommandMethod("AT_ChuanHoaBanVe")]
-        [CommandMethod("CHBV")]
-        [CommandMethod("AT_StandardizeDrawing")]
+        [CommandMethod("AT_Chuan_Hoa_Ban_Ve")]
         public void ChuanHoaBanVeCommand()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

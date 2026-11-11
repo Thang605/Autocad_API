@@ -29,7 +29,7 @@ namespace Civil3DCsharp
         private static int _lastVtkIndex = 2;
         private static int _lastTerrainIndex = 0;
 
-        [CommandMethod("CTP_BoTri_CongDung")]
+        [CommandMethod("CTP_Bo_Tri_Cong_Dung")]
         public void CTP_BoTri_CongDung()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

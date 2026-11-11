@@ -30,12 +30,21 @@ namespace MyFirstProject.Extensions
         }
         public static void GStationsFromSamplelineGroup(out double[] station, out SampleLine sampleLineOut)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
 
                 //select sampleline
                 ObjectId samplelineId = UserInput.GSampleLineId("\n Chọn 1 nhóm cọc: \n");
+                if (samplelineId == ObjectId.Null || !samplelineId.IsValid)
+                {
+                    station = [];
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+                    sampleLineOut = null;
+#pragma warning restore CS8625
+                    return;
+                }
+
                 SampleLine? sampleLine = tr.GetObject(samplelineId, OpenMode.ForRead) as SampleLine;
 #pragma warning disable CS8601 // Possible null reference assignment.
                 sampleLineOut = sampleLine;
@@ -413,7 +422,7 @@ namespace MyFirstProject.Extensions
         // Add missing methods that are used by other files
         public static void SetDefaultPointSetting(string stylePoint, string stylelabel)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
                 _ = new UtilitiesCAD();
@@ -460,7 +469,7 @@ namespace MyFirstProject.Extensions
 
         public static void GCoordinatePointFromAlignment(Alignment alignment, int sampleLineGroupIndex, out string[] samplelineName, out string[] eastings, out string[] northings, out string[] stations)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = A.Db.TransactionManager.StartTransaction();
 
             //get samplelineGroup
             ObjectId sampleLineGroupId = alignment.GetSampleLineGroupIds()[sampleLineGroupIndex];
@@ -471,14 +480,13 @@ namespace MyFirstProject.Extensions
             int i = sampleLineGroup.GetSampleLineIds().Count;
 #pragma warning restore CS8602 // Dereference of apossibly null reference.
             stations = new string[i];
-            _ = new string[i];
             samplelineName = new string[i];
             eastings = new string[i];
             northings = new string[i];
             int SamplelineIndex = 0;
             foreach (ObjectId sampleLineId in sampleLineGroup.GetSampleLineIds())
             {
-                SampleLine? sampleline = tr.GetObject(sampleLineId, OpenMode.ForWrite) as SampleLine;
+                SampleLine? sampleline = tr.GetObject(sampleLineId, OpenMode.ForRead) as SampleLine;
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
                 double station = sampleline.Station;
 #pragma warning restore CS8602 // Dereference of apossibly null reference.
@@ -506,7 +514,7 @@ namespace MyFirstProject.Extensions
                 double y1 = sectionPoints[i].Location.Y + Y - Z;
                 double y2 = sectionPoints[i + 1].Location.Y + Y - Z;
 
-                if (x1 <= x & x <= x2)
+                if (x1 <= x && x <= x2 && Math.Abs(x2 - x1) > 1e-9)
                 {
                     double at = (y2 - y1) / (x2 - x1);
                     double b = -x1 * (y2 - y1) / (x2 - x1) + y1;
@@ -518,7 +526,7 @@ namespace MyFirstProject.Extensions
 
         public static PointGroup CPointGroupWithDecription(string nameGroup, string Decription)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
                 _ = new UtilitiesCAD();

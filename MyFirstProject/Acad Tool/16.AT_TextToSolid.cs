@@ -50,7 +50,7 @@ namespace Civil3DCsharp
         /// Lệnh chính: Chuyển Text (DBText/MText) thành Solid Hatch hoặc 3D Solid
         /// Quy trình 2 bước: Step 1 chạy TXTEXP, Step 2 tạo hatch/solid cho từng Text
         /// </summary>
-        [CommandMethod("AT_TextToSolid")]
+        [CommandMethod("AT_Text_To_Solid")]
         public static void AT_TextToSolid()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -141,7 +141,7 @@ namespace Civil3DCsharp
                 ed.SetImpliedSelection(textIds.ToArray());
 
                 // Chạy TXTEXP rồi tự động gọi Step2
-                doc.SendStringToExecute("_.TXTEXP\n_AT_TextToSolid_Step2\n", true, false, false);
+                doc.SendStringToExecute("_.TXTEXP\n_AT_Text_To_Solid_Step2\n", true, false, false);
             }
         }
 
@@ -149,7 +149,7 @@ namespace Civil3DCsharp
         /// Bước 2: Tạo hatch / 3D solid từ polylines đã được tạo bởi TXTEXP
         /// Xử lý độc lập theo từng nhóm Text để hỗ trợ chọn nhiều Text cùng lúc
         /// </summary>
-        [CommandMethod("AT_TextToSolid_Step2")]
+        [CommandMethod("AT_Text_To_Solid_Step2")]
         public static void AT_TextToSolid_Step2()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -1654,7 +1654,7 @@ namespace Civil3DCsharp
         /// Lệnh tối ưu: Chuyển đổi hàng loạt Polyline/Curves thành Solid Hatch hoặc 3D Solid
         /// Xử lý mượt mà hàng nghìn đối tượng, tự động đục lỗ lồng nhau và giữ nguyên Layer/Color
         /// </summary>
-        [CommandMethod("AT_PolysToSolid")]
+        [CommandMethod("AT_Polys_To_Solid")]
         public static void AT_PolysToSolid()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

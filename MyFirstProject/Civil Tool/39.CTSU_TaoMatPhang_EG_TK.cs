@@ -36,7 +36,7 @@ namespace Civil3DCsharp
 {
     public class CTSU_TaoMatPhang_EG_TK_Commands
     {
-        [CommandMethod("CTSU_TaoMatPhang_EG_TK")]
+        [CommandMethod("CTT_Tao_Mat_Phang_EG_TK")]
         public static void CTSUTaoMatPhangEGTK()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

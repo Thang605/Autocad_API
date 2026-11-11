@@ -23,7 +23,7 @@ namespace MyFirstProject
     public class AT_OffsetAlignment_Civil
     {
         // Lệnh tạo offset alignment
-        [CommandMethod("AT_OffsetAlignment")]
+        [CommandMethod("CTA_Offset_Alignment")]
         public static void AT_OffsetAlignment()
         {
             var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;

@@ -21,7 +21,7 @@ namespace Civil3DCsharp
 {
     public class CTC_NhanBan_Corridor_Commands
     {
-        [CommandMethod("CTC_NhanBan_Corridor")]
+        [CommandMethod("CTC_Nhan_Ban_Corridor")]
         public static void CTC_NhanBan_Corridor()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

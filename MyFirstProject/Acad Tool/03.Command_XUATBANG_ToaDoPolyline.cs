@@ -40,7 +40,7 @@ namespace Civil3D_Csharp
         /// <summary>
         /// Main command to export polyline coordinate table with intersections
         /// </summary>
-        [CommandMethod("XUATBANG_ToaDoPolyline")]
+        [CommandMethod("AT_Xuat_Bang_Toa_Do_Polyline")]
         public static void ExportPolylineCoordinateTable()
         {
             try

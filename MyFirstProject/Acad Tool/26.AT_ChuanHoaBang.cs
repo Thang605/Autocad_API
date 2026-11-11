@@ -31,11 +31,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh chính: Chuẩn hoá đối tượng bảng theo phong cách và tiêu chuẩn T27
         /// </summary>
-        [CommandMethod("AT_ChuanHoaBang")]
-        [CommandMethod("AT_ChuanHoaDoiTuong")]
-        [CommandMethod("AT_ChuanHoaTable")]
-        [CommandMethod("CH_BANG")]
-        [CommandMethod("CHUANHOABANG")]
+        [CommandMethod("AT_Chuan_Hoa_Bang")]
         public static void RunChuanHoaBang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

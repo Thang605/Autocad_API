@@ -40,7 +40,7 @@ namespace Civil3DCsharp
         /// Lệnh gắn nhãn điểm đầu và điểm cuối tuyến (Alignment)
         /// Sử dụng Alignment.ImportLabelSet để import Label Set vào nhiều Alignment
         /// </summary>
-        [CommandMethod("CTA_GanNhan_DauCuoiTyten")]
+        [CommandMethod("CTA_Gan_Nhan_Dau_Cuoi_Tuyen")]
         public static void GanNhanDauCuoiTyten()
         {
             // 0. Cho phép chọn Alignment trên màn hình

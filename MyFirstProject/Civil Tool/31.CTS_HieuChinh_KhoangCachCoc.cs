@@ -25,7 +25,7 @@ namespace Civil3DCsharp
         /// sao cho cách đều nhau theo khoảng cách yêu cầu.
         /// Cọc có lý trình nhỏ nhất được giữ nguyên.
         /// </summary>
-        [CommandMethod("CTS_HieuChinh_KhoangCachCoc")]
+        [CommandMethod("CTS_Hieu_Chinh_Khoang_Cach_Coc")]
         public static void CTSHieuChinhKhoangCachCoc()
         {
             // Start transaction

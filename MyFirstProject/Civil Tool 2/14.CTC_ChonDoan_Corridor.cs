@@ -27,7 +27,7 @@ namespace Civil3DCsharp
     // ═══════════════════════════════════════════════════════════════
     public class CTC_ChonDoan_Corridor_Commands
     {
-        [CommandMethod("CTC_ChonDoan_Corridor")]
+        [CommandMethod("CTC_Chon_Doan_Corridor")]
         public static void CTC_ChonDoan_Corridor()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

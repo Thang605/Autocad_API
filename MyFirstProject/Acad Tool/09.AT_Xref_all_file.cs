@@ -28,7 +28,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh AT_XrefAll - Tạo xref cho tất cả file DWG trong thư mục được chọn (bao gồm thư mục con)
         /// </summary>
-        [CommandMethod("AT_XrefAll")]
+        [CommandMethod("AT_Xref_All")]
         public static void AT_XrefAll()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -154,7 +154,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh AT_XrefAllOverlay - Tạo xref overlay cho tất cả file DWG trong thư mục được chọn
         /// </summary>
-        [CommandMethod("AT_XrefAllOverlay")]
+        [CommandMethod("AT_Xref_All_Overlay")]
         public static void AT_XrefAllOverlay()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -337,7 +337,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh AT_XrefAttachToOverlay - Chuyển đổi tất cả xref từ Attach sang Overlay trong file hiện tại
         /// </summary>
-        [CommandMethod("AT_XrefAttachToOverlay")]
+        [CommandMethod("AT_Xref_Attach_To_Overlay")]
         public static void AT_XrefAttachToOverlay()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -405,7 +405,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh AT_XrefAttachToOverlayFile - Chuyển đổi tất cả xref từ Attach sang Overlay trong file được chỉ định
         /// </summary>
-        [CommandMethod("AT_XrefAttachToOverlayFile")]
+        [CommandMethod("AT_Xref_Attach_To_Overlay_File")]
         public static void AT_XrefAttachToOverlayFile()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

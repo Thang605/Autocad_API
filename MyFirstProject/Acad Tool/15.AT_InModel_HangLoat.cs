@@ -835,7 +835,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class AT_InModel_HangLoat_Commands
     {
-        [CommandMethod("AT_InModel_HangLoat")]
+        [CommandMethod("AT_In_Model_Hang_Loat")]
         public static void AT_InModel_HangLoat()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

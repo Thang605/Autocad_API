@@ -33,7 +33,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh mở giao diện Thống kê thuộc tính Parcel & Xuất bảng AutoCAD Table
         /// </summary>
-        [CommandMethod("CTPA_BangThongKeParcel")]
+        [CommandMethod("CT_Bang_Thong_Ke_Parcel")]
         public static void CTPA_BangThongKeParcel()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -547,11 +547,5 @@ namespace Civil3DCsharp
         }
 
         #endregion
-
-        [CommandMethod("CTPA_ThongKeParcel")]
-        public static void CTPA_ThongKeParcel() => CTPA_BangThongKeParcel();
-
-        [CommandMethod("CTPA_BangParcel")]
-        public static void CTPA_BangParcel() => CTPA_BangThongKeParcel();
     }
 }

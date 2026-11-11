@@ -41,7 +41,7 @@ namespace Civil3DCsharp
         private static bool lastUseInputMode = true; // true for input, false for pick from model
         private static int lastSelectionMode = 3; // 0 = quét chọn, 1 = nhặt 1 cái lấy nhóm, 2 = chọn từng cái, 3 = chọn từ danh sách nhóm
 
-        [CommandMethod("CTS_ThayDoi_BeRong_Sampleline")]
+        [CommandMethod("CTS_Thay_Doi_Be_Rong_Sample_Line")]
         public static void CTSThayDoiBeRongSampleline()
         {
             // start transaction

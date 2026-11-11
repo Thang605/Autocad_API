@@ -26,7 +26,7 @@ namespace Civil3DCsharp
         private static string? _lastExportDirectory;
         private static List<string> _currentQTOMaterialOrder = new();
 
-        [CommandMethod("CTSV_XuatKhoiLuongRaExcel")]
+        [CommandMethod("CTS_Xuat_Khoi_Luong_Ra_Excel")]
         public static void CTSVXuatKhoiLuongRaExcel()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

@@ -34,7 +34,7 @@ namespace Civil3DCsharp
         private static double _lastStartInvertElevation = 10.0;
         private static double _lastSlope = 0.005; // Default 0.5%
 
-        [CommandMethod("CTPi_ThayDoi_CaoDo_DayCong")]
+        [CommandMethod("CT_Thay_Doi_Cao_Do_Day_Cong")]
         public static void CTPi_ThayDoi_CaoDo_DayCong()
         {
             // start transaction

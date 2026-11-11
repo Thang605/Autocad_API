@@ -23,7 +23,7 @@ namespace Civil3DCsharp
         private static int _lastStandardIndex = 0;
         private static int _lastVtkIndex = 1;
 
-        [CommandMethod("CTA_BoTriCongNam")]
+        [CommandMethod("CTA_Bo_Tri_Cong_Nam")]
         public void CTA_BoTriCongNam()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

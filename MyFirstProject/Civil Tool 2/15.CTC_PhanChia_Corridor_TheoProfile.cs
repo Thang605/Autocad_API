@@ -18,7 +18,7 @@ namespace Civil3DCsharp
 {
     public class CTC_PhanChia_Corridor_TheoProfile_Command
     {
-        [CommandMethod("CTC_PhanChia_Corridor_TheoProfile")]
+        [CommandMethod("CTC_Phan_Chia_Corridor_Theo_Profile")]
         public static void CTC_PhanChia_Corridor_TheoProfile()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

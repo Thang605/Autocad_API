@@ -27,7 +27,7 @@ namespace Civil3DCsharp
         /// Lệnh chính: Tạo COGO Point từ file Excel
         /// File Excel cần có các cột: X, Y, Z, Description (tùy chọn)
         /// </summary>
-        [CommandMethod("CTPO_TaoCogoPoint_FromExcel")]
+        [CommandMethod("CT_Tao_Cogo_Point_Tu_Excel")]
         public static void CreateCogoPointFromExcel()
         {
             try

@@ -28,7 +28,7 @@ namespace Civil3DCsharp
 {
     public class Surfaces
     {        
-        [CommandMethod("CTS_TaoSpotElevation_OnSurface_TaiTim")]
+        [CommandMethod("CTT_Tao_Spot_Elevation_Tai_Tim")]
         public static void CTSTaoSpotElevationOnSurfaceTaiTim()
         {
             // start transantion

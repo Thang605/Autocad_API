@@ -26,7 +26,7 @@ namespace Civil3DCsharp
 {
     class Corridors
     {
-        [CommandMethod("CTC_AddAllSection")]
+        [CommandMethod("CTC_Add_All_Section")]
         public static void CVC_AddAllSection()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

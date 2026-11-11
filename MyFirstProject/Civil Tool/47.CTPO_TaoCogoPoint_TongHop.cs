@@ -34,10 +34,7 @@ namespace Civil3DCsharp
 {
     public class CTPO_TaoCogoPoint_TongHop_Commands
     {
-        [CommandMethod("CTPO_TaoCogoPoint_MultiSource")]
-        [CommandMethod("CTPO_TaoCogoPoint")]
-        [CommandMethod("TAOCOGOPOINT")]
-        [CommandMethod("TCP")]
+        [CommandMethod("CT_Tao_Cogo_Point_Tong_Hop")]
         public static void RunTaoCogoPoint()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

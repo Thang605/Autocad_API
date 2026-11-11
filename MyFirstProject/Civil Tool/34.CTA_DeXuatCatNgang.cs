@@ -14,7 +14,7 @@ namespace Civil3DCsharp
 {
     public class CTA_DeXuatCatNgang_Commands
     {
-        [CommandMethod("CTA_DeXuatCatNgang")]
+        [CommandMethod("CTA_De_Xuat_Cat_Ngang")]
         public void CTSV_DeXuatCatNgang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

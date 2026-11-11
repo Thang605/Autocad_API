@@ -37,7 +37,7 @@ namespace Civil3DCsharp
     class AT_TaoOutline_Command
     {
        
-        [CommandMethod("AT_TaoOutline")]
+        [CommandMethod("AT_Tao_Outline")]
         public static void AT_TaoOutline()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

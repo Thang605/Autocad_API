@@ -672,7 +672,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class ThemDoiTuongMauCmd
     {
-        [CommandMethod("AT_ThemDoiTuongMau")]
+        [CommandMethod("AT_Them_Doi_Tuong_Mau")]
         public static void AT_ThemDoiTuongMau()
         {
             try

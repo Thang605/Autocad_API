@@ -1349,7 +1349,7 @@ namespace Civil3DCsharp
 
     public class CTA_KiemTraTamNhin_Cmd
     {
-        [CommandMethod("CTA_KiemTraTamNhin")]
+        [CommandMethod("CTA_Kiem_Tra_Tam_Nhin")]
         public static void KiemTraTamNhin()
         {
             try

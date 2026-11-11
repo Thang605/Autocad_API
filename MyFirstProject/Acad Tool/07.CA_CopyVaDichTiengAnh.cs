@@ -218,7 +218,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CA")]
+        [CommandMethod("AT_Copy_Va_Dich_Tieng_Anh")]
         public static void CA()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

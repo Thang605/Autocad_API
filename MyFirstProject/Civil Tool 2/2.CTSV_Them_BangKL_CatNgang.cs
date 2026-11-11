@@ -33,7 +33,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh thêm Volume Tables (Bảng Khối Lượng) cho Section View Group
         /// </summary>
-        [CommandMethod("CTSV_Them_BangKL_CatNgang")]
+        [CommandMethod("CTS_Them_Bang_KL_Cat_Ngang")]
         public static void CTSV_Them_BangKL_CatNgang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

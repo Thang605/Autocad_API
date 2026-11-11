@@ -37,7 +37,7 @@ namespace Civil3DCsharp
         /// Lệnh tạo Material List cho SampleLineGroup với cấu trúc Đào/Đắp
         /// Kết quả: Material List với 2 materials: Đào đất (Cut) và Đắp đất (Fill)
         /// </summary>
-        [CommandMethod("CTS_Them_MaterialList")]
+        [CommandMethod("CTS_Them_Material_List")]
         public static void CTS_Them_MaterialList()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -307,7 +307,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh hiển thị thông tin Material List hiện có của SampleLineGroup
         /// </summary>
-        [CommandMethod("CTS_Xem_MaterialList")]
+        [CommandMethod("CTS_Xem_Material_List")]
         public static void CTS_Xem_MaterialList()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -422,7 +422,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh xóa tất cả Material List của SampleLineGroup
         /// </summary>
-        [CommandMethod("CTS_Xoa_MaterialList")]
+        [CommandMethod("CTS_Xoa_Material_List")]
         public static void CTS_Xoa_MaterialList()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

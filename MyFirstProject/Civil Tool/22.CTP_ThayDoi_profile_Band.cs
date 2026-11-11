@@ -20,7 +20,7 @@ namespace Civil3DCsharp
 {
     public class CTP_ThayDoi_profile_Band_Commands
     {
-        [CommandMethod("CTP_ThayDoi_profile_Band")]
+        [CommandMethod("CTP_Thay_Doi_Profile_Band")]
         public static void CTPThayDoiProfileBand()
         {
             using (Transaction tr = A.Db.TransactionManager.StartTransaction())

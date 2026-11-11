@@ -67,7 +67,7 @@ namespace Civil3DCsharp
         /// Lệnh CN: Copy nội dung text và truyền vào text khác.
         /// Hiện form để chọn Link hoặc Không link.
         /// </summary>
-        [CommandMethod("CN")]
+        [CommandMethod("AT_Copy_Noi_Dung_Text")]
         public static void CopyNoiDung()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

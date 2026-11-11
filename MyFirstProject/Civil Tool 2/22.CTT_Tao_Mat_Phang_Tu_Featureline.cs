@@ -30,7 +30,7 @@ namespace MyFirstProject.Civil_Tool_2
 
     public class CTT_Tao_Mat_Phang_Tu_Featureline_Command
     {
-        [CommandMethod("CTT_Tao_Mat_Phang_Tu_Featureline")]
+        [CommandMethod("CTT_Tao_Mat_Phang_Tu_Feature_Line")]
         public static void TaoMatPhangTuFeatureline()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

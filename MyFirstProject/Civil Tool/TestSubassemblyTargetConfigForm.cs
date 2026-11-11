@@ -16,7 +16,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class TestSubassemblyTargetConfigForm
     {
-        [CommandMethod("TestTargetConfigForm")]
+        [CommandMethod("CTC_Cau_Hinh_Target_Corridor")]
         public static void TestTargetConfigForm()
         {
             A.Ed.WriteMessage("\n=== TEST SUBASSEMBLY TARGET CONFIG FORM ===");
@@ -175,7 +175,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("TestTargetConfigFormDebug")]
+        [CommandMethod("CTC_Thong_Tin_Target_Corridor")]
         public static void TestTargetConfigFormDebug()
         {
             A.Ed.WriteMessage("\n=== TEST SUBASSEMBLY TARGET CONFIG FORM (DEBUG MODE) ===");

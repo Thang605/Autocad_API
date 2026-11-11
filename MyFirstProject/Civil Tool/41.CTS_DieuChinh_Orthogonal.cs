@@ -25,7 +25,7 @@ namespace Civil3DCsharp
     {
         private static int lastSelectionMode = 0; // 0 = All in file, 1 = Quét chọn, 2 = Theo nhóm, 3 = Chọn từ list
 
-        [CommandMethod("CTS_DieuChinh_Orthogonal")]
+        [CommandMethod("CTS_Dieu_Chinh_Orthogonal")]
         public static void CTSDieuChinhOrthogonal()
         {
             Dictionary<ObjectId, string> slGroups = new Dictionary<ObjectId, string>();

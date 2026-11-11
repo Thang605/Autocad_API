@@ -34,7 +34,7 @@ namespace Civil3DCsharp
     {
 
         
-        [CommandMethod("CTSV_ChuyenDoi_TNTK_TNTN")]
+        [CommandMethod("CTS_Chuyen_Doi_TNTK_TNTN")]
         public static void CTSVChuyenDoiTNTKTNTN()
         {
             // start transantion
@@ -151,7 +151,7 @@ namespace Civil3DCsharp
         }
 
 
-        [CommandMethod("CTSV_DanhCap")]
+        [CommandMethod("CTS_Danh_Cap")]
         public static void CTSVDanhCap()
         {
             // start transantion CTSV_DanhCap
@@ -410,7 +410,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_DanhCap_XoaBo")]
+        [CommandMethod("CTS_Danh_Cap_Xoa_Bo")]
         public static void CTSVDanhCapXoaBo()
         {
             // start transantion
@@ -436,7 +436,7 @@ namespace Civil3DCsharp
         }
 
 
-        [CommandMethod("CTSV_DanhCap_VeThem")]
+        [CommandMethod("CTS_Danh_Cap_Ve_Them")]
         public static void CTSVDanhCapVeThem()
         {
             // start transantion
@@ -475,7 +475,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_DanhCap_VeThem2")]
+        [CommandMethod("CTS_Danh_Cap_Ve_Them_2")]
         public static void CTSVDanhCapVeThem2()
         {
             // start transantion
@@ -497,7 +497,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_DanhCap_VeThem1")]
+        [CommandMethod("CTS_Danh_Cap_Ve_Them_1")]
         public static void CTSVDanhCapVeThem1()
         {
             // start transantion
@@ -519,7 +519,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_DanhCap_CapNhat")]
+        [CommandMethod("CTS_Danh_Cap_Cap_Nhat")]
         public static void CTSVDanhCapCapNhat()
         {
             // start transantion
@@ -562,7 +562,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_ThemVatLieu_TrenCatNgang")]
+        [CommandMethod("CTS_Them_Vat_Lieu_Tren_Cat_Ngang")]
         public static void CTSVThemVatLieuTrenCatNgang()
         {
             // start transantion CTSV_DanhCap
@@ -680,7 +680,7 @@ namespace Civil3DCsharp
             tr.Commit();
         }
 
-        [CommandMethod("CTSV_ThayDoi_MSS_Min_Max")]
+        [CommandMethod("CTS_Thay_Doi_MSS_Min_Max")]
         public static void CTSVThayDoiMSSMinMax()
         {
             // start transantion
@@ -726,7 +726,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_ThayDoi_GioiHan_traiPhai")]
+        [CommandMethod("CTS_Thay_Doi_Gioi_Han_Trai_Phai")]
         public static void CTSVThayDoiGioiHanTraiPhai()
         {
             // start transantion
@@ -773,7 +773,7 @@ namespace Civil3DCsharp
         }
 
 
-        [CommandMethod("CTSV_ThayDoi_KhungIn")]
+        [CommandMethod("CTS_Thay_Doi_Khung_In")]
         public static void CTSVThayDoiKhungIn()
         {
             // start transantion
@@ -839,7 +839,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_KhoaCatNgang_AddPoint")]
+        [CommandMethod("CTS_Khoa_Cat_Ngang_Add_Point")]
         public static void CTSVKhoaCatNgangAddPoint()
         {
             // start transantion
@@ -991,7 +991,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTSV_An_DuongDiaChat")]
+        [CommandMethod("CTS_An_Duong_Dia_Chat")]
         public static void CTSVAnDuongDiaChat()
         {
             // start transantion CTSV_DanhCap

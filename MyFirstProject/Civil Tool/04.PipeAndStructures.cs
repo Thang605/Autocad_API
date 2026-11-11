@@ -31,7 +31,7 @@ namespace Civil3DCsharp
     public class PipeAndStructures
     {
 
-        [CommandMethod("CTPI_ThayDoi_DuongKinhCong")]
+        [CommandMethod("CT_Thay_Doi_Duong_Kinh_Cong")]
         public static void CTPIThayDoiDuongKinhCong()
         {
             // start transantion
@@ -131,7 +131,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTPI_ThayDoi_DoanDocCong")]
+        [CommandMethod("CT_Thay_Doi_Do_Doc_Cong")]
         public static void CTPIThayDoiDoanDocCong()
         {
             // start transantion
@@ -210,7 +210,7 @@ namespace Civil3DCsharp
         }
 
 
-        [CommandMethod("CTPI_BangCaoDo_TuNhienHoThu")]
+        [CommandMethod("CT_Bang_Cao_Do_Tu_Nhien_Ho_Thu")]
         public static void CTPIBangCaoDoTuNhienHoTho()
         {
             // start transantion
@@ -259,7 +259,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("CTPI_XoayHoThu_Theo2diem")]
+        [CommandMethod("CT_Xoay_Ho_Thu_Theo_2_Diem")]
         public static void CTPIXoayHoThuTheo2diem()
         {
             // Lấy đối tượng cần thiết

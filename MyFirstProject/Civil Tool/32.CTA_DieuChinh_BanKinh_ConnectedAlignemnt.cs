@@ -24,7 +24,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh chính - Điều chỉnh bán kính đường cong trong Alignment
         /// </summary>
-        [CommandMethod("CTA_DieuChinhBanKinh_ConnectedAlignment")]
+        [CommandMethod("CTA_Dieu_Chinh_Ban_Kinh_Connected_Alignment")]
         public void CTA_DieuChinhBanKinh_ConnectedAlignment()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -290,7 +290,6 @@ namespace Civil3DCsharp
         /// <summary>
         /// Hiển thị hướng dẫn sử dụng
         /// </summary>
-        [CommandMethod("CTA_DieuChinhBanKinh_Help")]
         public void ShowHelp()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;

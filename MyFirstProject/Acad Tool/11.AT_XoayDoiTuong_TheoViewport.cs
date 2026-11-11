@@ -30,7 +30,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Xoay các đối tượng được chọn theo góc xoay của viewport hiện hành
         /// </summary>
-        [CommandMethod("AT_XoayDoiTuong_TheoViewport")]
+        [CommandMethod("AT_Xoay_Doi_Tuong_Theo_Viewport")]
         public static void XoayDoiTuong_TheoViewport()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();
@@ -146,7 +146,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Xoay đối tượng theo viewport với điểm cơ sở xoay
         /// </summary>
-        [CommandMethod("AT_XoayDoiTuong_TheoViewport_V2")]
+        [CommandMethod("AT_Xoay_Doi_Tuong_Theo_Viewport_V2")]
         public static void XoayDoiTuong_TheoViewport_V2()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

@@ -33,7 +33,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh quét chọn tất cả các Section có thuộc tính Static Dynamic = "Static" trên cắt ngang
         /// </summary>
-        [CommandMethod("CTSV_ChonSection_Static")]
+        [CommandMethod("CTS_Chon_Section_Static")]
         public static void CTSVChonSectionStatic()
         {
             // start transaction

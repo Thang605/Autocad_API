@@ -39,7 +39,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh chính: Xoay viewport hiện hành theo 2 điểm chọn
         /// </summary>
-        [CommandMethod("AT_Xoay_ViewPort_Theo2Diem")]
+        [CommandMethod("AT_Xoay_Viewport_Theo_2_Diem")]
         public static void Xoay_ViewPort_Theo2Diem()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

@@ -33,7 +33,7 @@ namespace Civil3DCsharp
 {
     public class CTSV_KhoiLuongCatNgang_Commands
     {
-        [CommandMethod("CTSV_KhoiLuongCatNgang")]
+        [CommandMethod("CTS_Khoi_Luong_Cat_Ngang")]
         public static void CTSVKhoiLuongCatNgang()
         {
             using Transaction tr = A.Db.TransactionManager.StartTransaction();

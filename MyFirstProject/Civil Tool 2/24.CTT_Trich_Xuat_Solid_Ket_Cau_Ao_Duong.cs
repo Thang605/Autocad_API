@@ -30,7 +30,7 @@ namespace MyFirstProject.Civil_Tool_2
 
     public class CTT_Trich_Xuat_Solid_Ket_Cau_Ao_Duong_Command
     {
-        [CommandMethod("AT_Xuat_Solid_KCAD_Tu_MatPhang")]
+        [CommandMethod("CTT_Xuat_Solid_KCAD_Tu_Mat_Phang")]
         public static void XuatSolidKcadTuMatPhang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

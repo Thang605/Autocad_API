@@ -34,7 +34,7 @@ namespace Civil3DCsharp
 {
     public class AT_TongKichThuoc
     {
-        [CommandMethod("AT_TongDoDai_Replace")]
+        [CommandMethod("AT_Tong_Do_Dai_Replace")]
         public static void AT_TongDoDai_Replace()
         {
             // start transantion
@@ -87,7 +87,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDoDai_Full")]
+        [CommandMethod("AT_Tong_Do_Dai_Full")]
         public static void AT_TongDoDai_Full()
         {
             // start transantion
@@ -137,7 +137,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDoDai_Replace2")]
+        [CommandMethod("AT_Tong_Do_Dai_Replace_2")]
         public static void AT_TongDoDai_Replace2()
         {
             // start transantion
@@ -190,7 +190,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDoDai_Replace_CongThem")]
+        [CommandMethod("AT_Tong_Do_Dai_Replace_Cong_Them")]
         public static void AT_TongDoDai_Replace_CongThem()
         {
             // start transantion
@@ -251,7 +251,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDienTich_Full")]
+        [CommandMethod("AT_Tong_Dien_Tich_Full")]
         public static void ET_TongDienTich_Full()
         {
             // start transantion
@@ -301,7 +301,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDienTich_Replace")]
+        [CommandMethod("AT_Tong_Dien_Tich_Replace")]
         public static void AT_TongDienTich_Replace()
         {
             // start transantion
@@ -354,7 +354,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDienTich_Replace2")]
+        [CommandMethod("AT_Tong_Dien_Tich_Replace_2")]
         public static void AT_TongDienTich_Replace2()
         {
             // start transantion
@@ -407,7 +407,7 @@ namespace Civil3DCsharp
             }
         }
 
-        [CommandMethod("AT_TongDienTich_Replace_CongThem")]
+        [CommandMethod("AT_Tong_Dien_Tich_Replace_Cong_Them")]
         public static void AT_TongDienTich_Replace_CongThem()
         {
             // start transantion

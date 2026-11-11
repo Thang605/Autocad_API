@@ -407,7 +407,7 @@ namespace MyFirstProject.Extensions
 
         public static void check()
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
                 _ = new UtilitiesCAD();

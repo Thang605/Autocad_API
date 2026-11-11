@@ -33,7 +33,7 @@ namespace Civil3DCsharp
             public Extents3d Extents { get; set; }  // Bounding box
         }
 
-        [CommandMethod("AT_CANLE_CHOTEXT")]
+        [CommandMethod("AT_Can_Le_Cho_Text")]
         public static void AT_CanLe_ChoText()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

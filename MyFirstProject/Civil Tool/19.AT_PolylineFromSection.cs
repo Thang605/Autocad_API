@@ -32,7 +32,7 @@ namespace Civil3DCsharp
 {
     public class AT_PolylineFromSection_Commands
     {
-        [CommandMethod("AT_PolylineFromSection")]
+        [CommandMethod("CTS_Polyline_Tu_Section")]
         public static void ATPolylineFromSection()
         {
             // start transaction

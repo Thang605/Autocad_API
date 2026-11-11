@@ -38,7 +38,7 @@ namespace Civil3DCsharp
         /// Bước 1 (tự động): Tạo SectionView riêng lẻ cho các SampleLine đã chọn, đặt tại vị trí sau nhóm đích.
         /// Bước 2 (hướng dẫn user): Move các SectionView vào nhóm đích qua context menu.
         /// </summary>
-        [CommandMethod("CTSV_Bosung_CatNgang")]
+        [CommandMethod("CTS_Bo_Sung_Cat_Ngang")]
         public static void CTSV_Bosung_CatNgang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

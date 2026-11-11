@@ -903,7 +903,7 @@ namespace Civil3DCsharp
     /// </summary>
     public class AT_InBanVe_Layout_Commands
     {
-        [CommandMethod("AT_InBanVe_TheoBlock")]
+        [CommandMethod("AT_In_Ban_Ve_Theo_Block")]
         public static void AT_InBanVe_TheoBlock()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

@@ -33,7 +33,7 @@ namespace Civil3DCsharp
 {
     public class CTSV_FitKhungIn
     {
-        [CommandMethod("CTSV_fit_KhungIn")]
+        [CommandMethod("CTS_Fit_Khung_In")]
         public static void CTSVFitKhungIn()
         {
             // ===== BƯỚC 1: Chọn SectionView trước =====

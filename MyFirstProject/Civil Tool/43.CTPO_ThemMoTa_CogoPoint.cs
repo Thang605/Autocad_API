@@ -16,7 +16,7 @@ namespace Civil3DCsharp
 {
     class CTPO_ThemMoTa_CogoPoint_Commands
     {
-        [CommandMethod("CTPO_ThemMoTa_CogoPoint")]
+        [CommandMethod("CT_Them_Mo_Ta_Cogo_Point")]
         public static void CTPO_ThemMoTa_CogoPoint()
         {
             // PHASE 1: Show description form

@@ -345,7 +345,12 @@ namespace MyFirstProject.Extensions
         }
         public static double CreatePolylineDanhCap(double x1, double x2, double y1, double y2, double bacCap, double docDanhCap)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            if (Math.Abs(x2 - x1) < 1e-9 || bacCap <= 0)
+            {
+                return 0;
+            }
+
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 //UtilitiesCAD CAD = new UtilitiesCAD();
                 BlockTable bt = (BlockTable)tr.GetObject(A.Doc.Database.BlockTableId, OpenMode.ForRead);
@@ -384,7 +389,8 @@ namespace MyFirstProject.Extensions
                         }
                         else
                         {
-                            polyline.AddVertexAt(soLe, new Point2d(pointList[j].X, pointList[j + 1].Y), 0, 0, 0);
+                            double nextY = (j + 1 < pointList.Count) ? pointList[j + 1].Y : y2;
+                            polyline.AddVertexAt(soLe, new Point2d(pointList[j].X, nextY), 0, 0, 0);
                         }
 
                     }
@@ -415,30 +421,25 @@ namespace MyFirstProject.Extensions
         }
         public static LayerTableRecord CCreateLayer(string NameLayer)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
-                _ = new UserInput();
-                _ = new UtilitiesCAD();
-                _ = new UtilitiesC3D();
-                //start here
-                // Open the Layer table for read
-                LayerTable? acLyrTbl;
-                acLyrTbl = tr.GetObject(A.Db.LayerTableId, OpenMode.ForWrite) as LayerTable;
-                LayerTableRecord acLyrTblRec = new();
+                LayerTable acLyrTbl = (LayerTable)tr.GetObject(A.Db.LayerTableId, OpenMode.ForRead);
+                LayerTableRecord acLyrTblRec;
 
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                if (acLyrTbl.Has(NameLayer) == false)
+                if (!acLyrTbl.Has(NameLayer))
                 {
-
-                    // Assign the layer the ACI color 1 and a name
-                    acLyrTblRec.Name = NameLayer;
-                    // Upgrade the Layer table for write
                     acLyrTbl.UpgradeOpen();
-                    // Append the new layer to the Layer table and the transaction
+                    acLyrTblRec = new LayerTableRecord
+                    {
+                        Name = NameLayer
+                    };
                     acLyrTbl.Add(acLyrTblRec);
                     tr.AddNewlyCreatedDBObject(acLyrTblRec, true);
                 }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+                else
+                {
+                    acLyrTblRec = (LayerTableRecord)tr.GetObject(acLyrTbl[NameLayer], OpenMode.ForRead);
+                }
 
                 tr.Commit();
                 return acLyrTblRec;
@@ -446,41 +447,35 @@ namespace MyFirstProject.Extensions
         }
         public static LayerTableRecord CCreateLayerWithFullOption(string NameLayer, short colorIndex, LineWeight lineweight, string lineTypeName)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
-                _ = new UserInput();
-                _ = new UtilitiesCAD();
-                _ = new UtilitiesC3D();
-                //start here
-                // Open the Layer table for read
-                LayerTable? acLyrTbl = tr.GetObject(A.Db.LayerTableId, OpenMode.ForWrite) as LayerTable;
-                LayerTableRecord acLyrTblRec = new();
+                LayerTable acLyrTbl = (LayerTable)tr.GetObject(A.Db.LayerTableId, OpenMode.ForRead);
+                LayerTableRecord acLyrTblRec;
 
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                if (acLyrTbl.Has(NameLayer) == false)
+                if (!acLyrTbl.Has(NameLayer))
                 {
-
-                    // Assign the layer the ACI color 1 and a name
-                    acLyrTblRec.Name = NameLayer;
-                    acLyrTblRec.Color = Color.FromColorIndex(ColorMethod.ByAci, colorIndex);
-                    acLyrTblRec.LineWeight = lineweight;
+                    acLyrTbl.UpgradeOpen();
+                    acLyrTblRec = new LayerTableRecord
+                    {
+                        Name = NameLayer,
+                        Color = Color.FromColorIndex(ColorMethod.ByAci, colorIndex),
+                        LineWeight = lineweight
+                    };
 
                     //add linetype
                     LinetypeTable? acLinTbl = tr.GetObject(A.Db.LinetypeTableId, OpenMode.ForRead) as LinetypeTable;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                    if (acLinTbl.Has(lineTypeName) == true)
+                    if (acLinTbl != null && acLinTbl.Has(lineTypeName))
                     {
                         acLyrTblRec.LinetypeObjectId = acLinTbl[lineTypeName];
                     }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
 
-                    // Upgrade the Layer table for write
-                    acLyrTbl.UpgradeOpen();
-                    // Append the new layer to the Layer table and the transaction
                     acLyrTbl.Add(acLyrTblRec);
                     tr.AddNewlyCreatedDBObject(acLyrTblRec, true);
                 }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+                else
+                {
+                    acLyrTblRec = (LayerTableRecord)tr.GetObject(acLyrTbl[NameLayer], OpenMode.ForRead);
+                }
 
                 tr.Commit();
                 return acLyrTblRec;
@@ -488,22 +483,25 @@ namespace MyFirstProject.Extensions
         }
         public static void CDelLayerAndObjectOnIt(string layerName)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
-
-                //start here
-                // Create a Selection Filter which selects all Objects on a given Layer... in this case "0"
+                // Create a Selection Filter which selects all Objects on a given Layer
                 TypedValue[] tvs = [new((int)DxfCode.LayerName, layerName)];
                 SelectionFilter sf = new(tvs);
                 // Select all Objects on Layer
                 PromptSelectionResult psr = A.Ed.SelectAll(sf);
-                SelectionSet ss = psr.Value;
-
-                // Iterate through objects and delete them
-                foreach (SelectedObject so in ss)
+                if (psr.Status == PromptStatus.OK && psr.Value != null)
                 {
-                    DBObject ob = tr.GetObject(so.ObjectId, OpenMode.ForWrite);
-                    ob.Erase();
+                    SelectionSet ss = psr.Value;
+                    // Iterate through objects and delete them
+                    foreach (SelectedObject so in ss)
+                    {
+                        if (so != null && so.ObjectId.IsValid && !so.ObjectId.IsErased)
+                        {
+                            DBObject ob = tr.GetObject(so.ObjectId, OpenMode.ForWrite);
+                            ob.Erase();
+                        }
+                    }
                 }
 
                 tr.Commit();
@@ -511,7 +509,7 @@ namespace MyFirstProject.Extensions
         }
         public static void CCreateText(Point3d position, double height, string TextString, string layerName, string textStyle)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
                 _ = new UtilitiesCAD();
@@ -557,7 +555,7 @@ namespace MyFirstProject.Extensions
         }
         public static void CCreateTextWithOutPut(Point3d position, double height, string TextString, string layerName, string textStyle)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new
                 UserInput();
@@ -602,7 +600,7 @@ namespace MyFirstProject.Extensions
         }
         public static DBText CCreateText2(Point3d position, double height, string TextString, string layerName, string textStyle)
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
                 _ = new UtilitiesCAD();
@@ -683,9 +681,7 @@ namespace MyFirstProject.Extensions
         public static ObjectId CreateDimStyle(string DimStyleName)
         {
             Database db = HostApplicationServices.WorkingDatabase;
-            Transaction tr = db.TransactionManager.StartTransaction();
-
-            using (tr)
+            using (Transaction tr = db.TransactionManager.StartTransaction())
             {
                 DimStyleTable DimTabb = (DimStyleTable)tr.GetObject(db.DimStyleTableId, OpenMode.ForRead);
                 ObjectId dimId = ObjectId.Null;
@@ -733,7 +729,7 @@ namespace MyFirstProject.Extensions
         }
         public static void CreateDim()
         {
-            Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using (Transaction tr = A.Db.TransactionManager.StartTransaction())
             {
                 _ = new UserInput();
                 _ = new UtilitiesCAD();

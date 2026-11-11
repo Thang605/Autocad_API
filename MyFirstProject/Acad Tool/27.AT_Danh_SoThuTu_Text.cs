@@ -80,7 +80,7 @@ namespace Civil3DCsharp
 
     public class AT_DanhSoThuTu_Text_Class
     {
-        [CommandMethod("AT_DanhSoThuTu")]
+        [CommandMethod("AT_Danh_So_Thu_Tu_Text")]
         public static void ET_DanhSoThuTu()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

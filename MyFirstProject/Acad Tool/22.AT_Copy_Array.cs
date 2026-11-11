@@ -238,7 +238,7 @@ namespace Civil3DCsharp
 
     public class AT_Copy_Array_Commands
     {
-        [CommandMethod("AT_COPY_ARRAY")]
+        [CommandMethod("AT_Copy_Array")]
         public static void AT_Copy_Array()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

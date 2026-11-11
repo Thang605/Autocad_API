@@ -31,7 +31,7 @@ namespace Civil3DCsharp
 {
     class CTSU_CaoDoMatPhang_TaiCogopoint_Commands
     {
-        [CommandMethod("CTSU_CaoDoMatPhang_TaiCogopoint")]
+        [CommandMethod("CTT_Cao_Do_Mat_Phang_Tai_Cogo_Point")]
         public static void CTSU_CaoDoMatPhang_TaiCogopoint()
         {
             // start transaction

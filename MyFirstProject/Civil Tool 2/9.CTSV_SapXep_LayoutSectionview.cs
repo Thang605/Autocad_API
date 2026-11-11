@@ -36,7 +36,7 @@ namespace Civil3DCsharp
         /// Section view sẽ được di chuyển (Location) vào vị trí trung tâm mỗi ô trong lưới.
         /// Vẽ khung in bằng Polyline trên layer Defpoints cho từng trang.
         /// </summary>
-        [CommandMethod("CTSV_SapXep_Layout")]
+        [CommandMethod("CTS_Sap_Xep_Layout")]
         public static void CTSVSapXepLayout()
         {
             // 1. Hiển thị form nhập thông số

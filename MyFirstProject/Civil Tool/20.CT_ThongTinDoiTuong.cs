@@ -32,7 +32,7 @@ namespace Civil3DCsharp
 {
     public class CT_ThongTinDoiTuong_Commands
     {
-        [CommandMethod("CT_ThongTinDoiTuong")]
+        [CommandMethod("CT_Thong_Tin_Doi_Tuong")]
         public static void CTThongTinDoiTuong()
         {
             // start transaction

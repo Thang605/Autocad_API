@@ -52,7 +52,7 @@ namespace Civil3DCsharp
         /// Lệnh CTSV_HieuChinhTextChong - Hiệu chỉnh text chồng lên nhau
         /// trong Section Data Band Label Group bằng cách điều chỉnh grip (DraggedOffset)
         /// </summary>
-        [CommandMethod("CTSV_HieuChinhTextChong")]
+        [CommandMethod("CTS_Hieu_Chinh_Text_Chong")]
         public static void CTSVHieuChinhTextChong()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

@@ -25,7 +25,7 @@ namespace Civil3DCsharp
         /// <summary>
         /// Lệnh ghi Label cho các đối tượng Arc sử dụng Civil 3D General Segment Label
         /// </summary>
-        [CommandMethod("AT_DIM_DUONGCONG")]
+        [CommandMethod("AT_Dim_Duong_Cong")]
         public static void AT_DIM_DUONGCONG()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

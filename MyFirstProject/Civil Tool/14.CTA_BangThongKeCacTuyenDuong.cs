@@ -32,7 +32,7 @@ namespace MyFirstProject
 {
     public class CTA_BangThongKeCacTuyenDuong_Commands
     {
-        [CommandMethod("CTA_BangThongKeCacTuyenDuong")]
+        [CommandMethod("CTA_Bang_Thong_Ke_Cac_Tuyen_Duong")]
 
         public static void CTABangThongKeCacTuyenDuong()
         {

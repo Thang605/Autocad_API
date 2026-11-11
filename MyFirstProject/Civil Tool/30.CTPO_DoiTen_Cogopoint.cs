@@ -14,7 +14,7 @@ namespace Civil3DCsharp
 {
     class CTPO_DoiTen_Cogopoint_Commands
     {
-        [CommandMethod("CTPO_DoiTen_Cogopoint")]
+        [CommandMethod("CT_Doi_Ten_Cogo_Point")]
         public static void CTPO_DoiTen_Cogopoint()
         {
             // Show the Name Template form

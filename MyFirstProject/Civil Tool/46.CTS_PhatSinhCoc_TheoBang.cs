@@ -24,7 +24,7 @@ namespace Civil3DCsharp
     {
         private static ObjectId _lastSelectedTableId = ObjectId.Null;
 
-        [CommandMethod("CTS_PhatSinhCoc_TheoBang")]
+        [CommandMethod("CTS_Phat_Sinh_Coc_Theo_Bang")]
         public static void CTSPhatSinhCocTheoBang()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

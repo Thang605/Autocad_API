@@ -16,7 +16,7 @@ namespace Civil3DCsharp
 {
     public class CTC_BatTat_CorridorRegion_Polyline_Command
     {
-        [CommandMethod("CTC_BatTat_CorridorRegion_Polyline")]
+        [CommandMethod("CTC_Bat_Tat_Corridor_Region_Polyline")]
         public static void Execute()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;

@@ -26,7 +26,7 @@ namespace Civil3DCsharp
         private static int _lastPvi2Index = -1;
         private static int _lastPviCenterIndex = -1;
 
-        [CommandMethod("CTP_DieuChinhDuongDo")]
+        [CommandMethod("CTP_Dieu_Chinh_Duong_Do")]
         public void CTP_DieuChinhDuongDo()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
