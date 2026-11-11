@@ -1,0 +1,1145 @@
+﻿{
+    "categories":  [
+                       {
+                           "name":  "Civil — 1. Tuyến (Alignment)",
+                           "commands":  [
+                                            {
+                                                "label":  "Bố trí đường cong nằm tự động",
+                                                "command":  "CTA_Bo_Tri_Cong_Nam",
+                                                "description":  "Tự động bố trí bán kính đường cong nằm và chuyển tiếp tại các đỉnh PI"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh bán kính Connected Alignment",
+                                                "command":  "CTA_Dieu_Chinh_Ban_Kinh_Connected_Alignment",
+                                                "description":  "Thay đổi bán kính cong cho các tuyến nối nút giao"
+                                            },
+                                            {
+                                                "label":  "Tạo đường Offset từ Alignment",
+                                                "command":  "CTA_Offset_Alignment",
+                                                "description":  "Tạo các đường Offset Alignment hai bên tuyến chính"
+                                            },
+                                            {
+                                                "label":  "Đề xuất mặt cắt ngang theo tuyến",
+                                                "command":  "CTA_De_Xuat_Cat_Ngang",
+                                                "description":  "Phân tích và đề xuất quy mô mặt cắt ngang cho tuyến"
+                                            },
+                                            {
+                                                "label":  "Kiểm tra tiêu chuẩn bình đồ tuyến",
+                                                "command":  "CTA_Kiem_Tra_Tim_Tuyen",
+                                                "description":  "Kiểm tra các yếu tố hình học bình đồ tuyến theo TCVN"
+                                            },
+                                            {
+                                                "label":  "Kiểm tra tầm nhìn (Sight Distance)",
+                                                "command":  "CTA_Kiem_Tra_Tam_Nhin",
+                                                "description":  "Phân tích và kiểm tra tầm nhìn dừng xe / vượt xe trên tuyến"
+                                            },
+                                            {
+                                                "label":  "Gán nhãn đầu tuyến \u0026 cuối tuyến",
+                                                "command":  "CTA_Gan_Nhan_Dau_Cuoi_Tuyen",
+                                                "description":  "Tự động gắn nhãn lý trình điểm đầu và điểm cuối tuyến"
+                                            },
+                                            {
+                                                "label":  "Bảng thống kê các tuyến đường",
+                                                "command":  "CTA_Bang_Thong_Ke_Cac_Tuyen_Duong",
+                                                "description":  "Tạo bảng tổng hợp thông số kỹ thuật các tuyến đường"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 2. Trắc dọc (Profile)",
+                           "commands":  [
+                                            {
+                                                "label":  "Vẽ trắc dọc tự nhiên (1 tuyến)",
+                                                "command":  "CTP_Ve_Trac_Doc_Tu_Nhien",
+                                                "description":  "Tạo đường trắc dọc tự nhiên và khung ProfileView cho 1 tuyến"
+                                            },
+                                            {
+                                                "label":  "Vẽ trắc dọc tự nhiên (Tất cả tuyến)",
+                                                "command":  "CTP_Ve_Trac_Doc_Tu_Nhien_Tat_Ca_Tuyen",
+                                                "description":  "Tạo trắc dọc tự nhiên hàng loạt cho tất cả tuyến trong bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh đường đỏ thiết kế",
+                                                "command":  "CTP_Dieu_Chinh_Duong_Do",
+                                                "description":  "Công cụ tinh chỉnh cao độ và độ dốc đường đỏ thiết kế"
+                                            },
+                                            {
+                                                "label":  "Bố trí đường cong đứng tự động",
+                                                "command":  "CTP_Bo_Tri_Cong_Dung",
+                                                "description":  "Tự động bố trí bán kính cong đứng lồi/lõm tại các đỉnh đổi dốc PVI"
+                                            },
+                                            {
+                                                "label":  "Kiểm tra tiêu chuẩn trắc dọc",
+                                                "command":  "CTP_Kiem_Tra_Profile",
+                                                "description":  "Kiểm tra độ dốc dọc, chiều dài đoạn dốc và bán kính cong đứng theo TCVN"
+                                            },
+                                            {
+                                                "label":  "Sửa đường tự nhiên theo cọc",
+                                                "command":  "CTP_Fix_Duong_Tu_Nhien_Theo_Coc",
+                                                "description":  "Lọc đỉnh đường tự nhiên trên trắc dọc trùng với vị trí cọc SampleLine"
+                                            },
+                                            {
+                                                "label":  "Bổ sung cọc từ trắc dọc",
+                                                "command":  "CTP_Bo_Sung_Coc_Tren_Trac_Doc",
+                                                "description":  "Phát sinh thêm cọc SampleLine tại các vị trí chọn trên trắc dọc"
+                                            },
+                                            {
+                                                "label":  "Gắn nhãn nút giao lên trắc dọc",
+                                                "command":  "CTP_Gan_Nhan_Nut_Giao_Len_Trac_Doc",
+                                                "description":  "Tự động tìm giao điểm các tuyến và gắn nhãn lý trình lên trắc dọc"
+                                            },
+                                            {
+                                                "label":  "Tạo CogoPoint từ đỉnh PVI",
+                                                "command":  "CTP_Tao_Cogo_Point_Tu_PVI",
+                                                "description":  "Trích xuất tọa độ và cao độ các đỉnh PVI trên trắc dọc thành CogoPoint"
+                                            },
+                                            {
+                                                "label":  "Chuyển Polyline thành Profile",
+                                                "command":  "CTP_Polyline_To_Profile",
+                                                "description":  "Chuyển đổi đường Polyline trên trắc dọc thành Profile Civil 3D"
+                                            },
+                                            {
+                                                "label":  "Xuất Profile thành Polyline",
+                                                "command":  "CTP_Profile_To_Polyline",
+                                                "description":  "Xuất đường Profile trên ProfileView thành đối tượng Polyline"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh Profile theo Polyline",
+                                                "command":  "CTP_Adjust_Profile_By_Polyline",
+                                                "description":  "Cập nhật cao độ đỉnh PVI của Profile bám theo đường Polyline"
+                                            },
+                                            {
+                                                "label":  "Thay đổi dữ liệu Profile trong Band",
+                                                "command":  "CTP_Thay_Doi_Profile_Band",
+                                                "description":  "Gán đồng loạt Profile tự nhiên và thiết kế vào các dòng Band trắc dọc"
+                                            },
+                                            {
+                                                "label":  "Dịch chuyển nhãn chẵn trong Band",
+                                                "command":  "CTP_Dich_Chuyen_Label_Chan",
+                                                "description":  "Dịch chuyển vị trí nhãn tại các lý trình chẵn trong Band trắc dọc"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 3. Hành lang (Corridor)",
+                           "commands":  [
+                                            {
+                                                "label":  "Tạo Corridor cho tuyến đường",
+                                                "command":  "CTC_Tao_Corridor_Cho_Tuyen_Duong",
+                                                "description":  "Tự động xây dựng Corridor, Region và gán Target cho tuyến đường"
+                                            },
+                                            {
+                                                "label":  "Tạo Corridor theo từng cấu kiện",
+                                                "command":  "CTC_Tao_Corridor_Theo_Cau_Kien",
+                                                "description":  "Tách và xây dựng Corridor riêng theo từng nhóm cấu kiện"
+                                            },
+                                            {
+                                                "label":  "Tạo Corridor đường đô thị rẽ phải",
+                                                "command":  "CTC_Tao_Corridor_Duong_Do_Thi_Re_Phai",
+                                                "description":  "Tạo Corridor cho góc nút giao rẽ phải đường đô thị"
+                                            },
+                                            {
+                                                "label":  "Thêm Section cho tất cả Region",
+                                                "command":  "CTC_Them_Section_Tat_Ca_Region",
+                                                "description":  "Bổ sung mặt cắt cọc vào tất cả các phân đoạn Region của Corridor"
+                                            },
+                                            {
+                                                "label":  "Thêm tất cả Section (SampleLine)",
+                                                "command":  "CTC_Add_All_Section",
+                                                "description":  "Thêm toàn bộ vị trí cọc SampleLine làm mặt cắt tính toán trong Corridor"
+                                            },
+                                            {
+                                                "label":  "Cấu hình Target cho Subassembly",
+                                                "command":  "CTC_Cau_Hinh_Target_Corridor",
+                                                "description":  "Thiết lập tự động các mục tiêu (Width/Elevation/Surface Target) cho Subassembly"
+                                            },
+                                            {
+                                                "label":  "Xem thông tin Target của Corridor",
+                                                "command":  "CTC_Thong_Tin_Target_Corridor",
+                                                "description":  "Liệt kê chi tiết các đối tượng Target đang gán trong Corridor"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh lý trình phân đoạn Region",
+                                                "command":  "CTC_Dieu_Chinh_Phan_Doan",
+                                                "description":  "Tinh chỉnh lý trình đầu/cuối của các Region trong Corridor"
+                                            },
+                                            {
+                                                "label":  "Chọn phân đoạn Region trên Corridor",
+                                                "command":  "CTC_Chon_Doan_Corridor",
+                                                "description":  "Chọn và quản lý các phân đoạn Region trên bình đồ"
+                                            },
+                                            {
+                                                "label":  "Phân chia Corridor theo Profile",
+                                                "command":  "CTC_Phan_Chia_Corridor_Theo_Profile",
+                                                "description":  "Tự động cắt chia Region của Corridor theo các đoạn của trắc dọc"
+                                            },
+                                            {
+                                                "label":  "Nhân bản Corridor (Copy)",
+                                                "command":  "CTC_Nhan_Ban_Corridor",
+                                                "description":  "Sao chép cấu trúc Baseline và Region sang một Corridor mới"
+                                            },
+                                            {
+                                                "label":  "Bật/Tắt \u0026 chia nhỏ Region theo Polyline",
+                                                "command":  "CTC_Bat_Tat_Corridor_Region_Polyline",
+                                                "description":  "Tự động bật hoặc tắt các Region nằm trong vùng Polyline kín"
+                                            },
+                                            {
+                                                "label":  "Xóa các Region đang bị tắt",
+                                                "command":  "CTC_Xoa_Region_Bi_Tat",
+                                                "description":  "Dọn dẹp và xóa vĩnh viễn các Region đã tắt trong Corridor"
+                                            },
+                                            {
+                                                "label":  "Tạo Corridor Surface (Hàng loạt / Form)",
+                                                "command":  "CTC_Tao_Corridor_Surface",
+                                                "description":  "Tự động tạo bề mặt Top/Datum cho nhiều Corridor cùng lúc"
+                                            },
+                                            {
+                                                "label":  "Tạo Corridor Surface (Chọn đơn)",
+                                                "command":  "CTC_Tao_Corridor_Surface_Don",
+                                                "description":  "Tạo nhanh bề mặt thiết kế cho 1 Corridor được chọn"
+                                            },
+                                            {
+                                                "label":  "Xuất 3D Solid từ Corridor",
+                                                "command":  "CTC_Xuat_Solid_Tu_Corridor",
+                                                "description":  "Trích xuất hàng loạt khối 3D Solid kết cấu từ Corridor"
+                                            },
+                                            {
+                                                "label":  "Ngắt liên kết \u0026 xóa Solid/Body Corridor",
+                                                "command":  "CTC_Ngat_Lien_Ket_Solid_Corridor",
+                                                "description":  "Ngắt liên kết động của 3D Solid với Corridor và dọn dẹp Body"
+                                            },
+                                            {
+                                                "label":  "Trích xuất ranh giới Corridor",
+                                                "command":  "CTC_Trich_Xuat_Ranh_Gioi_Corridor",
+                                                "description":  "Xuất đường bao ranh giới chân taluy / phạm vi chiếm dụng của Corridor"
+                                            },
+                                            {
+                                                "label":  "Quản lý \u0026 tạo Subassembly .NET",
+                                                "command":  "CTC_Quan_Ly_Subassembly_DotNet",
+                                                "description":  "Quản lý, cấu hình và chèn các Subassembly .NET tùy chỉnh"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 4. Cọc \u0026 Lý trình (Sample Line)",
+                           "commands":  [
+                                            {
+                                                "label":  "Phát sinh cọc tự động trên tuyến",
+                                                "command":  "CTS_Phat_Sinh_Coc",
+                                                "description":  "Phát sinh cọc lý trình Km, H, cọc chi tiết và cọc đặc biệt trên tuyến"
+                                            },
+                                            {
+                                                "label":  "Phát sinh cọc thủ công",
+                                                "command":  "CTS_Phat_Sinh_Coc_Thu_Cong",
+                                                "description":  "Chọn vị trí trực tiếp trên bình đồ để chèn cọc và đặt tên tự động"
+                                            },
+                                            {
+                                                "label":  "Phát sinh cọc theo bảng cấu hình",
+                                                "command":  "CTS_Phat_Sinh_Coc_Theo_Bang",
+                                                "description":  "Phát sinh cọc hàng loạt theo bảng phân đoạn khoảng cách"
+                                            },
+                                            {
+                                                "label":  "Phát sinh cọc theo khoảng Delta",
+                                                "command":  "CTS_Phat_Sinh_Coc_Theo_Khoang_Delta",
+                                                "description":  "Rải cọc đều theo khoảng cách Delta trong phạm vi chọn"
+                                            },
+                                            {
+                                                "label":  "Phát sinh cọc từ CogoPoint",
+                                                "command":  "CTS_Phat_Sinh_Coc_Tu_Cogo_Point",
+                                                "description":  "Tạo cọc SampleLine chiếu vuông góc từ các điểm CogoPoint"
+                                            },
+                                            {
+                                                "label":  "Chèn cọc trên trắc dọc",
+                                                "command":  "CTS_Chen_Coc_Tren_Trac_Doc",
+                                                "description":  "Hiển thị ký hiệu và tên cọc SampleLine lên khung trắc dọc"
+                                            },
+                                            {
+                                                "label":  "Chèn cọc trên trắc ngang",
+                                                "command":  "CTS_Chen_Coc_Tren_Trac_Ngang",
+                                                "description":  "Chèn bổ sung cọc mới từ vị trí mặt cắt ngang"
+                                            },
+                                            {
+                                                "label":  "Bổ sung cọc từ Data Shortcut (Local)",
+                                                "command":  "CTS_Bo_Sung_Coc_Data_Shortcut",
+                                                "description":  "Đọc và sao chép cọc SampleLine từ file nguồn DataShortcut vào bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Bổ sung cọc từ Data Shortcut (Ref)",
+                                                "command":  "CTS_Bo_Sung_Coc_Data_Shortcut_Ref",
+                                                "description":  "Tạo tham chiếu DataShortcut Reference cho tuyến và cọc"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc theo quy tắc (Form)",
+                                                "command":  "CTS_Doi_Ten_Coc_Quy_Tac",
+                                                "description":  "Đổi tên cọc thông minh theo quy tắc tiền tố, hậu tố và lý trình"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc cơ bản",
+                                                "command":  "CTS_Doi_Ten_Coc",
+                                                "description":  "Đánh lại số thứ tự tên cọc liên tục từ đầu đến cuối tuyến"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc theo đoạn",
+                                                "command":  "CTS_Doi_Ten_Coc_2",
+                                                "description":  "Đổi tên cọc trong phạm vi đoạn lý trình chỉ định"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc theo lý trình Km",
+                                                "command":  "CTS_Doi_Ten_Coc_3",
+                                                "description":  "Tự động đặt tên các cọc Km và cọc H theo lý trình"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc H (Hectomet)",
+                                                "command":  "CTS_Doi_Ten_Coc_H",
+                                                "description":  "Chuẩn hóa tên gọi cho các cọc Hectomet (H1..H9)"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc theo thứ tự chọn",
+                                                "command":  "CTS_Doi_Ten_Coc_Theo_Thu_Tu",
+                                                "description":  "Đổi tên các cọc theo thứ tự người dùng chọn trên bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Đổi tên cọc từ CogoPoint",
+                                                "command":  "CTS_Doi_Ten_Coc_Tu_Cogo_Point",
+                                                "description":  "Lấy tên/mô tả của CogoPoint gán sang tên cọc SampleLine tương ứng"
+                                            },
+                                            {
+                                                "label":  "Dịch cọc tịnh tiến (Tùy chọn)",
+                                                "command":  "CTS_Dich_Coc_Tinh_Tien",
+                                                "description":  "Dịch chuyển vị trí cọc dọc theo tuyến một khoảng Delta nhập vào"
+                                            },
+                                            {
+                                                "label":  "Dịch cọc tịnh tiến 20m",
+                                                "command":  "CTS_Dich_Coc_Tinh_Tien_20",
+                                                "description":  "Dịch chuyển nhanh cọc theo bước 20m"
+                                            },
+                                            {
+                                                "label":  "Dịch cọc tịnh tiến 40m",
+                                                "command":  "CTS_Dich_Coc_Tinh_Tien_40",
+                                                "description":  "Dịch chuyển nhanh cọc theo bước 40m"
+                                            },
+                                            {
+                                                "label":  "Sao chép nhóm cọc (Copy Group)",
+                                                "command":  "CTS_Copy_Nhom_Coc",
+                                                "description":  "Sao chép các cọc SampleLine sang một nhóm cọc hoặc tuyến khác"
+                                            },
+                                            {
+                                                "label":  "Đồng bộ 2 nhóm cọc",
+                                                "command":  "CTS_Dong_Bo_2_Nhom_Coc",
+                                                "description":  "Đồng bộ tên và lý trình giữa 2 nhóm cọc SampleLineGroup"
+                                            },
+                                            {
+                                                "label":  "Đồng bộ 2 nhóm cọc theo đoạn",
+                                                "command":  "CTS_Dong_Bo_2_Nhom_Coc_Theo_Doan",
+                                                "description":  "Đồng bộ tên và lý trình giữa 2 nhóm cọc trong đoạn chỉ định"
+                                            },
+                                            {
+                                                "label":  "Thay đổi bề rộng Sample Line",
+                                                "command":  "CTS_Thay_Doi_Be_Rong_Sample_Line",
+                                                "description":  "Thay đổi bề rộng sang trái và sang phải của các cọc SampleLine"
+                                            },
+                                            {
+                                                "label":  "Sao chép bề rộng Sample Line",
+                                                "command":  "CTS_Copy_Be_Rong_Sample_Line",
+                                                "description":  "Sao chép bề rộng lấy mẫu từ cọc mẫu sang các cọc khác"
+                                            },
+                                            {
+                                                "label":  "Offset bề rộng Sample Line theo Polyline",
+                                                "command":  "CTS_Offset_Be_Rong_Sample_Line",
+                                                "description":  "Cắt hoặc kéo dài bề rộng SampleLine bám theo đường biên Polyline trái/phải"
+                                            },
+                                            {
+                                                "label":  "Hiệu chỉnh khoảng cách cọc (Làm tròn)",
+                                                "command":  "CTS_Hieu_Chinh_Khoang_Cach_Coc",
+                                                "description":  "Làm tròn lý trình các cọc lẻ về số chẵn theo bước làm tròn"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh cọc vuông góc tuyến (Orthogonal)",
+                                                "command":  "CTS_Dieu_Chinh_Orthogonal",
+                                                "description":  "Xoay các vạch cọc SampleLine bị xiên về đúng phương vuông góc 90 độ với tim"
+                                            },
+                                            {
+                                                "label":  "Xuất bảng tọa độ cọc (Form đầy đủ)",
+                                                "command":  "CTS_Xuat_Toa_Do_Coc",
+                                                "description":  "Xuất bảng tọa độ X, Y, lý trình và khoảng cách lẻ của hệ thống cọc"
+                                            },
+                                            {
+                                                "label":  "Tạo bảng tọa độ cọc (Mẫu 1)",
+                                                "command":  "CTS_Tao_Bang_Toa_Do_Coc",
+                                                "description":  "Lập bảng tọa độ cọc trực tiếp trên bản vẽ theo mẫu 1"
+                                            },
+                                            {
+                                                "label":  "Tạo bảng tọa độ cọc (Mẫu 2 - Lý trình)",
+                                                "command":  "CTS_Tao_Bang_Toa_Do_Coc_2",
+                                                "description":  "Lập bảng tọa độ cọc kèm lý trình theo mẫu 2"
+                                            },
+                                            {
+                                                "label":  "Tạo bảng tọa độ cọc (Mẫu 3 - Cao độ)",
+                                                "command":  "CTS_Tao_Bang_Toa_Do_Coc_3",
+                                                "description":  "Lập bảng tọa độ cọc kèm cao độ theo mẫu 3"
+                                            },
+                                            {
+                                                "label":  "Cập nhật 2 bảng tọa độ cọc",
+                                                "command":  "CTS_Cap_Nhat_2_Bang_Toa_Do_Coc",
+                                                "description":  "Cập nhật dữ liệu đồng thời cho 2 bảng thống kê tọa độ cọc"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 5. Trắc ngang (Section View)",
+                           "commands":  [
+                                            {
+                                                "label":  "Vẽ trắc ngang thiết kế",
+                                                "command":  "CTS_Ve_Trac_Ngang_Thiet_Ke",
+                                                "description":  "Tạo hàng loạt khung trắc ngang SectionView kèm bảng khối lượng"
+                                            },
+                                            {
+                                                "label":  "Bổ sung Section trên trắc ngang",
+                                                "command":  "CTS_Bo_Sung_Cat_Ngang",
+                                                "description":  "Thêm nguồn dữ liệu Surface / Corridor mới vào tất cả SectionView"
+                                            },
+                                            {
+                                                "label":  "Tính toán \u0026 vẽ đánh cấp tự động",
+                                                "command":  "CTS_Danh_Cap",
+                                                "description":  "Tính toán và vẽ bậc đánh cấp vét hữu cơ / đắp nền trên trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Cập nhật lại đánh cấp",
+                                                "command":  "CTS_Danh_Cap_Cap_Nhat",
+                                                "description":  "Tính toán và cập nhật lại chiều dài đánh cấp sau khi chỉnh sửa"
+                                            },
+                                            {
+                                                "label":  "Vẽ thêm đánh cấp tùy chọn",
+                                                "command":  "CTS_Danh_Cap_Ve_Them",
+                                                "description":  "Vẽ bổ sung bậc đánh cấp tại vị trí chỉ định trên trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Vẽ thêm đánh cấp 1m",
+                                                "command":  "CTS_Danh_Cap_Ve_Them_1",
+                                                "description":  "Vẽ nhanh bậc đánh cấp rộng 1m trên trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Vẽ thêm đánh cấp 2m",
+                                                "command":  "CTS_Danh_Cap_Ve_Them_2",
+                                                "description":  "Vẽ nhanh bậc đánh cấp rộng 2m trên trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Xóa bỏ đánh cấp",
+                                                "command":  "CTS_Danh_Cap_Xoa_Bo",
+                                                "description":  "Xóa toàn bộ đường đánh cấp và dữ liệu đánh cấp trên trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Hiệu chỉnh Section (Static)",
+                                                "command":  "CTS_Hieu_Chinh_Section",
+                                                "description":  "Chuyển các đường cắt ngang được chọn sang chế độ tĩnh (Static)"
+                                            },
+                                            {
+                                                "label":  "Hiệu chỉnh Section (Dynamic)",
+                                                "command":  "CTS_Hieu_Chinh_Section_Dynamic",
+                                                "description":  "Chuyển các đường cắt ngang được chọn về chế độ động (Dynamic)"
+                                            },
+                                            {
+                                                "label":  "Chọn nhanh Section Static",
+                                                "command":  "CTS_Chon_Section_Static",
+                                                "description":  "Quét và chọn các mặt cắt ngang đang ở trạng thái Static"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh đường tự nhiên trên trắc ngang",
+                                                "command":  "CTS_Dieu_Chinh_Duong_Tu_Nhien",
+                                                "description":  "Chỉnh sửa cao độ đường tự nhiên EG trên các mặt cắt ngang"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi nhãn TN-TK sang TN-TN",
+                                                "command":  "CTS_Chuyen_Doi_TNTK_TNTN",
+                                                "description":  "Chuyển đổi kiểu hiển thị nhãn chênh cao trên Band trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Khóa cắt ngang \u0026 thêm điểm",
+                                                "command":  "CTS_Khoa_Cat_Ngang_Add_Point",
+                                                "description":  "Khóa đường cắt ngang và chèn thêm điểm gãy"
+                                            },
+                                            {
+                                                "label":  "Ẩn đường địa chất trên trắc ngang",
+                                                "command":  "CTS_An_Duong_Dia_Chat",
+                                                "description":  "Ẩn nhanh các đường địa chất nằm ngoài phạm vi đào/đắp"
+                                            },
+                                            {
+                                                "label":  "Hiệu chỉnh nhãn Text bị chồng đè",
+                                                "command":  "CTS_Hieu_Chinh_Text_Chong",
+                                                "description":  "Tự động rải và dịch chuyển các nhãn cao độ/khoảng cách bị đè nhau trên trắc ngang",
+                                                "videoUrl":  "Y:\\8. HDSD PHAN MEM - FORM MAU\\6.CIVIL 3D\\1.civil tool\\CTSV_HIEUCHINHTEXTCHONG.mkv"
+                                            },
+                                            {
+                                                "label":  "Tạo Polyline từ Section",
+                                                "command":  "CTS_Polyline_Tu_Section",
+                                                "description":  "Trích xuất hình học đường mặt cắt trên SectionView ra Polyline"
+                                            },
+                                            {
+                                                "label":  "Sắp xếp Layout Section View",
+                                                "command":  "CTS_Sap_Xep_Layout",
+                                                "description":  "Sắp xếp vị trí các trắc ngang theo hàng/cột gọn gàng"
+                                            },
+                                            {
+                                                "label":  "Fit khung in trắc ngang",
+                                                "command":  "CTS_Fit_Khung_In",
+                                                "description":  "Tự động căn chỉnh vùng hiển thị SectionView vừa khít khung in"
+                                            },
+                                            {
+                                                "label":  "Thay đổi khung in trắc ngang",
+                                                "command":  "CTS_Thay_Doi_Khung_In",
+                                                "description":  "Đổi mẫu Group Plot Style và Plot Area cho nhóm trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Thay đổi cao độ MSS (Form)",
+                                                "command":  "CTS_Thay_Doi_MSS",
+                                                "description":  "Mở giao diện cấu hình chi tiết cao độ và bề rộng cho nhóm SectionView"
+                                            },
+                                            {
+                                                "label":  "Thay đổi giới hạn cao độ MSS Min/Max",
+                                                "command":  "CTS_Thay_Doi_MSS_Min_Max",
+                                                "description":  "Điều chỉnh khoảng cao độ hiển thị tối thiểu/tối đa cho các SectionView"
+                                            },
+                                            {
+                                                "label":  "Thay đổi giới hạn bề rộng Trái/Phải",
+                                                "command":  "CTS_Thay_Doi_Gioi_Han_Trai_Phai",
+                                                "description":  "Điều chỉnh phạm vi offset trái/phải hiển thị trên SectionView"
+                                            },
+                                            {
+                                                "label":  "Thêm \u0026 cấu hình Material List",
+                                                "command":  "CTS_Them_Material_List",
+                                                "description":  "Tạo danh mục tính khối lượng đào đắp (Material List) cho nhóm cọc"
+                                            },
+                                            {
+                                                "label":  "Xem thông tin Material List",
+                                                "command":  "CTS_Xem_Material_List",
+                                                "description":  "Kiểm tra danh sách các loại vật liệu trong Material List hiện có"
+                                            },
+                                            {
+                                                "label":  "Xóa Material List",
+                                                "command":  "CTS_Xoa_Material_List",
+                                                "description":  "Xóa các Material List trong SampleLineGroup"
+                                            },
+                                            {
+                                                "label":  "Thêm vật liệu trên cắt ngang",
+                                                "command":  "CTS_Them_Vat_Lieu_Tren_Cat_Ngang",
+                                                "description":  "Gán thêm bề mặt vật liệu vào danh mục tính khối lượng"
+                                            },
+                                            {
+                                                "label":  "Thêm bảng khối lượng cắt ngang",
+                                                "command":  "CTS_Them_Bang_KL_Cat_Ngang",
+                                                "description":  "Chèn bảng khối lượng đào/đắp (Volume Table) vào từng SectionView"
+                                            },
+                                            {
+                                                "label":  "Tính tổng chiều dài trên cắt ngang",
+                                                "command":  "CTS_Tong_Chieu_Dai_Cat_Ngang",
+                                                "description":  "Đo và thống kê chiều dài các mã Link (Link Code) của Corridor trên trắc ngang"
+                                            },
+                                            {
+                                                "label":  "Tính khối lượng cắt ngang",
+                                                "command":  "CTS_Khoi_Luong_Cat_Ngang",
+                                                "description":  "Tổng hợp diện tích và khối lượng các lớp vật liệu trên mặt cắt ngang"
+                                            },
+                                            {
+                                                "label":  "Xuất khối lượng trắc ngang ra Excel",
+                                                "command":  "CTS_Xuat_Khoi_Luong_Ra_Excel",
+                                                "description":  "Xuất toàn bộ bảng khối lượng đào đắp và kết cấu của các tuyến ra file Excel"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 6. Bề mặt \u0026 Feature Line (Surface)",
+                           "commands":  [
+                                            {
+                                                "label":  "Tạo mặt phẳng ghép EG - TK",
+                                                "command":  "CTT_Tao_Mat_Phang_EG_TK",
+                                                "description":  "Tạo bề mặt kết hợp giữa địa hình tự nhiên (EG) và mặt phẳng thiết kế (TK)"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh mặt phẳng EG - TK (Tạo vùng sửa)",
+                                                "command":  "CTT_Dieu_Chinh_EG_TK",
+                                                "description":  "Hiệu chỉnh cao độ bề mặt tự nhiên theo bề mặt thiết kế"
+                                            },
+                                            {
+                                                "label":  "Áp dụng chỉnh sửa mặt phẳng EG - TK",
+                                                "command":  "CTT_Dieu_Chinh_EG_TK_Apply",
+                                                "description":  "Thực thi cập nhật cao độ bề mặt EG theo vùng chỉnh sửa"
+                                            },
+                                            {
+                                                "label":  "Xem trạng thái chờ sửa EG - TK",
+                                                "command":  "CTT_Dieu_Chinh_EG_TK_Status",
+                                                "description":  "Kiểm tra trạng thái phiên hiệu chỉnh bề mặt EG - TK hiện tại"
+                                            },
+                                            {
+                                                "label":  "Hủy các Polyline tạm EG - TK",
+                                                "command":  "CTT_Dieu_Chinh_EG_TK_Cancel",
+                                                "description":  "Hủy bỏ phiên hiệu chỉnh bề mặt EG - TK đang chờ"
+                                            },
+                                            {
+                                                "label":  "Lấy cao độ mặt phẳng tại CogoPoint",
+                                                "command":  "CTT_Cao_Do_Mat_Phang_Tai_Cogo_Point",
+                                                "description":  "Nội suy cao độ từ bề mặt TIN Surface và gán cho các điểm CogoPoint"
+                                            },
+                                            {
+                                                "label":  "Tạo Spot Elevation trên Surface tại tim",
+                                                "command":  "CTT_Tao_Spot_Elevation_Tai_Tim",
+                                                "description":  "Tạo nhãn cao độ Spot Elevation dọc theo tim tuyến trên bề mặt"
+                                            },
+                                            {
+                                                "label":  "Trích xuất 3D Solid KCAĐ từ mặt phẳng",
+                                                "command":  "CTT_Xuat_Solid_KCAD_Tu_Mat_Phang",
+                                                "description":  "Tạo các lớp 3D Solid kết cấu áo đường từ bề mặt TIN Surface và vùng bao"
+                                            },
+                                            {
+                                                "label":  "Tạo mặt phẳng (Surface) từ Feature Line",
+                                                "command":  "CTT_Tao_Mat_Phang_Tu_Feature_Line",
+                                                "description":  "Tạo bề mặt TIN Surface từ các đường FeatureLine chọn trên bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Tạo khối 3D Solid từ Feature Line",
+                                                "command":  "CT_Tao_3d_Solid_Tu_Feature_Line",
+                                                "description":  "Quét tiết diện hoặc đùn khối 3D Solid dọc theo đường FeatureLine"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 7. Điểm (CogoPoint)",
+                           "commands":  [
+                                            {
+                                                "label":  "Tạo CogoPoint đa nguồn (Form tổng hợp)",
+                                                "command":  "CT_Tao_Cogo_Point_Tong_Hop",
+                                                "description":  "Giao diện tổng hợp tạo CogoPoint từ Text, Circle, Point, Table, Excel..."
+                                            },
+                                            {
+                                                "label":  "Tạo CogoPoint lấy cao độ từ Surface",
+                                                "command":  "CT_Tao_Cogo_Point_Cao_Do_Tu_Surface",
+                                                "description":  "Rải điểm CogoPoint và tự động nội suy cao độ Z từ bề mặt TIN Surface"
+                                            },
+                                            {
+                                                "label":  "Tạo CogoPoint từ Spot Elevation",
+                                                "command":  "CT_Tao_Cogo_Point_Tu_Elevation_Spot",
+                                                "description":  "Chuyển đổi các nhãn cao độ Spot Elevation thành điểm CogoPoint"
+                                            },
+                                            {
+                                                "label":  "Tạo CogoPoint từ Text cao độ",
+                                                "command":  "CT_Tao_Cogo_Point_Tu_Text",
+                                                "description":  "Đọc giá trị số của Text cao độ hiện trạng để tạo điểm CogoPoint đúng vị trí"
+                                            },
+                                            {
+                                                "label":  "Tạo CogoPoint từ file Excel",
+                                                "command":  "CT_Tao_Cogo_Point_Tu_Excel",
+                                                "description":  "Nhập danh sách tọa độ điểm X, Y, Z, Mô tả từ file Excel vào bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Đổi tên CogoPoint theo mẫu (Template)",
+                                                "command":  "CT_Doi_Ten_Cogo_Point",
+                                                "description":  "Đổi tên điểm CogoPoint hàng loạt kết hợp xuất/nhập Excel"
+                                            },
+                                            {
+                                                "label":  "Đổi tên CogoPoint theo tuyến Alignment",
+                                                "command":  "CT_Doi_Ten_Cogo_Point_Tu_Alignment",
+                                                "description":  "Đổi tên CogoPoint theo thứ tự lý trình dọc theo tuyến Alignment"
+                                            },
+                                            {
+                                                "label":  "Thêm mô tả (Description) cho CogoPoint",
+                                                "command":  "CT_Them_Mo_Ta_Cogo_Point",
+                                                "description":  "Gán hoặc cập nhật mã mô tả Raw Description hàng loạt cho CogoPoint"
+                                            },
+                                            {
+                                                "label":  "Cập nhật tất cả Point Group",
+                                                "command":  "CT_Update_All_Point_Group",
+                                                "description":  "Cập nhật (Update) lại toàn bộ các nhóm điểm PointGroup trong bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Ẩn CogoPoint được chọn",
+                                                "command":  "CT_An_Cogo_Point",
+                                                "description":  "Chuyển Point Style và Label Style của các CogoPoint được chọn về None (ẩn)"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 8. Thoát nước (Pipe Network)",
+                           "commands":  [
+                                            {
+                                                "label":  "Thay đổi đường kính cống hàng loạt",
+                                                "command":  "CT_Thay_Doi_Duong_Kinh_Cong",
+                                                "description":  "Đổi kích thước đường kính trong Part Family cho nhiều đoạn cống"
+                                            },
+                                            {
+                                                "label":  "Thay đổi độ dốc cống",
+                                                "command":  "CT_Thay_Doi_Do_Doc_Cong",
+                                                "description":  "Cập nhật độ dốc dọc cho các đoạn cống được chọn"
+                                            },
+                                            {
+                                                "label":  "Thay đổi cao độ đáy cống (Invert)",
+                                                "command":  "CT_Thay_Doi_Cao_Do_Day_Cong",
+                                                "description":  "Tinh chỉnh cao độ đáy cống đầu/cuối hoặc theo độ dốc thiết kế"
+                                            },
+                                            {
+                                                "label":  "Điều chỉnh bề mặt tham chiếu cống/hố thu",
+                                                "command":  "CT_Dieu_Chinh_Be_Mat_Tham_Chieu",
+                                                "description":  "Gán đồng loạt Reference Surface và Reference Alignment cho cống \u0026 hố ga"
+                                            },
+                                            {
+                                                "label":  "Lập bảng cao độ tự nhiên hố thu",
+                                                "command":  "CT_Bang_Cao_Do_Tu_Nhien_Ho_Thu",
+                                                "description":  "Tạo bảng tổng hợp tọa độ và cao độ mặt đất tự nhiên tại các hố thu"
+                                            },
+                                            {
+                                                "label":  "Xoay hố thu theo 2 điểm",
+                                                "command":  "CT_Xoay_Ho_Thu_Theo_2_Diem",
+                                                "description":  "Xoay góc hướng của hố ga/cửa thu nước theo hướng 2 điểm chọn trên bản vẽ"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 9. Thửa đất (Parcel)",
+                           "commands":  [
+                                            {
+                                                "label":  "Thống kê Parcel ra bảng CAD / Excel",
+                                                "command":  "CT_Bang_Thong_Ke_Parcel",
+                                                "description":  "Tổng hợp diện tích các lô đất Parcel và xuất bảng thống kê chuẩn"
+                                            },
+                                            {
+                                                "label":  "Đổi tên Parcel theo mẫu (Template)",
+                                                "command":  "CT_Doi_Ten_Parcel",
+                                                "description":  "Đặt lại tên các lô đất Parcel theo mẫu tiền tố và số thứ tự"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "Civil — 10. BIM Property Sets \u0026 Thông tin",
+                           "commands":  [
+                                            {
+                                                "label":  "Cập nhật màu \u0026 PropertySet BIM (Solid \u0026 Surface)",
+                                                "command":  "AT_Cap_Nhat_Mau_Va_Property_Set",
+                                                "description":  "Đồng bộ màu sắc Layer, đặt ByLayer cho 3D Solid và nhập/xuất Property Set qua Excel"
+                                            },
+                                            {
+                                                "label":  "Cập nhật PropertySet 3D Solid theo Layer",
+                                                "command":  "AT_Solid_Update_Property_Set",
+                                                "description":  "Cập nhật nhanh thông tin Property Set của 3D Solid dựa theo tên Layer"
+                                            },
+                                            {
+                                                "label":  "Gán PropertySet cho 3D Solid",
+                                                "command":  "AT_Solid_Set_Property_Set",
+                                                "description":  "Khởi tạo bộ thuộc tính BIM Property Set và gán cho các khối 3D Solid"
+                                            },
+                                            {
+                                                "label":  "Xem thông tin khối 3D Solid",
+                                                "command":  "AT_Solid_Show_Info",
+                                                "description":  "Đọc và hiển thị thông tin thể tích, diện tích và thuộc tính của 3D Solid"
+                                            },
+                                            {
+                                                "label":  "Tra cứu thông tin đối tượng Civil 3D",
+                                                "command":  "CT_Thong_Tin_Doi_Tuong",
+                                                "description":  "Tra cứu nhanh thông số hình học và thuộc tính đối tượng Civil 3D"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 1. Layer, Tỷ lệ \u0026 Chuẩn hóa",
+                           "commands":  [
+                                            {
+                                                "label":  "Chuẩn hóa bản vẽ theo tiêu chuẩn T27",
+                                                "command":  "AT_Chuan_Hoa_Ban_Ve",
+                                                "description":  "Thiết lập trọn bộ 15 Layer chuẩn, TextStyle, DimStyle, MLeaderStyle theo tỷ lệ 1:N"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi tỷ lệ nhanh bản vẽ (1:N)",
+                                                "command":  "AT_Chuyen_Doi_Ty_Le_Nhanh",
+                                                "description":  "Quy đổi chiều cao chữ, DimScale, MLeaderScale, LinetypeScale và Hatch giữa các tỷ lệ"
+                                            },
+                                            {
+                                                "label":  "Giữ lại duy nhất Annotative Scale hiện hành",
+                                                "command":  "AT_Annotative_Scale_Current_Only",
+                                                "description":  "Dọn bỏ các tỷ lệ Annotative thừa, chỉ giữ lại tỷ lệ hiện hành"
+                                            },
+                                            {
+                                                "label":  "Gán lệnh tắt số thứ tự cho Layer",
+                                                "command":  "AT_Gan_Lenh_Layer",
+                                                "description":  "Chuyển nhanh các đối tượng đang chọn về đúng Layer quy chuẩn"
+                                            },
+                                            {
+                                                "label":  "Chọn đối tượng theo Layer",
+                                                "command":  "AT_Chon_Theo_Layer",
+                                                "description":  "Chọn tất cả các đối tượng trong bản vẽ thuộc các Layer được chỉ định"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi đối tượng sang Layer khác",
+                                                "command":  "AT_Chuyen_Doi_Layer",
+                                                "description":  "Chuyển nhanh các đối tượng từ Layer nguồn sang Layer đích"
+                                            },
+                                            {
+                                                "label":  "Xóa các đối tượng cùng Layer",
+                                                "command":  "AT_Xoa_Doi_Tuong_Cung_Layer",
+                                                "description":  "Chọn đối tượng mẫu để xóa toàn bộ các đối tượng nằm trên cùng Layer đó"
+                                            },
+                                            {
+                                                "label":  "Cập nhật màu Layer theo chuẩn BIM EIR",
+                                                "command":  "AT_Cap_Nhat_Mau_Layer",
+                                                "description":  "Đồng bộ bảng màu Layer theo quy chuẩn BIM EIR"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 2. Đo Độ dài, Diện tích \u0026 Độ dốc",
+                           "commands":  [
+                                            {
+                                                "label":  "Tính tổng độ dài (Tạo Text mới)",
+                                                "command":  "AT_Tong_Do_Dai_Full",
+                                                "description":  "Cộng tổng chiều dài các đường Line/Polyline/Arc/Spline và đặt Text kết quả mới"
+                                            },
+                                            {
+                                                "label":  "Tính tổng độ dài (Ghi đè Text)",
+                                                "command":  "AT_Tong_Do_Dai_Replace",
+                                                "description":  "Cộng tổng chiều dài các đường được chọn và thay số vào Text có sẵn"
+                                            },
+                                            {
+                                                "label":  "Tính tổng độ dài (Ghi đè nhiều lần)",
+                                                "command":  "AT_Tong_Do_Dai_Replace_2",
+                                                "description":  "Lặp lại thao tác cộng tổng chiều dài và cập nhật vào từng Text liên tiếp"
+                                            },
+                                            {
+                                                "label":  "Tính tổng độ dài (Cộng thêm vào Text)",
+                                                "command":  "AT_Tong_Do_Dai_Replace_Cong_Them",
+                                                "description":  "Cộng tổng chiều dài nhân hệ số hoặc cộng thêm giá trị bù rồi ghi vào Text"
+                                            },
+                                            {
+                                                "label":  "Tính tổng diện tích (Tạo Text mới)",
+                                                "command":  "AT_Tong_Dien_Tich_Full",
+                                                "description":  "Cộng tổng diện tích các vùng kín Polyline/Hatch/Region và đặt Text kết quả mới"
+                                            },
+                                            {
+                                                "label":  "Tính tổng diện tích (Ghi đè Text)",
+                                                "command":  "AT_Tong_Dien_Tich_Replace",
+                                                "description":  "Cộng tổng diện tích các hình được chọn và thay số vào Text có sẵn"
+                                            },
+                                            {
+                                                "label":  "Tính tổng diện tích (Ghi đè nhiều lần)",
+                                                "command":  "AT_Tong_Dien_Tich_Replace_2",
+                                                "description":  "Lặp lại thao tác cộng tổng diện tích và cập nhật vào từng Text liên tiếp"
+                                            },
+                                            {
+                                                "label":  "Tính tổng diện tích (Cộng thêm vào Text)",
+                                                "command":  "AT_Tong_Dien_Tich_Replace_Cong_Them",
+                                                "description":  "Cộng tổng diện tích nhân hệ số quy đổi rồi ghi vào Text"
+                                            },
+                                            {
+                                                "label":  "Đo độ dốc giữa 2 điểm",
+                                                "command":  "AT_Do_Doc",
+                                                "description":  "Tính và ghi nhãn độ dốc (%) hoặc hệ số mái dốc (1:m) giữa 2 điểm có cao độ"
+                                            },
+                                            {
+                                                "label":  "Đo độ dốc đơn giản",
+                                                "command":  "AT_Do_Doc_Simple",
+                                                "description":  "Tính nhanh độ dốc phần trăm giữa 2 điểm chọn trên bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Đo độ dốc theo đối tượng",
+                                                "command":  "AT_Do_Doc_Object",
+                                                "description":  "Đo và ghi nhãn độ dốc trực tiếp trên đoạn thẳng hoặc Polyline"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 3. Biên tập Text \u0026 Đánh số",
+                           "commands":  [
+                                            {
+                                                "label":  "Căn lề cho các đối tượng Text",
+                                                "command":  "AT_Can_Le_Cho_Text",
+                                                "description":  "Sắp xếp và căn lề Trái / Giữa / Phải thẳng hàng cho nhóm Text/MText"
+                                            },
+                                            {
+                                                "label":  "Copy nhanh nội dung Text",
+                                                "command":  "AT_Copy_Noi_Dung_Text",
+                                                "description":  "Sao chép nội dung giữa các Text/Attribute kèm tính toán cộng trừ nhân chia"
+                                            },
+                                            {
+                                                "label":  "Copy \u0026 dịch Text sang Tiếng Anh",
+                                                "command":  "AT_Copy_Va_Dich_Tieng_Anh",
+                                                "description":  "Sao chép văn bản thuyết minh trên bản vẽ và dịch tự động sang Tiếng Anh"
+                                            },
+                                            {
+                                                "label":  "Liên kết nội dung giữa các Text",
+                                                "command":  "AT_Text_Link",
+                                                "description":  "Gán nội dung từ Text nguồn sang các Text đích được chọn"
+                                            },
+                                            {
+                                                "label":  "Đánh số thứ tự cho Text (Form)",
+                                                "command":  "AT_Danh_So_Thu_Tu_Text",
+                                                "description":  "Đánh số thứ tự tăng dần cho các đối tượng Text/MText với tiền tố và hậu tố"
+                                            },
+                                            {
+                                                "label":  "Đánh số thứ tự cho Text (Chọn từng Text)",
+                                                "command":  "AT_Danh_So_Thu_Tu_Legacy",
+                                                "description":  "Đánh số thứ tự nhanh cho từng Text được chọn"
+                                            },
+                                            {
+                                                "label":  "Đồng bộ Text giữa Model \u0026 Layout",
+                                                "command":  "AT_Text_Layout",
+                                                "description":  "Xoay các Text/MText có sẵn nằm ngang chuẩn theo góc khung nhìn Layout"
+                                            },
+                                            {
+                                                "label":  "Tạo mới Text Layout",
+                                                "command":  "AT_Tao_Moi_Text_Layout",
+                                                "description":  "Tạo chữ mới tự động xoay góc và căn chỉnh theo khung nhìn Layout"
+                                            },
+                                            {
+                                                "label":  "Tạo nhãn cao độ từ Text",
+                                                "command":  "AT_Label_From_Text",
+                                                "description":  "Chuyển đổi đối tượng Text thường thành nhãn Label có liên kết"
+                                            },
+                                            {
+                                                "label":  "Phá khối Text thành nét vẽ (Explode Text)",
+                                                "command":  "AT_Explode_Text",
+                                                "description":  "Phá vỡ phông chữ Text thành các đường Polyline hình học"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 4. 3D Solid \u0026 Hình học",
+                           "commands":  [
+                                            {
+                                                "label":  "Tạo 3D Solid từ các Polyline",
+                                                "command":  "AT_Polys_To_Solid",
+                                                "description":  "Extrude hàng loạt các đường Polyline kín thành khối 3D Solid theo chiều cao"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi Text thành 3D Solid",
+                                                "command":  "AT_Text_To_Solid",
+                                                "description":  "Đùn chữ Text/MText thành chữ nổi 3D Solid với chiều dày tùy chọn"
+                                            },
+                                            {
+                                                "label":  "Tạo bề mặt Surface từ Polyline đóng",
+                                                "command":  "AT_Surface_From_Polyline",
+                                                "description":  "Chuyển các đường Polyline khép kín thành mặt phẳng 3D"
+                                            },
+                                            {
+                                                "label":  "Cắt 3D Solid theo Polyline mặt bằng",
+                                                "command":  "AT_Clip_3d_Solid",
+                                                "description":  "Cắt xén (Boolean Intersect/Subtract) các khối 3D Solid theo đường biên Polyline 2D"
+                                            },
+                                            {
+                                                "label":  "Cắt 3D Solid / Body vào Clipboard",
+                                                "command":  "AT_Cut_Solid_Body_To_Clipboard",
+                                                "description":  "Cắt phần giao 3D Solid/Body trong vùng chọn và sao chép vào Clipboard"
+                                            },
+                                            {
+                                                "label":  "Xóa nhanh các đối tượng 3D Solid / Body",
+                                                "command":  "AT_Xoa_Doi_Tuong_3d_Solid_Body",
+                                                "description":  "Lọc và xóa nhanh các khối 3D Solid và Body trong vùng chọn"
+                                            },
+                                            {
+                                                "label":  "Tạo đường bao ngoài (Outline)",
+                                                "command":  "AT_Tao_Outline",
+                                                "description":  "Tự động tạo đường biên khép kín bao quanh các đối tượng được chọn"
+                                            },
+                                            {
+                                                "label":  "Offset đối tượng sang 2 bên",
+                                                "command":  "AT_Offset_2_Ben",
+                                                "description":  "Offset một đường tim sang cả 2 phía trái và phải với khoảng cách chỉ định"
+                                            },
+                                            {
+                                                "label":  "Sao chép dãy đối tượng (Copy Array)",
+                                                "command":  "AT_Copy_Array",
+                                                "description":  "Sao chép và rải đều đối tượng theo khoảng cách hoặc số lượng"
+                                            },
+                                            {
+                                                "label":  "Ghi kích thước đường cong (Dim Arc/Curve)",
+                                                "command":  "AT_Dim_Duong_Cong",
+                                                "description":  "Đo và ghi kích thước chiều dài cung cong cho Arc hoặc phân đoạn Polyline"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 5. Block \u0026 Thư viện mẫu",
+                           "commands":  [
+                                            {
+                                                "label":  "Tạo Block riêng cho từng đối tượng",
+                                                "command":  "AT_Tao_Block_Tung_Doi_Tuong",
+                                                "description":  "Đóng gói từng đối tượng rời rạc thành một Block độc lập tại tâm của nó"
+                                            },
+                                            {
+                                                "label":  "Đánh số thứ tự Attribute cho Block",
+                                                "command":  "AT_Danh_So_Thu_Tu_Cho_Block",
+                                                "description":  "Tự động đánh số thứ tự vào thuộc tính Attribute của các Block theo hàng/cột"
+                                            },
+                                            {
+                                                "label":  "Chèn \u0026 quản lý thư viện đối tượng mẫu",
+                                                "command":  "AT_Them_Doi_Tuong_Mau",
+                                                "description":  "Chèn bảng mẫu quy chuẩn Layer, nét vẽ, chữ, kích thước và mẫu Hatch"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 6. Viewport, Layout \u0026 Xoay",
+                           "commands":  [
+                                            {
+                                                "label":  "Bố trí Viewport theo hình chữ nhật",
+                                                "command":  "AT_Bo_Tri_Viewport_Theo_Hinh",
+                                                "description":  "Tự động tạo các Layout và Viewport bám theo dãy khung in chữ nhật bên Model"
+                                            },
+                                            {
+                                                "label":  "Bố trí Viewport theo 2 điểm chọn",
+                                                "command":  "AT_Bo_Tri_Viewport_Theo_2_Diem",
+                                                "description":  "Tạo Viewport trên Layout và tự động xoay hướng nhìn theo 2 điểm chọn bên Model"
+                                            },
+                                            {
+                                                "label":  "Xoay Viewport hiện hành theo 2 điểm",
+                                                "command":  "AT_Xoay_Viewport_Theo_2_Diem",
+                                                "description":  "Xoay góc nhìn DVIEW/Twist của Viewport dựa theo 2 điểm chuẩn"
+                                            },
+                                            {
+                                                "label":  "Tắt VP Freeze Layer theo đối tượng chọn",
+                                                "command":  "AT_Tat_VP_Freeze_Layer",
+                                                "description":  "Chọn đối tượng để đóng băng Layer tương ứng trong Viewport hiện hành hoặc hàng loạt"
+                                            },
+                                            {
+                                                "label":  "Xoay đối tượng theo góc Viewport",
+                                                "command":  "AT_Xoay_Doi_Tuong_Theo_Viewport",
+                                                "description":  "Xoay Block/Text bên Model cho thẳng đứng với góc xoay của Viewport"
+                                            },
+                                            {
+                                                "label":  "Xoay đối tượng theo góc Viewport (V2)",
+                                                "command":  "AT_Xoay_Doi_Tuong_Theo_Viewport_V2",
+                                                "description":  "Đồng bộ góc xoay nhiều đối tượng theo hệ tọa độ của Viewport"
+                                            },
+                                            {
+                                                "label":  "Xoay đối tượng theo 2 điểm",
+                                                "command":  "AT_Xoay_Doi_Tuong_Theo_2_Diem",
+                                                "description":  "Xoay các đối tượng được chọn theo hướng vector xác định bởi 2 điểm"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi kích thước Dim sang Layout",
+                                                "command":  "AT_Dim_Layout",
+                                                "description":  "Ghi kích thước chuẩn theo hệ trục của khung nhìn Layout"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi kích thước Dim sang Layout (V2)",
+                                                "command":  "AT_Dim_Layout_2",
+                                                "description":  "Ghi kích thước liên hoàn theo khung nhìn Layout"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi Block sang Layout",
+                                                "command":  "AT_Block_Layout",
+                                                "description":  "Chèn và căn chỉnh Block khung tên đồng loạt trên các Layout"
+                                            },
+                                            {
+                                                "label":  "Cập nhật khung nhìn Layout",
+                                                "command":  "AT_Update_Layout",
+                                                "description":  "Làm mới và đồng bộ thông tin trên tất cả các tab Layout"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 7. Quản lý Xref",
+                           "commands":  [
+                                            {
+                                                "label":  "Gắn Xref tất cả file trong thư mục (Attach)",
+                                                "command":  "AT_Xref_All",
+                                                "description":  "Đính kèm toàn bộ các bản vẽ trong thư mục vào file hiện hành kiểu Attach"
+                                            },
+                                            {
+                                                "label":  "Gắn Xref tất cả file trong thư mục (Overlay)",
+                                                "command":  "AT_Xref_All_Overlay",
+                                                "description":  "Đính kèm toàn bộ các bản vẽ trong thư mục vào file hiện hành kiểu Overlay"
+                                            },
+                                            {
+                                                "label":  "Chuyển đổi các Xref đã nạp thành Block (Bind)",
+                                                "command":  "AT_Xref_To_Block",
+                                                "description":  "Bind/Insert các bản vẽ tham chiếu Xref thành Block nằm trực tiếp trong bản vẽ"
+                                            },
+                                            {
+                                                "label":  "Chuyển Xref từ Attach sang Overlay (Hiện hành)",
+                                                "command":  "AT_Xref_Attach_To_Overlay",
+                                                "description":  "Chuyển toàn bộ các Xref đang ở kiểu Attach sang kiểu Overlay để tránh vòng lặp"
+                                            },
+                                            {
+                                                "label":  "Chuyển Xref từ Attach sang Overlay (Hàng loạt file)",
+                                                "command":  "AT_Xref_Attach_To_Overlay_File",
+                                                "description":  "Xử lý hàng loạt nhiều file DWG để đổi kiểu Xref từ Attach sang Overlay"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 8. Bảng biểu, Xuất dữ liệu \u0026 In ấn",
+                           "commands":  [
+                                            {
+                                                "label":  "Chuẩn hóa định dạng bảng (Table)",
+                                                "command":  "AT_Chuan_Hoa_Bang",
+                                                "description":  "Định dạng lại phông chữ, chiều cao chữ, căn lề và đường viền bảng CAD theo chuẩn"
+                                            },
+                                            {
+                                                "label":  "Xuất bảng CAD ra file Excel",
+                                                "command":  "AT_Xuat_Bang_Cad_Ra_Excel",
+                                                "description":  "Nhận diện cả bảng AutoCAD Table lẫn bảng kẻ bằng Line/Text để xuất sang Excel"
+                                            },
+                                            {
+                                                "label":  "Xuất bảng tọa độ đỉnh Polyline",
+                                                "command":  "AT_Xuat_Bang_Toa_Do_Polyline",
+                                                "description":  "Lập bảng thống kê tọa độ X, Y và chiều dài các đỉnh của đường Polyline"
+                                            },
+                                            {
+                                                "label":  "Xuất đối tượng sang Google Earth (KML/KMZ)",
+                                                "command":  "AT_Export_Kml_Custom",
+                                                "description":  "Xuất bình đồ tuyến và đối tượng CAD sang file KML/KMZ"
+                                            },
+                                            {
+                                                "label":  "In hàng loạt bản vẽ từ Model",
+                                                "command":  "AT_In_Model_Hang_Loat",
+                                                "description":  "Tự động nhận diện khung in bên Model, sắp xếp thứ tự và xuất PDF hàng loạt"
+                                            },
+                                            {
+                                                "label":  "In hàng loạt bản vẽ theo Block khung tên",
+                                                "command":  "AT_In_Ban_Ve_Theo_Block",
+                                                "description":  "Quét các Block khung tên, đọc thuộc tính số hiệu bản vẽ và in PDF hàng loạt"
+                                            }
+                                        ]
+                       },
+                       {
+                           "name":  "AutoCAD — 9. Hệ thống, Palette \u0026 Nạp lại Code",
+                           "commands":  [
+                                            {
+                                                "label":  "Mở bảng lệnh Tool Palette",
+                                                "command":  "AT_Show_Palette",
+                                                "description":  "Mở hoặc hiển thị lại bảng lệnh Tool Palette (SHOW_PALETTE)"
+                                            },
+                                            {
+                                                "label":  "Nạp lại dữ liệu Tool Palette",
+                                                "command":  "AT_Reload_Palette",
+                                                "description":  "Đọc lại danh sách lệnh từ file ToolPalette.json / mặc định (RELOAD_PALETTE)"
+                                            },
+                                            {
+                                                "label":  "Cấu hình nguồn dữ liệu Tool Palette",
+                                                "command":  "AT_Palette_Config",
+                                                "description":  "Chọn file JSON/Excel cấu hình hoặc khôi phục mặc định (PALETTE_CONFIG)"
+                                            },
+                                            {
+                                                "label":  "Ẩn bảng lệnh Tool Palette",
+                                                "command":  "AT_Hide_Palette",
+                                                "description":  "Tạm ẩn bảng lệnh Tool Palette (HIDE_PALETTE)"
+                                            },
+                                            {
+                                                "label":  "Khởi động máy chủ kết nối AI (MCP Bridge)",
+                                                "command":  "AT_Khoi_Dong_Mcp_Bridge",
+                                                "description":  "Khởi động lại kết nối MCP Bridge giữa AutoCAD/Civil 3D và AI Agent"
+                                            },
+                                            {
+                                                "label":  "Làm mới thanh Menu lệnh",
+                                                "command":  "AT_Show_Menu",
+                                                "description":  "Tạo lại thanh menu Civil tool \u0026 Acad tool trên thanh Menu Bar"
+                                            },
+                                            {
+                                                "label":  "Tự động Build \u0026 nạp lại Code mới",
+                                                "command":  "RELOAD",
+                                                "description":  "Tải lại bản build Civil3D_Tools.dll mới nhất không cần tắt AutoCAD (NETRELOAD)"
+                                            },
+                                            {
+                                                "label":  "Bảng điều khiển nạp lại DLL",
+                                                "command":  "RELOADUI",
+                                                "description":  "Mở hộp thoại chọn đường dẫn và cấu hình tự động nạp lại DLL (NETRELOADUI)"
+                                            }
+                                        ]
+                       }
+                   ]
+}

@@ -30,6 +30,7 @@ namespace Civil3DCsharp
             EnsureResolverAttached();
             AT_McpBridgeServer.EnsureStarted();
             MyFirstProject.ClassicMenu.EnsureMenuLoaded();
+            MyFirstProject.ToolPaletteLoader.EnsurePaletteLoaded();
         }
 
         public void Terminate()

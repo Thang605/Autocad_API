@@ -429,7 +429,12 @@ namespace MyFirstProject
             AddMenuItem(subMenuExportPrint, "In Hàng Loạt Bản Vẽ Theo Block Khung Tên", "AT_In_Ban_Ve_Theo_Block");
 
             // 9. Hệ thống, MCP Bridge & Nạp lại Code
-            dynamic subMenuSystem = menu.AddSubMenu(menu.Count + 1, "9. Hệ thống & Nạp lại Code");
+            dynamic subMenuSystem = menu.AddSubMenu(menu.Count + 1, "9. Hệ thống, Palette & Nạp lại Code");
+            AddHeader(subMenuSystem, "--- Bảng lệnh Tool Palette ---");
+            AddMenuItem(subMenuSystem, "Mở Bảng Lệnh Tool Palette", "AT_Show_Palette");
+            AddMenuItem(subMenuSystem, "Nạp Lại Dữ Liệu Tool Palette", "AT_Reload_Palette");
+            AddMenuItem(subMenuSystem, "Cấu Hình Nguồn Dữ Liệu Tool Palette", "AT_Palette_Config");
+            AddMenuItem(subMenuSystem, "Ẩn Bảng Lệnh Tool Palette", "AT_Hide_Palette");
             AddHeader(subMenuSystem, "--- Kết nối AI & Thanh Menu ---");
             AddMenuItem(subMenuSystem, "Khởi Động Máy Chủ Kết Nối AI (MCP Bridge)", "AT_Khoi_Dong_Mcp_Bridge");
             AddMenuItem(subMenuSystem, "Làm Mới Thanh Menu Lệnh", "AT_Show_Menu");
