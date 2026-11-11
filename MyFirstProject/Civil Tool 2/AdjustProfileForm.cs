@@ -210,6 +210,10 @@ namespace MyFirstProject.Civil_Tool_2
                 btnOK, btnCancel
             });
 
+            // Keyboard Accessibility
+            this.AcceptButton = btnOK;
+            this.CancelButton = btnCancel;
+
             this.ResumeLayout(false);
         }
 
