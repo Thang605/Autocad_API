@@ -26,7 +26,7 @@ namespace MyFirstProject.Acad_Tool
         public CopyNoiDungForm()
         {
             InitializeComponent();
-            RestoreLastValues();
+            RestoreLastSettings();
         }
 
         private void InitializeComponent()
@@ -130,21 +130,26 @@ namespace MyFirstProject.Acad_Tool
                 btnCancel
             });
 
+            // Form events
+            this.FormClosing += (s, e) => SaveCurrentSettings();
+
             this.ResumeLayout(false);
         }
 
-        private void RestoreLastValues()
+        private void RestoreLastSettings()
         {
             rdoLink.Checked = _lastIsLinked;
             rdoNoLink.Checked = !_lastIsLinked;
         }
 
+        private void SaveCurrentSettings()
+        {
+            _lastIsLinked = rdoLink.Checked;
+        }
+
         private void BtnOK_Click(object? sender, EventArgs e)
         {
             IsLinked = rdoLink.Checked;
-
-            // Save for next time
-            _lastIsLinked = IsLinked;
 
             FormAccepted = true;
             this.DialogResult = DialogResult.OK;

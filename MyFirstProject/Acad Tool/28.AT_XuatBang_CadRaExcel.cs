@@ -253,8 +253,17 @@ namespace Civil3DCsharp
         {
             try
             {
+                // Bolt: Pre-filter type using ObjectClass to avoid expensive DBObject retrieval when object is not a table
+                string dxfName = objId.ObjectClass.DxfName;
+                bool isAcadTable = dxfName.Equals("ACAD_TABLE", StringComparison.OrdinalIgnoreCase);
+                bool isCivilTable = dxfName.StartsWith("AECC_", StringComparison.OrdinalIgnoreCase) && dxfName.Contains("TABLE");
+
+                if (!isAcadTable && !isCivilTable)
+                {
+                    return null;
+                }
+
                 AcadDBObject dbo = tr.GetObject(objId, OpenMode.ForRead);
-                string dxfName = dbo.GetRXClass().DxfName;
 
                 // 1. Trường hợp AutoCAD Table chuẩn (ACAD_TABLE)
                 if (dbo is ATable acadTable)

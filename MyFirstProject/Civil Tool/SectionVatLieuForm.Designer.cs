@@ -126,6 +126,8 @@ namespace MyFirstProject.Civil_Tool
             this.Name = "SectionVatLieuForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Cấu hình vẽ Polyline và gán Text Field";
+            this.AcceptButton = this.btnOK;
+            this.CancelButton = this.btnCancel;
             this.ResumeLayout(false);
             this.PerformLayout();
 

@@ -515,6 +515,9 @@ namespace Civil3DCsharp
             this.Controls.Add(pnlActionButtons);
             this.Controls.Add(pnlHeader);
 
+            this.AcceptButton = btnExecute;
+            this.CancelButton = btnClose;
+
             this.FormClosing += CapNhatMauLayerForm_FormClosing;
             this.ResumeLayout(false);
         }

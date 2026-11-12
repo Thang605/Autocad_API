@@ -365,6 +365,8 @@ namespace MyFirstProject.Menu_form
             this.Name = "KiemTraTimTuyenForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Kiểm Tra Tim Tuyến";
+            this.AcceptButton = this.btnCheck;
+            this.CancelButton = this.btnClose;
             this.Load += new System.EventHandler(this.KiemTraTimTuyenForm_Load);
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();

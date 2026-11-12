@@ -116,6 +116,8 @@
             Name = "PipeDiameterSelectionForm";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Chọn đường kính cống";
+            AcceptButton = btnOK;
+            CancelButton = btnCancel;
             ResumeLayout(false);
             PerformLayout();
         }

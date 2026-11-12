@@ -512,6 +512,8 @@ namespace MyFirstProject.Civil_Tool
             this.Name = "BoTriCongDungForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Bố Trí Đường Cong Đứng PVI (CTP_BoTri_CongDung)";
+            this.AcceptButton = this.btnApplyAll;
+            this.CancelButton = this.btnCancel;
             this.grpStandard.ResumeLayout(false);
             this.grpStandard.PerformLayout();
             this.grpObjects.ResumeLayout(false);
