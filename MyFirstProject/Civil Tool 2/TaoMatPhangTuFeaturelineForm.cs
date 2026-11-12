@@ -47,11 +47,14 @@ namespace MyFirstProject.Civil_Tool_2
         // ═══════════════════════════════════════════════════════════════
         //  PERSISTENT STATE (BẮT BUỘC THEO QUY TẮC RULE 2)
         // ═══════════════════════════════════════════════════════════════
-        private static Size _lastFormSize = new Size(1040, 760);
+        private static Size _lastFormSize = new Size(1060, 790);
         private static bool _lastCreateNewSurface = true;
         private static string _lastSurfaceName = "";
         private static ObjectId _lastExistingSurfaceId = ObjectId.Null;
         private static string _lastExistingSurfaceName = "";
+        private static bool _lastUseManagedSubSurface = true;
+        private static string _lastSubSurfaceSuffix = "";
+        private static string _lastSubSurfaceStyle = "_No Display";
         private static string _lastMasterSurfaceStyle = "";
         private static int _lastFilterSourceIdx = 0;
         private static string _lastFilterValue = "";
@@ -65,7 +68,7 @@ namespace MyFirstProject.Civil_Tool_2
         private static bool _lastTreatNestedAsHole = false;
         private static bool _lastRebuildAuto = true;
         private static bool _lastOverwriteOverlap = true;
-        private static bool _lastSafeCorridorCombine = true;
+        private static bool _lastSafeCorridorCombine = false;
         private static List<ObjectId> _lastSelectedIds = new List<ObjectId>();
         private static List<ObjectId> _lastCustomOuterIds = new List<ObjectId>();
         private static List<ObjectId> _lastCustomHideIds = new List<ObjectId>();
@@ -85,6 +88,8 @@ namespace MyFirstProject.Civil_Tool_2
         private Font _fontBold9 = null!;
         private Font _fontRegular9 = null!;
         private ToolTip _toolTip = null!;
+        private bool _suppressSubSuffixTracking = false;
+        private bool _userCustomizedSubSuffix = false;
 
         // Dữ liệu cache cho bộ lọc nạp nhanh
         private readonly Dictionary<string, List<ObjectId>> _bySite = new Dictionary<string, List<ObjectId>>(StringComparer.OrdinalIgnoreCase);
@@ -113,6 +118,13 @@ namespace MyFirstProject.Civil_Tool_2
         private WinFormsButton btnPickExistingSurface = null!;
         private Panel pnlExistingOptions = null!;
         private WinFormsLabel lblExistingSurfInfo = null!;
+        private CheckBox chkCreateManagedSubSurface = null!;
+        private Panel pnlSubSurfaceConfig = null!;
+        private WinFormsLabel lblSubPrefix = null!;
+        private WinFormsTextBox txtSubSurfaceSuffix = null!;
+        private WinFormsButton btnNextSubSuffix = null!;
+        private WinFormsLabel lblSubFullNamePreview = null!;
+        private WinFormsComboBox cboSubSurfaceStyle = null!;
         private CheckBox chkOverwriteOverlap = null!;
         private CheckBox chkSafeCorridorCombine = null!;
         private WinFormsComboBox cboMasterStyles = null!;
@@ -178,9 +190,9 @@ namespace MyFirstProject.Civil_Tool_2
             _fontBold9 = CreateFont(9F, FontStyle.Bold);
             _fontRegular9 = CreateFont(9F, FontStyle.Regular);
 
-            this.Text = "Tạo & Bổ Sung Mặt Phẳng TIN Từ Feature Line (0 Mặt Phẳng Phụ)";
+            this.Text = "Tạo & Bổ Sung Mặt Phẳng TIN Từ Feature Line";
             this.Size = _lastFormSize;
-            this.MinimumSize = new Size(960, 680);
+            this.MinimumSize = new Size(980, 700);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Font = _fontRegular9;
             this.BackColor = WinFormsColor.FromArgb(245, 247, 250);
@@ -209,7 +221,7 @@ namespace MyFirstProject.Civil_Tool_2
 
             WinFormsLabel lblHeaderSub = new WinFormsLabel
             {
-                Text = "Tạo mới hoặc ghép bổ sung vào Surface có sẵn — Tự động khóa biên cũ, xử lý chồng lấn & cắt tam giác bắc cầu (0 mặt phẳng phụ)",
+                Text = "Tạo mới 1 TIN Surface sạch hoặc Bổ sung vào mặt phẳng có sẵn qua Mặt phẳng phụ mang tiền tố tên gốc để dễ quản lý",
                 Font = CreateFont(8.5F, FontStyle.Regular),
                 ForeColor = WinFormsColor.FromArgb(212, 232, 252),
                 Dock = DockStyle.Fill,
@@ -492,7 +504,7 @@ namespace MyFirstProject.Civil_Tool_2
             // ═══ GROUP 2: MẶT PHẲNG TIN ĐÍCH ═══
             GroupBox grpTarget = new GroupBox
             {
-                Text = "2. Mặt phẳng TIN đích (Chỉ 1 Surface - Không tạo mặt phẳng phụ)",
+                Text = "2. Mặt phẳng TIN đích (Tạo mới hoặc Bổ sung vào mặt có sẵn)",
                 Font = CreateFont(9.5F, FontStyle.Bold),
                 Dock = DockStyle.Top,
                 AutoSize = true,
@@ -512,7 +524,7 @@ namespace MyFirstProject.Civil_Tool_2
 
             radNewSurface = new RadioButton
             {
-                Text = "🆕 Tạo mặt phẳng TIN mới:",
+                Text = "🆕 Tạo mặt phẳng TIN mới (1 Surface độc lập):",
                 Font = _fontBold9,
                 AutoSize = true,
                 Checked = true,
@@ -549,7 +561,7 @@ namespace MyFirstProject.Civil_Tool_2
                 Font = _fontRegular9,
                 Margin = new Padding(0, 6, 8, 4)
             };
-            cboExistingSurfaces.SelectedIndexChanged += (s, e) => UpdateExistingSurfaceMetadataUI();
+            cboExistingSurfaces.SelectedIndexChanged += (s, e) => OnSelectedExistingSurfaceChanged();
 
             btnPickExistingSurface = CreateActionButton("🎯 Chọn", 98, 40, WinFormsColor.FromArgb(224, 236, 252), WinFormsColor.FromArgb(15, 68, 130), false);
             btnPickExistingSurface.Margin = new Padding(0, 0, 0, 2);
@@ -571,7 +583,7 @@ namespace MyFirstProject.Civil_Tool_2
                 Dock = DockStyle.Top,
                 AutoSize = true,
                 ColumnCount = 1,
-                RowCount = 3
+                RowCount = 5
             };
             tlpExistingOpts.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.Percent, 100F));
 
@@ -581,14 +593,167 @@ namespace MyFirstProject.Civil_Tool_2
                 Font = CreateFont(8.25F, FontStyle.Italic),
                 ForeColor = WinFormsColor.FromArgb(24, 95, 60),
                 AutoSize = true,
-                MaximumSize = new Size(395, 0),
+                MaximumSize = new Size(415, 0),
                 UseMnemonic = false,
                 Margin = new Padding(0, 0, 0, 4)
             };
 
+            chkCreateManagedSubSurface = new CheckBox
+            {
+                Text = "Tạo mặt phẳng phụ có tiền tố tên mặt phẳng gốc & Paste động (dễ quản lý)",
+                Font = CreateFont(8.5F, FontStyle.Bold),
+                ForeColor = WinFormsColor.FromArgb(15, 68, 130),
+                AutoSize = true,
+                Checked = _lastUseManagedSubSurface,
+                UseMnemonic = false,
+                Margin = new Padding(0, 0, 0, 4)
+            };
+            chkCreateManagedSubSurface.CheckedChanged += (s, e) =>
+            {
+                pnlSubSurfaceConfig.Enabled = chkCreateManagedSubSurface.Checked;
+                UpdateSubSurfaceNamePreview();
+            };
+            _toolTip.SetToolTip(
+                chkCreateManagedSubSurface,
+                "• Tích chọn (Khuyên dùng): Tạo 1 mặt phẳng phụ mang tiền tố '<TênMặtPhẳngCóSẵn>_' rồi Paste động vào mặt phẳng có sẵn.\n" +
+                "  Trong Toolspace -> Prospector -> Surfaces, các mặt phẳng phụ nằm ngay bên dưới mặt phẳng gốc giúp bật/tắt, sửa hoặc xóa từng vùng cực dễ.\n" +
+                "• Bỏ tích: Gộp trực tiếp vào mặt phẳng có sẵn (0 mặt phẳng phụ).");
+
+            pnlSubSurfaceConfig = new Panel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                BackColor = WinFormsColor.FromArgb(246, 250, 255),
+                Padding = new Padding(8, 6, 6, 6),
+                Margin = new Padding(0, 0, 0, 5)
+            };
+
+            TableLayoutPanel tlpSubConfig = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 1,
+                RowCount = 3
+            };
+            tlpSubConfig.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.Percent, 100F));
+
+            // Dòng A: Nhãn tiền tố '<TênMặtPhẳngCóSẵn>_' + Ô nhập hậu tố + Nút gợi ý số thứ tự mới
+            TableLayoutPanel tlpSubNameRow = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 3,
+                RowCount = 1,
+                Margin = new Padding(0, 0, 0, 2)
+            };
+            tlpSubNameRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.AutoSize));
+            tlpSubNameRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.Percent, 100F));
+            tlpSubNameRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.AutoSize));
+
+            lblSubPrefix = new WinFormsLabel
+            {
+                Text = "<TênGốc>_",
+                Font = CreateFont(8.75F, FontStyle.Bold),
+                BackColor = WinFormsColor.FromArgb(216, 232, 252),
+                ForeColor = WinFormsColor.FromArgb(14, 62, 118),
+                AutoSize = true,
+                MaximumSize = new Size(175, 28),
+                AutoEllipsis = true,
+                Padding = new Padding(6, 5, 6, 5),
+                Margin = new Padding(0, 5, 4, 2),
+                UseMnemonic = false
+            };
+
+            txtSubSurfaceSuffix = new WinFormsTextBox
+            {
+                Dock = DockStyle.Fill,
+                Font = CreateFont(9F),
+                Text = "Phu_1",
+                Margin = new Padding(0, 6, 6, 2)
+            };
+            txtSubSurfaceSuffix.TextChanged += (s, e) =>
+            {
+                if (!_suppressSubSuffixTracking)
+                {
+                    string parent = GetEffectiveParentSurfaceName();
+                    _userCustomizedSubSuffix = !CTT_Tao_Mat_Phang_Tu_Featureline_Command.IsDefaultAutoSubSuffix(parent, txtSubSurfaceSuffix.Text);
+                }
+                UpdateSubSurfaceNamePreview();
+            };
+            _toolTip.SetToolTip(
+                txtSubSurfaceSuffix,
+                "Nhập hậu tố mô tả vùng bổ sung (ví dụ: Phu_1, ViaHe_Trai, NutGiao_Km2, Taluy1...).\n" +
+                "Hệ thống tự động gắn tiền tố '<TênMặtPhẳngCóSẵn>_' ở phía trước để nhóm gọn dưới mặt phẳng gốc.");
+
+            btnNextSubSuffix = CreateActionButton("🔄 Số mới", 90, 40, WinFormsColor.FromArgb(224, 236, 252), WinFormsColor.FromArgb(15, 68, 130), false);
+            btnNextSubSuffix.Margin = new Padding(0);
+            btnNextSubSuffix.Click += (s, e) =>
+            {
+                _userCustomizedSubSuffix = false;
+                AssignNextAvailableSubSuffix();
+            };
+            _toolTip.SetToolTip(btnNextSubSuffix, "Tự động đặt hậu tố tiếp theo chưa tồn tại (Phu_1, Phu_2, Phu_3...) cho mặt phẳng có sẵn đang chọn");
+
+            tlpSubNameRow.Controls.Add(lblSubPrefix, 0, 0);
+            tlpSubNameRow.Controls.Add(txtSubSurfaceSuffix, 1, 0);
+            tlpSubNameRow.Controls.Add(btnNextSubSuffix, 2, 0);
+
+            // Dòng B: Xem trước trực tiếp tên đầy đủ của mặt phẳng phụ
+            lblSubFullNamePreview = new WinFormsLabel
+            {
+                Text = "📌 Tên mặt phẳng phụ: ''",
+                Font = CreateFont(8.25F, FontStyle.Bold),
+                ForeColor = WinFormsColor.FromArgb(18, 92, 52),
+                AutoSize = true,
+                MaximumSize = new Size(405, 0),
+                UseMnemonic = false,
+                Margin = new Padding(0, 2, 0, 4)
+            };
+
+            // Dòng C: Chọn Surface Style của mặt phẳng phụ (mặc định '_No Display')
+            TableLayoutPanel tlpSubStyleRow = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2,
+                RowCount = 1,
+                Margin = new Padding(0)
+            };
+            tlpSubStyleRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.AutoSize));
+            tlpSubStyleRow.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(SizeType.Percent, 100F));
+
+            WinFormsLabel lblSubStyle = new WinFormsLabel
+            {
+                Text = "Style mặt phẳng phụ:",
+                Font = CreateFont(8.5F, FontStyle.Regular),
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                UseMnemonic = false,
+                Margin = new Padding(0, 4, 8, 0)
+            };
+
+            cboSubSurfaceStyle = new WinFormsComboBox
+            {
+                Dock = DockStyle.Fill,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = CreateFont(8.75F),
+                Margin = new Padding(0, 2, 0, 0)
+            };
+            _toolTip.SetToolTip(
+                cboSubSurfaceStyle,
+                "Khuyên dùng '_No Display' để mặt phẳng phụ ẩn trên màn hình CAD (tránh vẽ trùng đường đồng mức với mặt phẳng chính) nhưng vẫn quản lý đầy đủ trong Prospector.");
+
+            tlpSubStyleRow.Controls.Add(lblSubStyle, 0, 0);
+            tlpSubStyleRow.Controls.Add(cboSubSurfaceStyle, 1, 0);
+
+            tlpSubConfig.Controls.Add(tlpSubNameRow, 0, 0);
+            tlpSubConfig.Controls.Add(lblSubFullNamePreview, 0, 1);
+            tlpSubConfig.Controls.Add(tlpSubStyleRow, 0, 2);
+            pnlSubSurfaceConfig.Controls.Add(tlpSubConfig);
+
             chkOverwriteOverlap = new CheckBox
             {
-                Text = "Đắp đè cao độ mới tại vùng chồng lấn (thay điểm cũ dưới FL)",
+                Text = "Đắp đè cao độ mới tại vùng chồng lấn (bỏ tích = giữ mặt cũ)",
                 Font = CreateFont(8.5F, FontStyle.Regular),
                 AutoSize = true,
                 Checked = _lastOverwriteOverlap,
@@ -597,12 +762,12 @@ namespace MyFirstProject.Civil_Tool_2
             };
             _toolTip.SetToolTip(
                 chkOverwriteOverlap,
-                "• Tích chọn (Khuyên dùng): Tại vùng giao chồng, cao độ của mảng Feature Line mới sẽ thay thế điểm/lưới cũ (tương tự Paste Surface nhưng 0 mặt phẳng phụ).\n" +
+                "• Tích chọn (Khuyên dùng): Tại vùng giao chồng, cao độ của mảng Feature Line mới sẽ đắp lên mặt phẳng cũ.\n" +
                 "• Bỏ tích: Giữ nguyên 100% cao độ mặt phẳng cũ tại nơi giao chồng, chỉ nối mở rộng thêm phần diện tích mới nằm ngoài mặt phẳng cũ.");
 
             chkSafeCorridorCombine = new CheckBox
             {
-                Text = "🛡️ Mặt phẳng Corridor -> Gộp vào '<Tên>_Gop' (an toàn khi Rebuild)",
+                Text = "🛡️ Tạo riêng mặt gộp '<Tên>_Gop' thay vì Paste trực tiếp vào Corridor Surface",
                 Font = CreateFont(8.5F, FontStyle.Bold),
                 ForeColor = WinFormsColor.FromArgb(145, 72, 0),
                 AutoSize = true,
@@ -611,14 +776,17 @@ namespace MyFirstProject.Civil_Tool_2
                 UseMnemonic = false,
                 Margin = new Padding(0, 2, 0, 0)
             };
+            chkSafeCorridorCombine.CheckedChanged += (s, e) => OnSelectedExistingSurfaceChanged();
             _toolTip.SetToolTip(
                 chkSafeCorridorCombine,
-                "Mặt phẳng đang chọn sinh trực tiếp từ Corridor/Grading (bị giới hạn bởi Corridor Extents và bị ghi đè khi Rebuild Corridor).\n" +
-                "Tích chọn để tự động tạo/cập nhật mặt phẳng tổng hợp '<Tên>_Gop' kế thừa động mặt phẳng gốc + ghép thêm Feature Line (0 mặt phẳng phụ thừa).");
+                "• Bỏ tích (Mặc định): Tạo mặt phẳng phụ '<Tên>_Phu_1' và Paste trực tiếp vào mặt phẳng đang chọn (tiện khi SampleLine đang cắt trực tiếp mặt này).\n" +
+                "• Tích chọn: Tạo/cập nhật mặt phẳng tổng hợp '<Tên>_Gop' kế thừa động mặt Corridor gốc + Paste mặt phẳng phụ vào đó.");
 
             tlpExistingOpts.Controls.Add(lblExistingSurfInfo, 0, 0);
-            tlpExistingOpts.Controls.Add(chkOverwriteOverlap, 0, 1);
-            tlpExistingOpts.Controls.Add(chkSafeCorridorCombine, 0, 2);
+            tlpExistingOpts.Controls.Add(chkCreateManagedSubSurface, 0, 1);
+            tlpExistingOpts.Controls.Add(pnlSubSurfaceConfig, 0, 2);
+            tlpExistingOpts.Controls.Add(chkOverwriteOverlap, 0, 3);
+            tlpExistingOpts.Controls.Add(chkSafeCorridorCombine, 0, 4);
             pnlExistingOptions.Controls.Add(tlpExistingOpts);
 
             WinFormsLabel lblStyle = new WinFormsLabel
@@ -981,6 +1149,7 @@ namespace MyFirstProject.Civil_Tool_2
             cboExistingSurfaces.Enabled = !createNew;
             btnPickExistingSurface.Enabled = !createNew;
             pnlExistingOptions.Enabled = !createNew;
+            pnlSubSurfaceConfig.Enabled = !createNew && chkCreateManagedSubSurface.Checked;
 
             if (createNew)
             {
@@ -994,6 +1163,7 @@ namespace MyFirstProject.Civil_Tool_2
             }
 
             UpdateExistingSurfaceMetadataUI();
+            UpdateSubSurfaceNamePreview();
 
             chkNestedClosedAsHole.Enabled = radBoundaryAuto.Checked;
             pnlCustomBoundary.Enabled = radBoundaryCustom.Checked;
@@ -1001,6 +1171,91 @@ namespace MyFirstProject.Civil_Tool_2
             numSupplementing.Enabled = chkUseSupplementing.Checked;
             numMaxEdgeLength.Enabled = chkLimitMaxEdge.Checked;
             btnSuggestMaxEdge.Enabled = chkLimitMaxEdge.Checked;
+        }
+
+        private void OnSelectedExistingSurfaceChanged()
+        {
+            UpdateExistingSurfaceMetadataUI();
+
+            if (!_userCustomizedSubSuffix)
+            {
+                AssignNextAvailableSubSuffix();
+            }
+            else
+            {
+                UpdateSubSurfaceNamePreview();
+            }
+        }
+
+        private string GetEffectiveParentSurfaceName()
+        {
+            string selectedSurf = cboExistingSurfaces.SelectedItem?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(selectedSurf)) return "";
+
+            if (chkSafeCorridorCombine.Visible && chkSafeCorridorCombine.Checked)
+            {
+                return $"{selectedSurf}_Gop";
+            }
+
+            return selectedSurf;
+        }
+
+        private void AssignNextAvailableSubSuffix()
+        {
+            string parentName = GetEffectiveParentSurfaceName();
+            string nextSuffix = CTT_Tao_Mat_Phang_Tu_Featureline_Command.SuggestNextSubSurfaceSuffix(
+                _existingSurfaceMap.Keys,
+                parentName,
+                "Phu");
+
+            _suppressSubSuffixTracking = true;
+            try
+            {
+                txtSubSurfaceSuffix.Text = nextSuffix;
+            }
+            finally
+            {
+                _suppressSubSuffixTracking = false;
+            }
+
+            UpdateSubSurfaceNamePreview();
+        }
+
+        private void UpdateSubSurfaceNamePreview()
+        {
+            string parentName = GetEffectiveParentSurfaceName();
+            string prefixDisplay = string.IsNullOrWhiteSpace(parentName) ? "<TênGốc>_" : $"{parentName}_";
+            lblSubPrefix.Text = prefixDisplay;
+            _toolTip.SetToolTip(lblSubPrefix, $"Tiền tố bắt buộc theo mặt phẳng có sẵn: {prefixDisplay}");
+
+            if (!chkCreateManagedSubSurface.Checked)
+            {
+                lblSubFullNamePreview.Text = "ℹ️ Chế độ gộp trực tiếp (0 mặt phẳng phụ — nạp thẳng vào mặt phẳng đích)";
+                lblSubFullNamePreview.ForeColor = WinFormsColor.FromArgb(85, 98, 115);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(parentName))
+            {
+                lblSubFullNamePreview.Text = "📌 Tên mặt phẳng phụ: (Chưa chọn mặt phẳng có sẵn)";
+                lblSubFullNamePreview.ForeColor = WinFormsColor.FromArgb(85, 98, 115);
+                return;
+            }
+
+            string fullSubName = CTT_Tao_Mat_Phang_Tu_Featureline_Command.BuildPrefixedSubSurfaceName(
+                parentName,
+                txtSubSurfaceSuffix.Text);
+
+            if (_existingSurfaceMap.TryGetValue(fullSubName, out ObjectId dupId) && IsIdAlive(dupId))
+            {
+                lblSubFullNamePreview.Text = $"⚠️ Tên mặt phẳng phụ: '{fullSubName}' (đã có — sẽ hỏi Cập nhật / Đánh số mới)";
+                lblSubFullNamePreview.ForeColor = WinFormsColor.FromArgb(155, 80, 0);
+            }
+            else
+            {
+                lblSubFullNamePreview.Text = $"📌 Tên mặt phẳng phụ: '{fullSubName}' (xếp ngay dưới '{parentName}')";
+                lblSubFullNamePreview.ForeColor = WinFormsColor.FromArgb(18, 92, 52);
+            }
         }
 
         private void UpdateExistingSurfaceMetadataUI()
@@ -1024,9 +1279,9 @@ namespace MyFirstProject.Civil_Tool_2
             if (isSpecialOrig)
             {
                 string origLabel = origType == SurfaceOriginationType.FromCorridor ? "Corridor Surface" : "Grading Surface";
-                lblExistingSurfInfo.Text = $"⚠️ '{selectedSurf}' ({origLabel}, {triCount:N0} tam giác)";
+                lblExistingSurfInfo.Text = $"⚠️ '{selectedSurf}' ({origLabel}, {triCount:N0} tam giác hiện có)";
                 lblExistingSurfInfo.ForeColor = WinFormsColor.FromArgb(150, 75, 0);
-                chkSafeCorridorCombine.Text = $"🛡️ Gộp an toàn vào '{selectedSurf}_Gop' (tránh mất khi Rebuild Corridor)";
+                chkSafeCorridorCombine.Text = $"🛡️ Tạo mặt gộp '{selectedSurf}_Gop' thay vì Paste trực tiếp vào Corridor";
             }
             else
             {
@@ -1035,11 +1290,33 @@ namespace MyFirstProject.Civil_Tool_2
             }
         }
 
+        private static bool LooksLikeAuxiliarySubSurface(string surfName, string styleName)
+        {
+            if (string.IsNullOrWhiteSpace(surfName)) return false;
+
+            int idxSub = surfName.LastIndexOf("_Sub_", StringComparison.OrdinalIgnoreCase);
+            if (idxSub > 0 && int.TryParse(surfName.Substring(idxSub + 5), out _))
+                return true;
+
+            int idxPhu = surfName.LastIndexOf("_Phu_", StringComparison.OrdinalIgnoreCase);
+            if (idxPhu > 0 && int.TryParse(surfName.Substring(idxPhu + 5), out _))
+                return true;
+
+            if (styleName.IndexOf("No Display", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                surfName.Contains('_'))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         #region DRAWING METADATA SCAN (STYLES, EXISTING SURFACES, FILTER GROUPS)
 
         private void ScanDrawingSourcesAndStyles()
         {
             cboMasterStyles.Items.Clear();
+            cboSubSurfaceStyle.Items.Clear();
             cboExistingSurfaces.Items.Clear();
             _existingSurfaceMap.Clear();
             _surfaceOriginationMap.Clear();
@@ -1049,20 +1326,26 @@ namespace MyFirstProject.Civil_Tool_2
             _byCorridor.Clear();
             _allFeatureLineIdsInDrawing.Clear();
 
+            var primarySurfaceNames = new List<string>();
+            var auxiliarySurfaceNames = new List<string>();
+
             try
             {
                 CivilDocument civDoc = CivilApplication.ActiveDocument;
                 using (Transaction tr = _db.TransactionManager.StartTransaction())
                 {
+                    var styleNameById = new Dictionary<ObjectId, string>();
                     if (civDoc != null)
                     {
-                        // 1. Nạp Surface Styles
+                        // 1. Nạp Surface Styles cho cả mặt phẳng chính và mặt phẳng phụ
                         foreach (ObjectId styleId in civDoc.Styles.SurfaceStyles)
                         {
                             if (tr.GetObject(styleId, OpenMode.ForRead) is SurfaceStyle style &&
                                 !string.IsNullOrWhiteSpace(style.Name))
                             {
+                                styleNameById[styleId] = style.Name;
                                 cboMasterStyles.Items.Add(style.Name);
+                                cboSubSurfaceStyle.Items.Add(style.Name);
                             }
                         }
 
@@ -1078,7 +1361,19 @@ namespace MyFirstProject.Civil_Tool_2
                                 catch { _surfaceOriginationMap[surf.Name] = SurfaceOriginationType.None; }
                                 try { _surfaceTriCountMap[surf.Name] = surf.GetTriangles(false).Count; }
                                 catch { _surfaceTriCountMap[surf.Name] = 0; }
-                                cboExistingSurfaces.Items.Add(surf.Name);
+
+                                string surfStyleName = "";
+                                try
+                                {
+                                    if (!surf.StyleId.IsNull && styleNameById.TryGetValue(surf.StyleId, out string? sn))
+                                        surfStyleName = sn;
+                                }
+                                catch { }
+
+                                if (LooksLikeAuxiliarySubSurface(surf.Name, surfStyleName))
+                                    auxiliarySurfaceNames.Add(surf.Name);
+                                else
+                                    primarySurfaceNames.Add(surf.Name);
                             }
                         }
                     }
@@ -1164,11 +1459,27 @@ namespace MyFirstProject.Civil_Tool_2
             }
             catch { }
 
+            // Đưa các mặt phẳng gốc lên đầu danh sách chọn mặt phẳng đích, các mặt phẳng phụ xuống cuối
+            foreach (string sName in primarySurfaceNames)
+            {
+                cboExistingSurfaces.Items.Add(sName);
+            }
+            foreach (string subName in auxiliarySurfaceNames)
+            {
+                cboExistingSurfaces.Items.Add(subName);
+            }
+
             if (cboMasterStyles.Items.Count == 0)
             {
                 cboMasterStyles.Items.Add("Standard");
             }
             cboMasterStyles.SelectedIndex = 0;
+
+            if (cboSubSurfaceStyle.Items.Count == 0)
+            {
+                cboSubSurfaceStyle.Items.Add("_No Display");
+            }
+            SelectPreferredSubSurfaceStyle(_lastSubSurfaceStyle);
 
             if (cboExistingSurfaces.Items.Count > 0)
             {
@@ -1178,6 +1489,31 @@ namespace MyFirstProject.Civil_Tool_2
             {
                 radExistingSurface.Enabled = false;
                 radNewSurface.Checked = true;
+            }
+        }
+
+        private void SelectPreferredSubSurfaceStyle(string preferredStyle)
+        {
+            string[] priorities = !string.IsNullOrWhiteSpace(preferredStyle)
+                ? new[] { preferredStyle, "_No Display", "No Display", "_Khong Hien Thi", "Border Only" }
+                : new[] { "_No Display", "No Display", "_Khong Hien Thi", "Border Only" };
+
+            foreach (string p in priorities)
+            {
+                for (int i = 0; i < cboSubSurfaceStyle.Items.Count; i++)
+                {
+                    string itemText = cboSubSurfaceStyle.Items[i]?.ToString() ?? "";
+                    if (string.Equals(itemText, p, StringComparison.OrdinalIgnoreCase))
+                    {
+                        cboSubSurfaceStyle.SelectedIndex = i;
+                        return;
+                    }
+                }
+            }
+
+            if (cboSubSurfaceStyle.Items.Count > 0)
+            {
+                cboSubSurfaceStyle.SelectedIndex = 0;
             }
         }
 
@@ -1287,6 +1623,11 @@ namespace MyFirstProject.Civil_Tool_2
                     _lastExistingSurfaceId = sId;
             }
 
+            _lastUseManagedSubSurface = chkCreateManagedSubSurface.Checked;
+            _lastSubSurfaceSuffix = txtSubSurfaceSuffix.Text.Trim();
+            if (cboSubSurfaceStyle.SelectedItem != null)
+                _lastSubSurfaceStyle = cboSubSurfaceStyle.SelectedItem.ToString() ?? "_No Display";
+
             if (cboMasterStyles.SelectedItem != null)
                 _lastMasterSurfaceStyle = cboMasterStyles.SelectedItem.ToString() ?? "";
 
@@ -1328,6 +1669,9 @@ namespace MyFirstProject.Civil_Tool_2
             if (!string.IsNullOrEmpty(_lastExistingSurfaceName) && cboExistingSurfaces.Items.Contains(_lastExistingSurfaceName))
                 cboExistingSurfaces.SelectedItem = _lastExistingSurfaceName;
 
+            chkCreateManagedSubSurface.Checked = _lastUseManagedSubSurface;
+            SelectPreferredSubSurfaceStyle(_lastSubSurfaceStyle);
+
             if (!string.IsNullOrEmpty(_lastMasterSurfaceStyle) && cboMasterStyles.Items.Contains(_lastMasterSurfaceStyle))
                 cboMasterStyles.SelectedItem = _lastMasterSurfaceStyle;
 
@@ -1355,6 +1699,29 @@ namespace MyFirstProject.Civil_Tool_2
             chkRebuildAuto.Checked = _lastRebuildAuto;
             chkOverwriteOverlap.Checked = _lastOverwriteOverlap;
             chkSafeCorridorCombine.Checked = _lastSafeCorridorCombine;
+
+            // Khôi phục hậu tố mặt phẳng phụ: nếu hậu tố tự động cũ đã tồn tại thì tự tăng sang số mới (Phu_2, Phu_3...)
+            string effectiveParent = GetEffectiveParentSurfaceName();
+            if (string.IsNullOrWhiteSpace(_lastSubSurfaceSuffix) ||
+                CTT_Tao_Mat_Phang_Tu_Featureline_Command.IsDefaultAutoSubSuffix(effectiveParent, _lastSubSurfaceSuffix))
+            {
+                _userCustomizedSubSuffix = false;
+                AssignNextAvailableSubSuffix();
+            }
+            else
+            {
+                _suppressSubSuffixTracking = true;
+                try
+                {
+                    txtSubSurfaceSuffix.Text = CTT_Tao_Mat_Phang_Tu_Featureline_Command.ExtractCleanSubSurfaceSuffix(effectiveParent, _lastSubSurfaceSuffix);
+                }
+                finally
+                {
+                    _suppressSubSuffixTracking = false;
+                }
+                _userCustomizedSubSuffix = true;
+                UpdateSubSurfaceNamePreview();
+            }
 
             _customOuterIds.Clear();
             _customOuterIds.AddRange(_lastCustomOuterIds.Where(IsIdAlive));
@@ -1461,7 +1828,7 @@ namespace MyFirstProject.Civil_Tool_2
                     cboExistingSurfaces.SelectedItem = surf.Name;
                     radExistingSurface.Enabled = true;
                     radExistingSurface.Checked = true;
-                    UpdateExistingSurfaceMetadataUI();
+                    OnSelectedExistingSurfaceChanged();
                 }
                 tr.Commit();
             }
@@ -1748,6 +2115,9 @@ namespace MyFirstProject.Civil_Tool_2
             string surfaceName = txtSurfaceName.Text.Trim();
             ObjectId existingSurfaceId = ObjectId.Null;
             bool overwriteSameName = false;
+            bool useManagedSub = !createNew && chkCreateManagedSubSurface.Checked;
+            bool overwriteExistingSub = false;
+            string cleanSubSuffix = txtSubSurfaceSuffix.Text.Trim();
 
             if (createNew)
             {
@@ -1783,6 +2153,34 @@ namespace MyFirstProject.Civil_Tool_2
                     return;
                 }
                 surfaceName = selectedSurf;
+
+                if (useManagedSub)
+                {
+                    string effectiveParent = (chkSafeCorridorCombine.Visible && chkSafeCorridorCombine.Checked)
+                        ? $"{surfaceName}_Gop"
+                        : surfaceName;
+
+                    string desiredSubName = CTT_Tao_Mat_Phang_Tu_Featureline_Command.BuildPrefixedSubSurfaceName(
+                        effectiveParent,
+                        cleanSubSuffix);
+
+                    if (_existingSurfaceMap.TryGetValue(desiredSubName, out ObjectId existingSubId) &&
+                        IsIdAlive(existingSubId) &&
+                        existingSubId != existingSurfaceId)
+                    {
+                        DialogResult subDupChoice = MessageBox.Show(
+                            $"Mặt phẳng phụ '{desiredSubName}' đã tồn tại trong bản vẽ!\n\n" +
+                            $"• Nhấn [Yes]  : Cập nhật / Ghi đè mặt phẳng phụ '{desiredSubName}' hiện có (giữ nguyên liên kết Paste vào '{effectiveParent}')\n" +
+                            $"• Nhấn [No]   : Tự động đánh số tên mặt phẳng phụ mới\n" +
+                            $"• Nhấn [Cancel]: Hủy để nhập hậu tố khác",
+                            "Trùng tên Mặt phẳng phụ",
+                            MessageBoxButtons.YesNoCancel,
+                            MessageBoxIcon.Question);
+
+                        if (subDupChoice == DialogResult.Cancel) return;
+                        overwriteExistingSub = subDupChoice == DialogResult.Yes;
+                    }
+                }
             }
 
             FeatureLineBoundaryMode bndMode = FeatureLineBoundaryMode.AutoSmart;
@@ -1811,6 +2209,10 @@ namespace MyFirstProject.Civil_Tool_2
                 ExistingSurfaceId = existingSurfaceId,
                 OverwriteExistingIfNameMatches = overwriteSameName,
                 SurfaceStyleName = cboMasterStyles.SelectedItem?.ToString() ?? "",
+                UseManagedSubSurfaceForExisting = useManagedSub,
+                SubSurfaceSuffixOrName = cleanSubSuffix,
+                SubSurfaceStyleName = cboSubSurfaceStyle.SelectedItem?.ToString() ?? "_No Display",
+                OverwriteExistingSubSurface = overwriteExistingSub,
                 SourceEntityIds = _items.Select(x => x.Id).ToList(),
                 BoundaryMode = bndMode,
                 CustomOuterBoundaryIds = _customOuterIds.Where(IsIdAlive).ToList(),
@@ -1825,7 +2227,7 @@ namespace MyFirstProject.Civil_Tool_2
                 TreatNestedClosedAsHole = chkNestedClosedAsHole.Checked,
                 AutoRebuild = chkRebuildAuto.Checked,
                 OverwriteOverlapOnExisting = chkOverwriteOverlap.Checked,
-                CreateCombinedForCorridorSurface = chkSafeCorridorCombine.Checked,
+                CreateCombinedForCorridorSurface = chkSafeCorridorCombine.Visible && chkSafeCorridorCombine.Checked,
                 CombinedSurfaceName = $"{surfaceName}_Gop"
             };
 
@@ -1835,7 +2237,9 @@ namespace MyFirstProject.Civil_Tool_2
             btnExecute.Enabled = false;
             lblStatus.Text = createNew
                 ? "Đang xây dựng lưới tam giác TIN mới và cắt lọc biên trực tiếp (0 mặt phẳng phụ)..."
-                : $"Đang bổ sung mảng Feature Line vào mặt phẳng '{surfaceName}' (0 mặt phẳng phụ)...";
+                : (useManagedSub
+                    ? $"Đang tạo mặt phẳng phụ có tiền tố '{surfaceName}_' và Paste động vào '{surfaceName}'..."
+                    : $"Đang gộp trực tiếp mảng Feature Line vào mặt phẳng '{surfaceName}'...");
             System.Windows.Forms.Application.DoEvents();
 
             try
@@ -1846,15 +2250,19 @@ namespace MyFirstProject.Civil_Tool_2
                 {
                     lblStatus.Text = $"✅ {result.Message}";
                     string triInfoLine = result.IsSupplementedIntoExisting
-                        ? $"• Lưới tam giác : {result.PreviousTriangleCount:N0} → {result.FinalTriangleCount:N0} (đã cắt lọc {result.TrimmedTriangleCount:N0} tam giác bắc cầu/thừa)\n"
+                        ? $"• Lưới mặt gốc  : {result.PreviousTriangleCount:N0} → {result.FinalTriangleCount:N0} tam giác\n"
                         : $"• Tam giác hợp lệ: {result.FinalTriangleCount:N0} (đã cắt {result.TrimmedTriangleCount:N0} tam giác thừa)\n";
+
+                    string subInfoLine = (result.SubSurfaceCount > 0 && !string.IsNullOrWhiteSpace(result.CreatedSubSurfaceName))
+                        ? $"• Mặt phẳng phụ : '{result.CreatedSubSurfaceName}' ({result.SubSurfaceTriangleCount:N0} tam giác — đã Paste động)"
+                        : "• Mặt phẳng phụ : 0 (Bản vẽ sạch 100%)";
 
                     MessageBox.Show(
                         $"{result.Message}\n\n" +
-                        $"• Mặt phẳng TIN : '{result.FinalSurfaceName}'\n" +
+                        $"• Mặt phẳng gốc : '{result.FinalSurfaceName}'\n" +
                         $"• Đường đã xử lý: {result.ProcessedCurveCount} ({result.OpenCurveCount} Hở, {result.ClosedCurveCount} Kín)\n" +
                         triInfoLine +
-                        $"• Mặt phẳng phụ : 0 (Bản vẽ sạch 100%)",
+                        subInfoLine,
                         result.IsSupplementedIntoExisting ? "Bổ Sung Mặt Phẳng Thành Công" : "Tạo Mặt Phẳng Thành Công",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -1864,6 +2272,11 @@ namespace MyFirstProject.Civil_Tool_2
                     {
                         _lastExistingSurfaceName = result.FinalSurfaceName;
                         _lastExistingSurfaceId = result.MasterSurfaceId;
+                    }
+                    // Nếu đang dùng hậu tố tự động (Phu_1, Phu_2...), đặt lại để lần mở sau tự động gợi ý số tiếp theo
+                    if (useManagedSub && CTT_Tao_Mat_Phang_Tu_Featureline_Command.IsDefaultAutoSubSuffix(result.FinalSurfaceName, cleanSubSuffix))
+                    {
+                        _lastSubSurfaceSuffix = "";
                     }
                     this.DialogResult = DialogResult.OK;
                     this.Close();

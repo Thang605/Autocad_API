@@ -65,17 +65,41 @@ namespace MyFirstProject.Civil_Tool_2
 
         /// <summary>
         /// Khi bổ sung vào mặt phẳng TIN có sẵn:
-        /// true  = Đắp đè cao độ mới tại vùng chồng lấn (thay thế điểm/lưới cũ bên dưới Feature Line mới, 0 mặt phẳng phụ).
+        /// true  = Tạo 1 mặt phẳng phụ mang tiền tố '&lt;TênMặtPhẳngCóSẵn&gt;_&lt;HậuTố&gt;' rồi Paste động vào mặt phẳng có sẵn để dễ quản lý trong Prospector.
+        /// false = Gộp trực tiếp Breaklines/lưới vào mặt phẳng có sẵn (0 mặt phẳng phụ).
+        /// </summary>
+        public bool UseManagedSubSurfaceForExisting { get; set; } = true;
+
+        /// <summary>
+        /// Hậu tố (hoặc tên) của mặt phẳng phụ khi bổ sung vào mặt phẳng có sẵn.
+        /// Hệ thống luôn đảm bảo tên mặt phẳng phụ bắt đầu bằng tiền tố '&lt;TênMặtPhẳngCóSẵn&gt;_'.
+        /// </summary>
+        public string SubSurfaceSuffixOrName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Surface Style áp dụng cho mặt phẳng phụ (mặc định ưu tiên '_No Display' để ẩn trên màn hình CAD nhưng vẫn quản lý rõ trong Prospector).
+        /// </summary>
+        public string SubSurfaceStyleName { get; set; } = "_No Display";
+
+        /// <summary>
+        /// Nếu mặt phẳng phụ cùng tên '&lt;TênMặtPhẳngCóSẵn&gt;_&lt;HậuTố&gt;' đã tồn tại:
+        /// true = Cập nhật/ghi đè nội dung mặt phẳng phụ đó tại chỗ (giữ nguyên ObjectId &amp; liên kết PasteSurface).
+        /// false = Tự động tăng số thứ tự để tạo mặt phẳng phụ mới.
+        /// </summary>
+        public bool OverwriteExistingSubSurface { get; set; } = false;
+
+        /// <summary>
+        /// Khi bổ sung vào mặt phẳng TIN có sẵn:
+        /// true  = Đắp đè cao độ mới tại vùng chồng lấn (thay thế điểm/lưới cũ bên dưới Feature Line mới).
         /// false = Giữ nguyên cao độ mặt phẳng cũ tại vùng chồng lấn, chỉ nối mở rộng thêm phần diện tích mới bên ngoài.
         /// </summary>
         public bool OverwriteOverlapOnExisting { get; set; } = true;
 
         /// <summary>
         /// Khi mặt phẳng đích có nguồn gốc trực tiếp từ Corridor / Grading (FromCorridor / FromGrading):
-        /// Tự động tạo hoặc cập nhật mặt phẳng tổng hợp '&lt;Tên&gt;_Gop' kế thừa động mặt phẳng gốc + ghép phần Feature Line mới,
-        /// giúp không bị cắt bởi Corridor Extents và không mất dữ liệu khi Rebuild Corridor.
+        /// Tự động tạo hoặc cập nhật mặt phẳng tổng hợp '&lt;Tên&gt;_Gop' kế thừa động mặt phẳng gốc + ghép phần Feature Line mới.
         /// </summary>
-        public bool CreateCombinedForCorridorSurface { get; set; } = true;
+        public bool CreateCombinedForCorridorSurface { get; set; } = false;
         public string CombinedSurfaceName { get; set; } = string.Empty;
     }
 
@@ -85,6 +109,9 @@ namespace MyFirstProject.Civil_Tool_2
         public string Message { get; set; } = string.Empty;
         public ObjectId MasterSurfaceId { get; set; } = ObjectId.Null;
         public string FinalSurfaceName { get; set; } = string.Empty;
+        public ObjectId CreatedSubSurfaceId { get; set; } = ObjectId.Null;
+        public string CreatedSubSurfaceName { get; set; } = string.Empty;
+        public int SubSurfaceTriangleCount { get; set; }
         public bool IsSupplementedIntoExisting { get; set; }
         public int PreviousTriangleCount { get; set; }
         public int SubSurfaceCount { get; set; }
@@ -519,14 +546,91 @@ namespace MyFirstProject.Civil_Tool_2
             return true;
         }
 
-        #region SUPPLEMENT / MERGE INTO EXISTING SURFACE (ZERO SUB-SURFACES)
+        #region SUPPLEMENT / MERGE INTO EXISTING SURFACE (MANAGED PREFIXED SUB-SURFACE OR DIRECT MERGE)
 
         /// <summary>
-        /// Bổ sung mảng mặt phẳng mới tạo bởi Feature Line vào một mặt phẳng TIN ĐÃ CÓ SẴN mà không để lại mặt phẳng phụ:
-        /// - Tự xử lý mặt phẳng gốc từ Corridor/Grading (gộp an toàn sang '&lt;Tên&gt;_Gop' nếu bật bảo vệ Corridor).
-        /// - Gỡ bỏ bẫy Outer Boundary cũ cắt mất vùng mới mở rộng bên ngoài, đồng thời khóa nguyên vẹn đường biên cũ.
-        /// - Xử lý chính xác vùng chồng lấn (Đắp đè cao độ mới thay thế điểm cũ, hoặc Giữ nguyên mặt phẳng cũ chỉ nối phần mới).
-        /// - Xóa sạch 100% tam giác bắc cầu nối ngang qua khe hở giữa mặt phẳng cũ và mặt phẳng mới.
+        /// Chuẩn hóa hậu tố do người dùng nhập (tự động khử lặp tiền tố nếu người dùng lỡ gõ cả tên mặt phẳng gốc vào ô hậu tố).
+        /// </summary>
+        public static string ExtractCleanSubSurfaceSuffix(string parentSurfaceName, string rawSuffixOrName)
+        {
+            string parent = (parentSurfaceName ?? string.Empty).Trim();
+            string suffix = (rawSuffixOrName ?? string.Empty).Trim();
+
+            if (!string.IsNullOrEmpty(parent))
+            {
+                while (suffix.StartsWith(parent + "_", StringComparison.OrdinalIgnoreCase))
+                {
+                    suffix = suffix.Substring(parent.Length + 1).TrimStart('_').Trim();
+                }
+
+                if (string.Equals(suffix, parent, StringComparison.OrdinalIgnoreCase))
+                {
+                    suffix = string.Empty;
+                }
+            }
+
+            return suffix.TrimStart('_').Trim();
+        }
+
+        /// <summary>
+        /// Tạo tên mặt phẳng phụ luôn có tiền tố bắt buộc là '&lt;TênMặtPhẳngCóSẵn&gt;_' để quản lý tập trung ngay dưới mặt phẳng gốc trong Prospector.
+        /// Ví dụ: 'Doan 1_Top' + 'Phu_1' -&gt; 'Doan 1_Top_Phu_1'; 'Doan 1_Top' + 'ViaHe1' -&gt; 'Doan 1_Top_ViaHe1'.
+        /// </summary>
+        public static string BuildPrefixedSubSurfaceName(string parentSurfaceName, string rawSuffixOrName, string fallbackSuffix = "Phu_1")
+        {
+            string parent = (parentSurfaceName ?? string.Empty).Trim();
+            string cleanSuffix = ExtractCleanSubSurfaceSuffix(parent, rawSuffixOrName);
+            if (string.IsNullOrWhiteSpace(cleanSuffix))
+            {
+                cleanSuffix = string.IsNullOrWhiteSpace(fallbackSuffix) ? "Phu_1" : fallbackSuffix.Trim().TrimStart('_');
+            }
+
+            return string.IsNullOrEmpty(parent) ? cleanSuffix : $"{parent}_{cleanSuffix}";
+        }
+
+        /// <summary>
+        /// Kiểm tra xem hậu tố đang là mẫu đánh số tự động mặc định ('Phu_1', 'Phu_2'...) hay hậu tố tùy chỉnh của người dùng.
+        /// </summary>
+        public static bool IsDefaultAutoSubSuffix(string parentSurfaceName, string rawSuffixOrName, string baseTag = "Phu")
+        {
+            string clean = ExtractCleanSubSurfaceSuffix(parentSurfaceName, rawSuffixOrName);
+            if (string.IsNullOrWhiteSpace(clean)) return true;
+
+            string prefix = (string.IsNullOrWhiteSpace(baseTag) ? "Phu" : baseTag.Trim()) + "_";
+            if (!clean.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string numPart = clean.Substring(prefix.Length);
+            return int.TryParse(numPart, out int n) && n >= 1;
+        }
+
+        /// <summary>
+        /// Gợi ý hậu tố tự động tiếp theo chưa trùng ('Phu_1', 'Phu_2'...) theo tên mặt phẳng có sẵn.
+        /// </summary>
+        public static string SuggestNextSubSurfaceSuffix(IEnumerable<string> existingSurfaceNames, string parentSurfaceName, string baseTag = "Phu")
+        {
+            string tag = string.IsNullOrWhiteSpace(baseTag) ? "Phu" : baseTag.Trim();
+            string parent = (parentSurfaceName ?? string.Empty).Trim();
+            var existingSet = new HashSet<string>(existingSurfaceNames ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+
+            int index = 1;
+            while (true)
+            {
+                string candidateSuffix = $"{tag}_{index}";
+                string fullCandidate = string.IsNullOrEmpty(parent) ? candidateSuffix : $"{parent}_{candidateSuffix}";
+                if (!existingSet.Contains(fullCandidate))
+                {
+                    return candidateSuffix;
+                }
+                index++;
+            }
+        }
+
+        /// <summary>
+        /// Bổ sung mảng mặt phẳng mới tạo bởi Feature Line vào một mặt phẳng TIN ĐÃ CÓ SẴN:
+        /// - Chế độ mặc định (UseManagedSubSurfaceForExisting = true): Tạo 1 mặt phẳng phụ sạch có tiền tố '&lt;TênMặtPhẳngCóSẵn&gt;_&lt;HậuTố&gt;'
+        ///   (Style mặc định '_No Display') rồi Paste động vào mặt phẳng có sẵn để dễ quản lý/bật tắt/cập nhật trong Prospector.
+        /// - Chế độ gộp trực tiếp (UseManagedSubSurfaceForExisting = false): Nạp trực tiếp vào mặt phẳng có sẵn (0 mặt phẳng phụ).
         /// </summary>
         private static SurfaceCreationResult SupplementFeatureLinesIntoExistingSurface(
             CivilDocument civDoc,
@@ -593,6 +697,24 @@ namespace MyFirstProject.Civil_Tool_2
                     Success = false,
                     Message = "Không thể truy cập mặt phẳng TIN đích để bổ sung dữ liệu."
                 };
+            }
+
+            // Nhánh ưu tiên mặc định: Tạo mặt phẳng phụ mang tiền tố '<TênMặtPhẳngCóSẵn>_' & Paste động để người dùng quản lý rõ ràng
+            if (options.UseManagedSubSurfaceForExisting)
+            {
+                return SupplementViaManagedSubSurface(
+                    civDoc,
+                    tr,
+                    ed,
+                    options,
+                    targetSurfaceId,
+                    targetSurface,
+                    sourceCurves,
+                    openCount,
+                    closedCount,
+                    midOrd,
+                    suppDist,
+                    closeTol);
             }
 
             string finalSurfaceName = targetSurface.Name;
@@ -1052,6 +1174,361 @@ namespace MyFirstProject.Civil_Tool_2
             catch
             {
                 if (wasLocked)
+                {
+                    try { targetSurface.Lock = true; } catch { }
+                }
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Tạo hoặc cập nhật 1 mặt phẳng phụ duy nhất có tiền tố '&lt;TênMặtPhẳngCóSẵn&gt;_&lt;HậuTố&gt;'
+        /// rồi Paste động vào mặt phẳng có sẵn để kỹ sư quản lý trực quan ngay dưới mặt phẳng gốc trong Prospector.
+        /// </summary>
+        private static SurfaceCreationResult SupplementViaManagedSubSurface(
+            CivilDocument civDoc,
+            Transaction tr,
+            Editor ed,
+            TaoMatPhangOptions options,
+            ObjectId targetSurfaceId,
+            CivSurface targetSurface,
+            List<SourceCurveInfo> sourceCurves,
+            int openCount,
+            int closedCount,
+            double midOrd,
+            double suppDist,
+            double closeTol)
+        {
+            string finalSurfaceName = targetSurface.Name;
+            bool wasTargetLocked = false;
+            bool wasSubLocked = false;
+            CivSurface? subSurface = null;
+
+            try
+            {
+                wasTargetLocked = targetSurface.Lock;
+                if (wasTargetLocked) targetSurface.Lock = false;
+            }
+            catch { }
+
+            try
+            {
+                int prevTriangleCount = CountVisibleTriangles(targetSurface);
+                ObjectId subStyleId = ResolveSubSurfaceStyleId(civDoc, tr, options.SubSurfaceStyleName, targetSurface.StyleId, out string resolvedSubStyleName);
+                if (subStyleId.IsNull || !subStyleId.IsValid)
+                {
+                    tr.Abort();
+                    return new SurfaceCreationResult
+                    {
+                        Success = false,
+                        Message = "Không tìm thấy Surface Style hợp lệ để tạo mặt phẳng phụ."
+                    };
+                }
+
+                string desiredSubName = BuildPrefixedSubSurfaceName(finalSurfaceName, options.SubSurfaceSuffixOrName);
+                ObjectId existingSubId = FindSurfaceByName(civDoc, tr, desiredSubName);
+                bool reusingExistingSub = !existingSubId.IsNull &&
+                                          existingSubId.IsValid &&
+                                          !existingSubId.IsErased &&
+                                          existingSubId != targetSurfaceId &&
+                                          options.OverwriteExistingSubSurface;
+
+                SurfaceOperationPasteSurface? existingPasteOp = reusingExistingSub
+                    ? FindPasteOperationForSubSurface(targetSurface, existingSubId)
+                    : null;
+
+                // Nếu chế độ giữ nguyên mặt phẳng cũ tại vùng chồng lấn -> chụp lưới mặt phẳng gốc trước khi Paste/Cập nhật
+                TinTopologyGraph? oldGraph = null;
+                SpatialTriangleGrid2D? oldTriGrid = null;
+                if (!options.OverwriteOverlapOnExisting)
+                {
+                    bool tempDisabledPriorPaste = false;
+                    if (existingPasteOp != null && existingPasteOp.Enabled)
+                    {
+                        try
+                        {
+                            existingPasteOp.Enabled = false;
+                            targetSurface.Rebuild();
+                            tempDisabledPriorPaste = true;
+                        }
+                        catch { }
+                    }
+
+                    int pureOldTris = CountVisibleTriangles(targetSurface);
+                    if (pureOldTris > 0)
+                    {
+                        oldGraph = BuildTinTopologyGraph(targetSurface);
+                        oldTriGrid = new SpatialTriangleGrid2D(oldGraph);
+                    }
+
+                    if (tempDisabledPriorPaste && existingPasteOp != null)
+                    {
+                        try { existingPasteOp.Enabled = true; } catch { }
+                    }
+                }
+
+                ObjectId subSurfaceId;
+                string finalSubName;
+
+                if (reusingExistingSub)
+                {
+                    subSurfaceId = existingSubId;
+                    subSurface = tr.GetObject(subSurfaceId, OpenMode.ForWrite) as CivSurface;
+                    if (subSurface == null)
+                    {
+                        tr.Abort();
+                        return new SurfaceCreationResult
+                        {
+                            Success = false,
+                            Message = $"Không thể mở mặt phẳng phụ '{desiredSubName}' ở chế độ ghi (OpenMode.ForWrite)."
+                        };
+                    }
+
+                    try
+                    {
+                        wasSubLocked = subSurface.Lock;
+                        if (wasSubLocked) subSurface.Lock = false;
+                    }
+                    catch { }
+
+                    ClearSurfaceDefinitionsAndEdits(subSurface);
+                    try { subSurface.StyleId = subStyleId; } catch { }
+                    finalSubName = subSurface.Name;
+                }
+                else
+                {
+                    finalSubName = EnsureUniquePrefixedSubSurfaceName(civDoc, tr, finalSurfaceName, options.SubSurfaceSuffixOrName);
+                    subSurfaceId = TinSurface.Create(finalSubName, subStyleId);
+                    if (subSurfaceId.IsNull || !subSurfaceId.IsValid)
+                    {
+                        tr.Abort();
+                        return new SurfaceCreationResult
+                        {
+                            Success = false,
+                            Message = $"Không thể khởi tạo mặt phẳng phụ '{finalSubName}'."
+                        };
+                    }
+
+                    subSurface = tr.GetObject(subSurfaceId, OpenMode.ForWrite) as CivSurface;
+                    if (subSurface == null)
+                    {
+                        tr.Abort();
+                        return new SurfaceCreationResult
+                        {
+                            Success = false,
+                            Message = $"Không thể mở mặt phẳng phụ '{finalSubName}' ở chế độ ghi."
+                        };
+                    }
+
+                    finalSubName = subSurface.Name;
+                }
+
+                ed.WriteMessage($"\n══════════════════════════════════════════════════════════════════");
+                ed.WriteMessage($"\n➕ BỔ SUNG VÀO MẶT PHẲNG CÓ SẴN QUA MẶT PHẲNG PHỤ CÓ TIỀN TỐ QUẢN LÝ");
+                ed.WriteMessage($"\n  • Mặt phẳng gốc  : '{finalSurfaceName}' (Hiện có: {prevTriangleCount:N0} tam giác)");
+                ed.WriteMessage($"\n  • Mặt phẳng phụ  : '{finalSubName}' ({(reusingExistingSub ? "Cập nhật tại chỗ" : "Tạo mới")} | Style: '{resolvedSubStyleName}')");
+                ed.WriteMessage($"\n  • Nguồn bổ sung  : {sourceCurves.Count} đối tượng ({openCount} đường hở, {closedCount} đường kín)");
+
+                bool populatedOk = PopulateCleanFeatureLineSurface(
+                    subSurface,
+                    options,
+                    tr,
+                    ed,
+                    sourceCurves,
+                    midOrd,
+                    suppDist,
+                    closeTol,
+                    usePointsOnlyBreaklines: false,
+                    out int addedBreaklineCount,
+                    out int subTrimmedCount,
+                    out _);
+
+                if (!populatedOk || addedBreaklineCount == 0)
+                {
+                    tr.Abort();
+                    return new SurfaceCreationResult
+                    {
+                        Success = false,
+                        Message = "Không thể thêm Breakline nào vào mặt phẳng phụ."
+                    };
+                }
+
+                // Nếu người dùng chọn KHÔNG đắp đè vùng chồng lấn -> cắt bỏ tam giác của mặt phẳng phụ nằm lọt trong mặt phẳng gốc & khớp cao độ mép nối
+                if (!options.OverwriteOverlapOnExisting && oldTriGrid != null && oldGraph != null && oldGraph.Triangles.Count > 0)
+                {
+                    TinTopologyGraph subGraph = BuildTinTopologyGraph(subSurface);
+                    if (subGraph.Triangles.Count > 0)
+                    {
+                        bool[] subRemoved = new bool[subGraph.Triangles.Count];
+                        bool anyMarked = false;
+                        for (int t = 0; t < subGraph.Triangles.Count; t++)
+                        {
+                            TinTriangleNode tri = subGraph.Triangles[t];
+                            Point2d c = tri.Centroid2D;
+                            Point3d p0 = subGraph.Vertices[tri.V0].Pos;
+                            Point3d p1 = subGraph.Vertices[tri.V1].Pos;
+                            Point3d p2 = subGraph.Vertices[tri.V2].Pos;
+
+                            if (oldTriGrid.ContainsPoint(c.X, c.Y, -1e-4) &&
+                                oldTriGrid.ContainsPoint(p0.X, p0.Y, 0.01) &&
+                                oldTriGrid.ContainsPoint(p1.X, p1.Y, 0.01) &&
+                                oldTriGrid.ContainsPoint(p2.X, p2.Y, 0.01))
+                            {
+                                subRemoved[t] = true;
+                                anyMarked = true;
+                            }
+                        }
+
+                        if (anyMarked)
+                        {
+                            subTrimmedCount += ApplyRemovedTrianglesToSurface(subSurface, subGraph, subRemoved, midOrd, ed);
+                        }
+
+                        try
+                        {
+                            foreach (TinSurfaceVertex v in subSurface.Vertices)
+                            {
+                                if (v == null || !v.IsValid) continue;
+                                Point3d loc = v.Location;
+                                if (oldTriGrid.TryInterpolateZ(loc.X, loc.Y, out double oldZ, 0.015) &&
+                                    Math.Abs(loc.Z - oldZ) > 0.002)
+                                {
+                                    try { subSurface.SetVertexElevation(v, oldZ); } catch { }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                int subTriangleCount = CountVisibleTriangles(subSurface);
+                if (subTriangleCount == 0)
+                {
+                    tr.Abort();
+                    return new SurfaceCreationResult
+                    {
+                        Success = false,
+                        Message = !options.OverwriteOverlapOnExisting
+                            ? "Toàn bộ vùng Feature Line mới nằm trọn trong mặt phẳng cũ trong khi tùy chọn 'Đắp đè vùng chồng lấn' đang tắt (0 tam giác mở rộng mới)."
+                            : "Mặt phẳng phụ tạo từ Feature Line có 0 tam giác hợp lệ sau khi lọc biên (hãy kiểm tra lại chiều dài cạnh tối đa hoặc đường biên)."
+                    };
+                }
+
+                // Liên kết Paste động mặt phẳng phụ vào mặt phẳng có sẵn
+                existingPasteOp = FindPasteOperationForSubSurface(targetSurface, subSurfaceId);
+                if (existingPasteOp != null)
+                {
+                    try { if (!existingPasteOp.Enabled) existingPasteOp.Enabled = true; } catch { }
+                }
+                else
+                {
+                    targetSurface.PasteSurface(subSurfaceId);
+                    existingPasteOp = FindPasteOperationForSubSurface(targetSurface, subSurfaceId);
+                }
+
+                targetSurface.Rebuild();
+
+                // Kiểm tra an toàn: nếu mặt phẳng gốc có Outer/DataClip Boundary cũ làm cắt khuất phần mặt phẳng phụ vừa Paste -> khóa biên cũ & gỡ Outer Boundary
+                if (HasRestrictiveOuterBoundary(targetSurface))
+                {
+                    List<Point2d> sampleSubCentroids = GetSampleVisibleCentroids(subSurface, maxSamples: 8);
+                    bool anyClippedByOuter = false;
+                    for (int i = 0; i < sampleSubCentroids.Count; i++)
+                    {
+                        if (!IsPointVisibleOnSurface(targetSurface, sampleSubCentroids[i].X, sampleSubCentroids[i].Y))
+                        {
+                            anyClippedByOuter = true;
+                            break;
+                        }
+                    }
+
+                    if (anyClippedByOuter)
+                    {
+                        if (existingPasteOp != null)
+                        {
+                            try
+                            {
+                                existingPasteOp.Enabled = false;
+                                targetSurface.Rebuild();
+                            }
+                            catch { }
+                        }
+
+                        TinTopologyGraph pureOld = oldGraph ?? BuildTinTopologyGraph(targetSurface);
+                        var borderSegs = new List<(Point3d A, Point3d B)>();
+                        for (int eIdx = 0; eIdx < pureOld.Edges.Count; eIdx++)
+                        {
+                            TinEdgeNode edge = pureOld.Edges[eIdx];
+                            if ((edge.TriA >= 0) != (edge.TriB >= 0))
+                            {
+                                borderSegs.Add((pureOld.Vertices[edge.U].Pos, pureOld.Vertices[edge.V].Pos));
+                            }
+                        }
+
+                        foreach (Point3dCollection chain in ChainSegmentsToPolylines(borderSegs))
+                        {
+                            try { targetSurface.BreaklinesDefinition.AddStandardBreaklines(chain, midOrd, 100000.0, 0.0, 0.0); }
+                            catch { }
+                        }
+
+                        RemoveRestrictiveOuterBoundaries(targetSurface);
+
+                        if (existingPasteOp != null)
+                        {
+                            try { existingPasteOp.Enabled = true; } catch { }
+                        }
+
+                        targetSurface.Rebuild();
+                    }
+                }
+
+                SetAutoRebuildSafe(subSurface, options.AutoRebuild);
+                SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
+
+                int finalTriangleCount = CountVisibleTriangles(targetSurface);
+
+                if (wasSubLocked && subSurface != null)
+                {
+                    try { subSurface.Lock = true; } catch { }
+                }
+                if (wasTargetLocked)
+                {
+                    try { targetSurface.Lock = true; } catch { }
+                }
+
+                tr.Commit();
+
+                ed.WriteMessage($"\n  • Mặt phẳng phụ  : '{finalSubName}' ({subTriangleCount:N0} tam giác, đã lọc {subTrimmedCount:N0} tam giác thừa)");
+                ed.WriteMessage($"\n  • Kết quả Paste  : '{finalSurfaceName}' ({prevTriangleCount:N0} -> {finalTriangleCount:N0} tam giác)");
+                ed.WriteMessage($"\n🎉 Đã tạo mặt phẳng phụ '{finalSubName}' và Paste động vào '{finalSurfaceName}' thành công!");
+                ed.WriteMessage($"\n══════════════════════════════════════════════════════════════════\n");
+
+                return new SurfaceCreationResult
+                {
+                    Success = true,
+                    Message = $"Đã bổ sung vào '{finalSurfaceName}' qua mặt phẳng phụ '{finalSubName}' ({prevTriangleCount:N0} → {finalTriangleCount:N0} tam giác)!",
+                    MasterSurfaceId = targetSurfaceId,
+                    FinalSurfaceName = finalSurfaceName,
+                    CreatedSubSurfaceId = subSurfaceId,
+                    CreatedSubSurfaceName = finalSubName,
+                    SubSurfaceTriangleCount = subTriangleCount,
+                    IsSupplementedIntoExisting = true,
+                    PreviousTriangleCount = prevTriangleCount,
+                    SubSurfaceCount = 1,
+                    ProcessedCurveCount = addedBreaklineCount,
+                    OpenCurveCount = openCount,
+                    ClosedCurveCount = closedCount,
+                    TrimmedTriangleCount = subTrimmedCount,
+                    FinalTriangleCount = finalTriangleCount
+                };
+            }
+            catch
+            {
+                if (wasSubLocked && subSurface != null)
+                {
+                    try { subSurface.Lock = true; } catch { }
+                }
+                if (wasTargetLocked)
                 {
                     try { targetSurface.Lock = true; } catch { }
                 }
@@ -3748,6 +4225,221 @@ namespace MyFirstProject.Civil_Tool_2
             while (existingNames.Contains(candidate));
 
             return candidate;
+        }
+
+        private static string EnsureUniquePrefixedSubSurfaceName(CivilDocument civDoc, Transaction tr, string parentSurfaceName, string rawSuffixOrName)
+        {
+            HashSet<string> existingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ObjectId sId in civDoc.GetSurfaceIds())
+            {
+                if (sId.IsNull || !sId.IsValid || sId.IsErased) continue;
+                if (tr.GetObject(sId, OpenMode.ForWrite) is CivSurface s && !string.IsNullOrEmpty(s.Name))
+                {
+                    existingNames.Add(s.Name);
+                }
+            }
+
+            string desired = BuildPrefixedSubSurfaceName(parentSurfaceName, rawSuffixOrName);
+            if (!existingNames.Contains(desired) && !string.Equals(desired, parentSurfaceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return desired;
+            }
+
+            // Nếu đang ở dạng đánh số tự động '<Parent>_Phu_<N>' hoặc kết thúc bằng '_<Số>', tăng thẳng số thứ tự để tên đẹp ('_Phu_2', '_Phu_3'...)
+            int lastUnderscore = desired.LastIndexOf('_');
+            if (lastUnderscore > 0 && lastUnderscore < desired.Length - 1)
+            {
+                string tailDigits = desired.Substring(lastUnderscore + 1);
+                if (int.TryParse(tailDigits, out int startNum) && startNum >= 1)
+                {
+                    string stem = desired.Substring(0, lastUnderscore);
+                    int nextNum = startNum + 1;
+                    while (true)
+                    {
+                        string numbered = $"{stem}_{nextNum}";
+                        if (!existingNames.Contains(numbered) && !string.Equals(numbered, parentSurfaceName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return numbered;
+                        }
+                        nextNum++;
+                    }
+                }
+            }
+
+            int idx = 1;
+            while (true)
+            {
+                string candidate = $"{desired}_{idx}";
+                if (!existingNames.Contains(candidate) && !string.Equals(candidate, parentSurfaceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+                idx++;
+            }
+        }
+
+        private static ObjectId ResolveSubSurfaceStyleId(
+            CivilDocument civDoc,
+            Transaction tr,
+            string requestedSubStyleName,
+            ObjectId fallbackStyleId,
+            out string resolvedStyleName)
+        {
+            resolvedStyleName = string.Empty;
+            SurfaceStyleCollection styles = civDoc.Styles.SurfaceStyles;
+
+            string[] candidates = !string.IsNullOrWhiteSpace(requestedSubStyleName)
+                ? new[] { requestedSubStyleName.Trim(), "_No Display", "No Display", "_Khong Hien Thi", "Border Only" }
+                : new[] { "_No Display", "No Display", "_Khong Hien Thi", "Border Only" };
+
+            foreach (string cand in candidates)
+            {
+                foreach (ObjectId sId in styles)
+                {
+                    if (sId.IsNull || !sId.IsValid || sId.IsErased) continue;
+                    if (tr.GetObject(sId, OpenMode.ForWrite) is SurfaceStyle st &&
+                        string.Equals(st.Name, cand, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resolvedStyleName = st.Name;
+                        return sId;
+                    }
+                }
+            }
+
+            if (!fallbackStyleId.IsNull && fallbackStyleId.IsValid && !fallbackStyleId.IsErased)
+            {
+                if (tr.GetObject(fallbackStyleId, OpenMode.ForWrite) is SurfaceStyle fbSt)
+                {
+                    resolvedStyleName = fbSt.Name;
+                    return fallbackStyleId;
+                }
+            }
+
+            foreach (ObjectId sId in styles)
+            {
+                if (sId.IsNull || !sId.IsValid || sId.IsErased) continue;
+                if (tr.GetObject(sId, OpenMode.ForWrite) is SurfaceStyle anySt)
+                {
+                    resolvedStyleName = anySt.Name;
+                    return sId;
+                }
+            }
+
+            return ObjectId.Null;
+        }
+
+        private static void ClearSurfaceDefinitionsAndEdits(CivSurface surface)
+        {
+            try
+            {
+                for (int i = surface.BoundariesDefinition.Count - 1; i >= 0; i--)
+                {
+                    try { surface.BoundariesDefinition.RemoveAt(i); } catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                for (int i = surface.BreaklinesDefinition.Count - 1; i >= 0; i--)
+                {
+                    try { surface.BreaklinesDefinition.RemoveAt(i); } catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                for (int i = surface.Operations.Count - 1; i >= 0; i--)
+                {
+                    try { surface.Operations.RemoveAt(i); } catch { }
+                }
+            }
+            catch { }
+
+            try { surface.Rebuild(); } catch { }
+        }
+
+        private static SurfaceOperationPasteSurface? FindPasteOperationForSubSurface(CivSurface targetSurface, ObjectId subSurfaceId)
+        {
+            if (subSurfaceId.IsNull || !subSurfaceId.IsValid) return null;
+            try
+            {
+                for (int i = 0; i < targetSurface.Operations.Count; i++)
+                {
+                    try
+                    {
+                        if (targetSurface.Operations[i] is SurfaceOperationPasteSurface pasteOp &&
+                            pasteOp.SurfaceId == subSurfaceId)
+                        {
+                            return pasteOp;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static bool HasRestrictiveOuterBoundary(CivSurface surface)
+        {
+            try
+            {
+                for (int i = 0; i < surface.BoundariesDefinition.Count; i++)
+                {
+                    try
+                    {
+                        SurfaceBoundaryType bType = surface.BoundariesDefinition[i].BoundaryType;
+                        if (bType == SurfaceBoundaryType.Outer || bType == SurfaceBoundaryType.DataClip)
+                            return true;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static List<Point2d> GetSampleVisibleCentroids(CivSurface surface, int maxSamples = 8)
+        {
+            var result = new List<Point2d>();
+            try
+            {
+                TinSurfaceTriangleCollection tris = surface.GetTriangles(false);
+                int count = tris.Count;
+                if (count == 0) return result;
+
+                int step = Math.Max(1, count / Math.Max(1, maxSamples));
+                int idx = 0;
+                foreach (TinSurfaceTriangle tri in tris)
+                {
+                    if (tri != null && tri.IsValid && (idx % step == 0))
+                    {
+                        Point3d p0 = tri.Vertex1.Location;
+                        Point3d p1 = tri.Vertex2.Location;
+                        Point3d p2 = tri.Vertex3.Location;
+                        result.Add(new Point2d((p0.X + p1.X + p2.X) / 3.0, (p0.Y + p1.Y + p2.Y) / 3.0));
+                        if (result.Count >= maxSamples) break;
+                    }
+                    idx++;
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private static bool IsPointVisibleOnSurface(CivSurface surface, double x, double y)
+        {
+            try
+            {
+                surface.FindElevationAtXY(x, y);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         #endregion
