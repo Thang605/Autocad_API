@@ -47,7 +47,7 @@ namespace MyFirstProject.Civil_Tool_2
         // ═══════════════════════════════════════════════════════════════
         //  PERSISTENT STATE (BẮT BUỘC THEO QUY TẮC RULE 2)
         // ═══════════════════════════════════════════════════════════════
-        private static Size _lastFormSize = new Size(1060, 790);
+        private static Size _lastFormSize = new Size(1080, 790);
         private static bool _lastCreateNewSurface = true;
         private static string _lastSurfaceName = "";
         private static ObjectId _lastExistingSurfaceId = ObjectId.Null;
@@ -72,6 +72,10 @@ namespace MyFirstProject.Civil_Tool_2
         private static List<ObjectId> _lastSelectedIds = new List<ObjectId>();
         private static List<ObjectId> _lastCustomOuterIds = new List<ObjectId>();
         private static List<ObjectId> _lastCustomHideIds = new List<ObjectId>();
+        private static List<ObjectId> _lastExecutedIds = new List<ObjectId>();
+        private static List<ObjectId> _lastExecutedOuterIds = new List<ObjectId>();
+        private static List<ObjectId> _lastExecutedHideIds = new List<ObjectId>();
+        private static string _lastExecutedTargetDesc = "";
 
         // ═══════════════════════════════════════════════════════════════
         //  FIELDS
@@ -90,6 +94,7 @@ namespace MyFirstProject.Civil_Tool_2
         private ToolTip _toolTip = null!;
         private bool _suppressSubSuffixTracking = false;
         private bool _userCustomizedSubSuffix = false;
+        private bool _completedSuccessfully = false;
 
         // Dữ liệu cache cho bộ lọc nạp nhanh
         private readonly Dictionary<string, List<ObjectId>> _bySite = new Dictionary<string, List<ObjectId>>(StringComparer.OrdinalIgnoreCase);
@@ -106,6 +111,7 @@ namespace MyFirstProject.Civil_Tool_2
         private WinFormsButton btnLoadByFilter = null!;
         private WinFormsButton btnSelectNew = null!;
         private WinFormsButton btnSelectAdd = null!;
+        private WinFormsButton btnRestoreLast = null!;
         private WinFormsButton btnRemoveSelected = null!;
         private WinFormsButton btnClearAll = null!;
         private CheckBox chkAutoClose = null!;
@@ -351,23 +357,27 @@ namespace MyFirstProject.Civil_Tool_2
                 Margin = new Padding(0, 0, 0, 6)
             };
 
-            btnSelectNew = CreateActionButton("🎯 Chọn trên CAD", 148, 40, WinFormsColor.FromArgb(20, 72, 118), WinFormsColor.White, true);
+            btnSelectNew = CreateActionButton("🎯 Chọn trên CAD", 136, 40, WinFormsColor.FromArgb(20, 72, 118), WinFormsColor.White, true);
             btnSelectNew.Click += (s, e) => PickSourceEntitiesOnCad(append: false);
             _toolTip.SetToolTip(btnSelectNew, "Quét chọn mới các đường Feature Line, Auto Corridor FL, Polyline trên bản vẽ");
 
-            btnSelectAdd = CreateActionButton("➕ Chọn thêm", 118, 40, WinFormsColor.FromArgb(25, 135, 84), WinFormsColor.White, true);
+            btnSelectAdd = CreateActionButton("➕ Chọn thêm", 110, 40, WinFormsColor.FromArgb(25, 135, 84), WinFormsColor.White, true);
             btnSelectAdd.Click += (s, e) => PickSourceEntitiesOnCad(append: true);
             _toolTip.SetToolTip(btnSelectAdd, "Chọn bổ sung thêm đối tượng trên CAD vào danh sách hiện tại");
 
-            btnRemoveSelected = CreateActionButton("🗑️ Xóa dòng", 105, 40, WinFormsColor.FromArgb(232, 236, 241), WinFormsColor.FromArgb(55, 65, 80), false);
+            btnRestoreLast = CreateActionButton("↺ Nạp lại cũ", 104, 40, WinFormsColor.FromArgb(255, 243, 205), WinFormsColor.FromArgb(125, 78, 0), false);
+            btnRestoreLast.Click += (s, e) => RestoreLastExecutedItems();
+
+            btnRemoveSelected = CreateActionButton("🗑️ Xóa dòng", 98, 40, WinFormsColor.FromArgb(232, 236, 241), WinFormsColor.FromArgb(55, 65, 80), false);
             btnRemoveSelected.Click += (s, e) => RemoveSelectedItemsInList();
             _toolTip.SetToolTip(btnRemoveSelected, "Loại bỏ các dòng đang bôi đen trong bảng (hoặc nhấn phím Delete)");
 
-            btnClearAll = CreateActionButton("🧹 Xóa hết", 96, 40, WinFormsColor.FromArgb(248, 225, 228), WinFormsColor.FromArgb(155, 30, 45), false);
+            btnClearAll = CreateActionButton("🧹 Xóa hết", 90, 40, WinFormsColor.FromArgb(248, 225, 228), WinFormsColor.FromArgb(155, 30, 45), false);
             btnClearAll.Click += (s, e) => ClearAllSourceItems();
 
             flpPickBar.Controls.Add(btnSelectNew);
             flpPickBar.Controls.Add(btnSelectAdd);
+            flpPickBar.Controls.Add(btnRestoreLast);
             flpPickBar.Controls.Add(btnRemoveSelected);
             flpPickBar.Controls.Add(btnClearAll);
 
@@ -1114,7 +1124,13 @@ namespace MyFirstProject.Civil_Tool_2
             this.AcceptButton = btnExecute;
             this.CancelButton = btnClose;
 
-            this.FormClosing += (s, e) => SaveCurrentSettings();
+            this.FormClosing += (s, e) =>
+            {
+                if (!_completedSuccessfully)
+                {
+                    SaveCurrentSettings();
+                }
+            };
             this.ResizeEnd += (s, e) => _lastFormSize = this.Size;
         }
 
@@ -1746,14 +1762,69 @@ namespace MyFirstProject.Civil_Tool_2
 
         private void TryRestorePreviousSelection()
         {
-            if (_lastSelectedIds == null || _lastSelectedIds.Count == 0) return;
+            UpdateRestoreLastButtonState();
 
-            List<ObjectId> validIds = _lastSelectedIds.Where(IsIdAlive).ToList();
-            if (validIds.Count > 0)
+            if (_lastSelectedIds != null && _lastSelectedIds.Count > 0)
             {
-                PopulateItems(validIds);
-                lblStatus.Text = $"Đã khôi phục {validIds.Count} đối tượng từ lần chạy trước.";
+                List<ObjectId> validPending = _lastSelectedIds.Where(IsIdAlive).ToList();
+                if (validPending.Count > 0)
+                {
+                    PopulateItems(validPending);
+                    lblStatus.Text = $"Đã khôi phục {validPending.Count} đối tượng đang chọn dở từ lần mở trước.";
+                    return;
+                }
             }
+
+            int lastExecCount = _lastExecutedIds != null ? _lastExecutedIds.Count(IsIdAlive) : 0;
+            if (lastExecCount > 0)
+            {
+                string targetLabel = string.IsNullOrWhiteSpace(_lastExecutedTargetDesc) ? "lần trước" : $"'{_lastExecutedTargetDesc}'";
+                lblStatus.Text = $"Danh sách đã làm trống để chọn vùng mới (tránh trùng lặp). Nhấn '↺ Nạp lại cũ' nếu cần gọi lại {lastExecCount} đường của {targetLabel}.";
+            }
+        }
+
+        private void UpdateRestoreLastButtonState()
+        {
+            int validExecCount = _lastExecutedIds != null ? _lastExecutedIds.Count(IsIdAlive) : 0;
+            btnRestoreLast.Enabled = validExecCount > 0;
+
+            if (validExecCount > 0)
+            {
+                string targetLabel = string.IsNullOrWhiteSpace(_lastExecutedTargetDesc) ? "lần chạy trước" : $"'{_lastExecutedTargetDesc}'";
+                _toolTip.SetToolTip(
+                    btnRestoreLast,
+                    $"Nạp lại {validExecCount} đối tượng vừa dùng tạo {targetLabel} (dùng khi muốn chỉnh lại thông số của vùng cũ)");
+            }
+            else
+            {
+                _toolTip.SetToolTip(btnRestoreLast, "Chưa có bộ đối tượng nào từ lần thực thi thành công trước đó trong phiên này");
+            }
+        }
+
+        private void RestoreLastExecutedItems()
+        {
+            List<ObjectId> validExec = _lastExecutedIds != null
+                ? _lastExecutedIds.Where(IsIdAlive).ToList()
+                : new List<ObjectId>();
+
+            if (validExec.Count == 0)
+            {
+                UpdateRestoreLastButtonState();
+                return;
+            }
+
+            PopulateItems(validExec);
+
+            if (_customOuterIds.Count == 0 && _lastExecutedOuterIds.Count > 0)
+            {
+                _customOuterIds.AddRange(_lastExecutedOuterIds.Where(IsIdAlive));
+                _customHideIds.Clear();
+                _customHideIds.AddRange(_lastExecutedHideIds.Where(IsIdAlive));
+                UpdateCustomBoundaryLabel();
+            }
+
+            string targetLabel = string.IsNullOrWhiteSpace(_lastExecutedTargetDesc) ? "lần chạy trước" : $"'{_lastExecutedTargetDesc}'";
+            lblStatus.Text = $"↺ Đã nạp lại {_items.Count} đối tượng từ {targetLabel}.";
         }
 
         #endregion
@@ -2267,7 +2338,20 @@ namespace MyFirstProject.Civil_Tool_2
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
 
+                    // Ghi nhớ riêng bộ đối tượng vừa thực thi vào nút '↺ Nạp lại cũ', đồng thời làm trống danh sách chờ cho lần chạy vùng tiếp theo
+                    _lastExecutedIds = _items.Select(x => x.Id).Where(IsIdAlive).ToList();
+                    _lastExecutedOuterIds = _customOuterIds.Where(IsIdAlive).ToList();
+                    _lastExecutedHideIds = _customHideIds.Where(IsIdAlive).ToList();
+                    _lastExecutedTargetDesc = !string.IsNullOrWhiteSpace(result.CreatedSubSurfaceName)
+                        ? result.CreatedSubSurfaceName
+                        : result.FinalSurfaceName;
+
                     SaveCurrentSettings();
+                    _completedSuccessfully = true;
+                    _lastSelectedIds.Clear();
+                    _lastCustomOuterIds.Clear();
+                    _lastCustomHideIds.Clear();
+
                     if (!string.IsNullOrWhiteSpace(result.FinalSurfaceName) && IsIdAlive(result.MasterSurfaceId))
                     {
                         _lastExistingSurfaceName = result.FinalSurfaceName;
