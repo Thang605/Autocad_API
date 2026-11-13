@@ -42,22 +42,7 @@ namespace MyFirstProject.Extensions
         }
         public static ObjectId ParentAlignmentId(this SampleLine sl)
         {
-            ObjectId algnId = ObjectId.Null;
-            foreach (ObjectId id in CivilApplication.ActiveDocument.GetAlignmentIds())
-            {
-                Alignment algn = (Alignment)id.GetObject(OpenMode.ForRead);
-                foreach (ObjectId slgId in algn.GetSampleLineGroupIds())
-                {
-                    if (slgId == sl.GroupId)
-                    {
-                        algnId = id;
-                        break;
-                    }
-                }
-                if (algnId != ObjectId.Null)
-                    break;
-            }
-            return algnId;
+            return Civil3DCsharp.Civil3DExtensions.GetParentAlignmentId(sl);
         }
 
         public static void Ok(string thongbao)

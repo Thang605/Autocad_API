@@ -1,6 +1,5 @@
 using Autodesk.Aec.PropertyData.DatabaseServices;
 using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
@@ -199,10 +198,8 @@ namespace MyFirstProject.Extensions
 
             try
             {
-                // Lấy thông tin cơ bản của solid
-                string layerName = solid.Layer;
+                // Chỉ tính các thông tin thực sự được ghi vào Property Set.
                 double volume = solid.MassProperties.Volume;
-                Point3d centroid = solid.MassProperties.Centroid;
 
                 // Sử dụng tên Property Set cố định
                 string propertySetName = DefaultPropertySetName;
@@ -717,6 +714,9 @@ namespace MyFirstProject.Extensions
 
             if (defIdsMap.Count == 0) return 0;
 
+            bool needsVolume = defIdsMap.Values.Any(entry =>
+                entry.defs.Any(def => def.SourceType == PropertySourceType.Volume));
+
             Database db = A.Db;
             BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
@@ -756,7 +756,7 @@ namespace MyFirstProject.Extensions
                 if (entity == null || !selectedLayers.TryGetValue(entity.LayerId, out var map)) continue;
 
                 double volume = 0.0;
-                if (entity is Solid3d solid)
+                if (needsVolume && entity is Solid3d solid)
                 {
                     try { volume = solid.MassProperties.Volume; }
                     catch { }

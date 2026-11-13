@@ -71,10 +71,39 @@ namespace MyFirstProject
         private WpfBorder _tabAcad = null!;
 
         private List<PaletteCommandInfo> _allCommands = new();
+        private List<SearchEntry> _searchEntries = new();
+        private readonly Dictionary<PaletteCommandInfo, WpfBorder> _commandItems = new();
         private readonly Action<string> _executeCommand;
         private readonly Action? _reloadCallback;
         private readonly Dictionary<string, bool> _expandStates = new();
         private string _activeScope = "ALL"; // "ALL", "CIVIL", "ACAD"
+
+        private sealed class SearchEntry
+        {
+            public PaletteCommandInfo Command { get; }
+            private readonly string _label;
+            private readonly string _description;
+            private readonly string _category;
+
+            public SearchEntry(PaletteCommandInfo command)
+            {
+                Command = command;
+                _label = RemoveDiacritics(command.Label);
+                _description = RemoveDiacritics(command.Description);
+                _category = RemoveDiacritics(command.Category);
+            }
+
+            public bool Matches(string query, string queryNoSign)
+            {
+                return Command.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    Command.Command.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    Command.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    Command.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    _label.Contains(queryNoSign, StringComparison.OrdinalIgnoreCase) ||
+                    _description.Contains(queryNoSign, StringComparison.OrdinalIgnoreCase) ||
+                    _category.Contains(queryNoSign, StringComparison.OrdinalIgnoreCase);
+            }
+        }
 
         // ═══════════════════════════════════════════════════════════════
         //  CONSTRUCTOR
@@ -339,7 +368,10 @@ namespace MyFirstProject
         /// </summary>
         public void LoadCommands(List<PaletteCommandInfo> commands)
         {
-            _allCommands = commands ?? new();
+            // Snapshot danh sách; chỉ xây lại chỉ mục và control khi nạp dữ liệu mới.
+            _allCommands = commands?.ToList() ?? new();
+            _searchEntries = _allCommands.Select(c => new SearchEntry(c)).ToList();
+            _commandItems.Clear();
 
             foreach (var cat in _allCommands.Select(c => c.Category).Distinct())
             {
@@ -386,35 +418,34 @@ namespace MyFirstProject
 
         private void FilterCommands(string searchText)
         {
+            // WPF chỉ cho một parent: gỡ các dòng khỏi nhóm cũ trước khi tái sử dụng.
+            foreach (WpfStackPanel section in _categoriesPanel.Children)
+            {
+                if (section.Children.Count > 1 && section.Children[1] is WpfStackPanel items)
+                    items.Children.Clear();
+            }
             _categoriesPanel.Children.Clear();
 
-            IEnumerable<PaletteCommandInfo> source = _allCommands;
+            IEnumerable<SearchEntry> source = _searchEntries;
             if (_activeScope == "CIVIL")
-                source = source.Where(IsCivilCommand);
+                source = source.Where(entry => IsCivilCommand(entry.Command));
             else if (_activeScope == "ACAD")
-                source = source.Where(c => !IsCivilCommand(c));
+                source = source.Where(entry => !IsCivilCommand(entry.Command));
 
             List<PaletteCommandInfo> filtered;
             bool isSearching = !string.IsNullOrWhiteSpace(searchText);
 
             if (!isSearching)
             {
-                filtered = source.ToList();
+                filtered = source.Select(entry => entry.Command).ToList();
             }
             else
             {
                 string query = searchText.Trim();
                 string queryNoSign = RemoveDiacritics(query);
 
-                filtered = source.Where(c =>
-                    c.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    c.Command.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    c.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    c.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    RemoveDiacritics(c.Label).Contains(queryNoSign, StringComparison.OrdinalIgnoreCase) ||
-                    RemoveDiacritics(c.Description).Contains(queryNoSign, StringComparison.OrdinalIgnoreCase) ||
-                    RemoveDiacritics(c.Category).Contains(queryNoSign, StringComparison.OrdinalIgnoreCase)
-                ).ToList();
+                filtered = source.Where(entry => entry.Matches(query, queryNoSign))
+                    .Select(entry => entry.Command).ToList();
             }
 
             // Giữ nguyên thứ tự Category được định nghĩa trong file JSON / mặc định
@@ -510,10 +541,26 @@ namespace MyFirstProject
                 Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed
             };
 
-            foreach (var cmd in commands)
+            void PopulateItems()
             {
-                itemsPanel.Children.Add(CreateCommandItem(cmd));
+                if (itemsPanel.Children.Count > 0) return;
+                foreach (var cmd in commands)
+                {
+                    if (!_commandItems.TryGetValue(cmd, out var item))
+                    {
+                        item = CreateCommandItem(cmd);
+                        _commandItems.Add(cmd, item);
+                    }
+                    // Một cấu hình có thể chứa cùng instance nhiều lần.
+                    // Khi đó dòng lặp cần control riêng để không trùng parent WPF.
+                    if (item.Parent != null)
+                        item = CreateCommandItem(cmd);
+                    item.Background = BgItem;
+                    itemsPanel.Children.Add(item);
+                }
             }
+
+            if (isExpanded) PopulateItems();
 
             headerBorder.MouseEnter += (s, e) => headerBorder.Background = BgHeaderHover;
             headerBorder.MouseLeave += (s, e) => headerBorder.Background = BgHeader;
@@ -521,6 +568,7 @@ namespace MyFirstProject
             headerBorder.MouseLeftButtonDown += (s, e) =>
             {
                 bool newState = itemsPanel.Visibility != Visibility.Visible;
+                if (newState) PopulateItems();
                 itemsPanel.Visibility = newState ? Visibility.Visible : Visibility.Collapsed;
                 arrow.Text = newState ? "▼" : "▶";
                 _expandStates[category] = newState;

@@ -1,5 +1,4 @@
 using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.Civil.ApplicationServices;
 using Autodesk.Civil.DatabaseServices;
 using System;
 using System.Linq;
@@ -20,20 +19,24 @@ namespace Civil3DCsharp
         {
             ArgumentNullException.ThrowIfNull(sampleLine);
             
-            foreach (ObjectId alignmentId in CivilApplication.ActiveDocument.GetAlignmentIds())
+            ObjectId groupId = sampleLine.GroupId;
+            if (groupId.IsNull || !groupId.IsValid || groupId.IsErased)
+                return ObjectId.Null;
+
+            // Đi thẳng qua nhóm cọc, không quét mọi tuyến trong bản vẽ đang active.
+            // Dùng database của cọc để hỗ trợ cả đối tượng từ bản vẽ khác.
+            Transaction? activeTr = sampleLine.Database.TransactionManager.TopTransaction;
+            if (activeTr != null)
             {
-                using var alignment = alignmentId.GetObject(OpenMode.ForRead) as Alignment;
-                if (alignment == null) continue;
-                
-                foreach (ObjectId sampleLineGroupId in alignment.GetSampleLineGroupIds())
-                {
-                    if (sampleLineGroupId == sampleLine.GroupId)
-                    {
-                        return alignmentId;
-                    }
-                }
+                var activeGroup = activeTr.GetObject(groupId, OpenMode.ForRead) as SampleLineGroup;
+                return activeGroup?.ParentAlignmentId ?? ObjectId.Null;
             }
-            return ObjectId.Null;
+
+            using var tr = sampleLine.Database.TransactionManager.StartOpenCloseTransaction();
+            var group = tr.GetObject(groupId, OpenMode.ForRead) as SampleLineGroup;
+            ObjectId alignmentId = group?.ParentAlignmentId ?? ObjectId.Null;
+            tr.Commit();
+            return alignmentId;
         }
 
         /// <summary>

@@ -14,8 +14,12 @@
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AutoCAD assemblies also depend on WPF (WindowsBase). -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="accoremgd">
