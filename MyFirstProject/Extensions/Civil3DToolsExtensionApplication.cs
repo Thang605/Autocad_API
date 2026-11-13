@@ -29,12 +29,14 @@ namespace Civil3DCsharp
         {
             EnsureResolverAttached();
             AT_McpBridgeServer.EnsureStarted();
+            MyFirstProject.Civil_Tool_2.FeatureLineDynamicSyncManager.EnsureStarted();
             MyFirstProject.ClassicMenu.EnsureMenuLoaded();
             MyFirstProject.ToolPaletteLoader.EnsurePaletteLoaded();
         }
 
         public void Terminate()
         {
+            MyFirstProject.Civil_Tool_2.FeatureLineDynamicSyncManager.Stop();
             AT_McpBridgeServer.StopBridge();
             if (!_attachedByThisAssembly) return;
             AppDomain.CurrentDomain.AssemblyResolve -= OnAssemblyResolve;

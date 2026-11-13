@@ -68,7 +68,7 @@ namespace MyFirstProject.Civil_Tool_2
         private static bool _lastTreatNestedAsHole = false;
         private static bool _lastRebuildAuto = true;
         private static bool _lastOverwriteOverlap = true;
-        private static bool _lastSafeCorridorCombine = false;
+        private static bool _lastSafeCorridorCombine = true;
         private static List<ObjectId> _lastSelectedIds = new List<ObjectId>();
         private static List<ObjectId> _lastCustomOuterIds = new List<ObjectId>();
         private static List<ObjectId> _lastCustomHideIds = new List<ObjectId>();
@@ -154,6 +154,7 @@ namespace MyFirstProject.Civil_Tool_2
         private WinFormsButton btnSuggestMaxEdge = null!;
 
         private ProgressBar progressBar = null!;
+        private WinFormsButton btnSyncDynamic = null!;
         private WinFormsButton btnExecute = null!;
         private WinFormsButton btnClose = null!;
 
@@ -299,13 +300,32 @@ namespace MyFirstProject.Civil_Tool_2
                 FlatStyle = FlatStyle.Flat,
                 Font = CreateFont(9.5F, FontStyle.Bold),
                 UseMnemonic = false,
-                Margin = new Padding(0)
+                Margin = new Padding(8, 0, 0, 0)
             };
             btnExecute.FlatAppearance.BorderSize = 0;
             btnExecute.Click += BtnExecute_Click;
 
+            btnSyncDynamic = new WinFormsButton
+            {
+                Text = "🔄 Đồng Bộ Biên Động",
+                Width = 184,
+                Height = 42,
+                BackColor = WinFormsColor.FromArgb(224, 236, 252),
+                ForeColor = WinFormsColor.FromArgb(14, 62, 118),
+                FlatStyle = FlatStyle.Flat,
+                Font = CreateFont(9F, FontStyle.Bold),
+                UseMnemonic = false,
+                Margin = new Padding(0)
+            };
+            btnSyncDynamic.FlatAppearance.BorderSize = 0;
+            btnSyncDynamic.Click += BtnSyncDynamic_Click;
+            _toolTip.SetToolTip(
+                btnSyncDynamic,
+                "Quét và cập nhật lại toàn bộ mặt phẳng phụ tạo từ Feature Line + các mặt phẳng tổng đang PasteSurface theo hình học & ranh giới mới nhất");
+
             flpBottomButtons.Controls.Add(btnClose);
             flpBottomButtons.Controls.Add(btnExecute);
+            flpBottomButtons.Controls.Add(btnSyncDynamic);
 
             pnlBottom.Controls.Add(flpBottomButtons);
             pnlBottom.Controls.Add(lblStatus);
@@ -818,8 +838,8 @@ namespace MyFirstProject.Civil_Tool_2
 
             chkRebuildAuto = new CheckBox
             {
-                Text = "Tự động cập nhật khi đối tượng nguồn thay đổi (Auto-Rebuild)",
-                Font = CreateFont(8.75F),
+                Text = "Tự động cập nhật lưới & ranh giới mặt phẳng tổng khi chỉnh Feature Line (Auto-Rebuild)",
+                Font = CreateFont(8.5F),
                 AutoSize = true,
                 Checked = _lastRebuildAuto,
                 UseMnemonic = false,
@@ -2169,6 +2189,61 @@ namespace MyFirstProject.Civil_Tool_2
         #endregion
 
         #region EXECUTION
+
+        private void BtnSyncDynamic_Click(object? sender, EventArgs e)
+        {
+            this.UseWaitCursor = true;
+            progressBar.Visible = true;
+            progressBar.Style = ProgressBarStyle.Marquee;
+            btnSyncDynamic.Enabled = false;
+            btnExecute.Enabled = false;
+            lblStatus.Text = "Đang quét & đồng bộ lại toàn bộ ranh giới mặt phẳng Feature Line và mặt phẳng tổng...";
+            System.Windows.Forms.Application.DoEvents();
+
+            try
+            {
+                string prevExistingSurf = cboExistingSurfaces.SelectedItem?.ToString() ?? "";
+                string prevMasterStyle = cboMasterStyles.SelectedItem?.ToString() ?? "";
+                string prevSubStyle = cboSubSurfaceStyle.SelectedItem?.ToString() ?? "_No Display";
+
+                FeatureLineDynamicSyncManager.EnsureStarted();
+                FeatureLineDynamicSyncManager.SyncAllInDocument(
+                    _db,
+                    _ed,
+                    forceAll: true,
+                    out int updatedSubCount,
+                    out int rebuiltParentCount);
+
+                ScanDrawingSourcesAndStyles();
+                if (!string.IsNullOrEmpty(prevExistingSurf) && cboExistingSurfaces.Items.Contains(prevExistingSurf))
+                    cboExistingSurfaces.SelectedItem = prevExistingSurf;
+                if (!string.IsNullOrEmpty(prevMasterStyle) && cboMasterStyles.Items.Contains(prevMasterStyle))
+                    cboMasterStyles.SelectedItem = prevMasterStyle;
+                SelectPreferredSubSurfaceStyle(prevSubStyle);
+                UpdateControlStates();
+
+                lblStatus.Text = $"🔄 Đã đồng bộ {updatedSubCount} mặt phẳng từ Feature Line & {rebuiltParentCount} mặt phẳng tổng.";
+                MessageBox.Show(
+                    $"Hoàn tất đồng bộ động theo hình học & ranh giới Feature Line mới nhất:\n\n" +
+                    $"• Mặt phẳng phụ / FL đã cập nhật : {updatedSubCount}\n" +
+                    $"• Mặt phẳng tổng đã Rebuild lại : {rebuiltParentCount}",
+                    "Đồng Bộ Biên Động Thành Công",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (System.Exception ex)
+            {
+                lblStatus.Text = $"❌ Lỗi đồng bộ biên động: {ex.Message}";
+                MessageBox.Show($"Không thể đồng bộ:\n{ex.Message}", "Lỗi đồng bộ biên động", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.UseWaitCursor = false;
+                progressBar.Visible = false;
+                btnSyncDynamic.Enabled = true;
+                btnExecute.Enabled = true;
+            }
+        }
 
         private void BtnExecute_Click(object? sender, EventArgs e)
         {

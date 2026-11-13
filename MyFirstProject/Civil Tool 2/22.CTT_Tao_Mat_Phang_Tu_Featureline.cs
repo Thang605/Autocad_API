@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -15,6 +18,7 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using CadEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
 using CivSurface = Autodesk.Civil.DatabaseServices.TinSurface;
 using DBObject = Autodesk.AutoCAD.DatabaseServices.DBObject;
+using DocumentCollectionEventArgs = Autodesk.AutoCAD.ApplicationServices.DocumentCollectionEventArgs;
 
 [assembly: CommandClass(typeof(MyFirstProject.Civil_Tool_2.CTT_Tao_Mat_Phang_Tu_Featureline_Command))]
 
@@ -127,6 +131,7 @@ namespace MyFirstProject.Civil_Tool_2
         [CommandMethod("CTT_Tao_Mat_Phang_Tu_Feature_Line")]
         public static void TaoMatPhangTuFeatureline()
         {
+            FeatureLineDynamicSyncManager.EnsureStarted();
             Document doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
@@ -191,6 +196,8 @@ namespace MyFirstProject.Civil_Tool_2
             Editor ed,
             TaoMatPhangOptions options)
         {
+            FeatureLineDynamicSyncManager.EnsureStarted();
+
             if (options == null || options.SourceEntityIds == null || options.SourceEntityIds.Count == 0)
             {
                 return new SurfaceCreationResult { Success = false, Message = "Danh sách đối tượng nguồn đang trống." };
@@ -350,6 +357,7 @@ namespace MyFirstProject.Civil_Tool_2
 
                     SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
                     int finalTriangleCount = CountVisibleTriangles(targetSurface);
+                    SaveSurfaceRecipe(targetSurface, tr, CreateRecipeFromOptions(db, options, ObjectId.Null));
 
                     tr.Commit();
 
@@ -456,10 +464,10 @@ namespace MyFirstProject.Civil_Tool_2
 
                 if (customOuterPolys.Count == 1)
                 {
-                    AddNativeBoundaryPolygon(targetSurface, customOuterPolys[0], midOrd, SurfaceBoundaryType.Outer);
+                    AddNativeBoundaryPolygonOrEntity(targetSurface, customOuterPolys[0], midOrd, SurfaceBoundaryType.Outer, nonDestructive: true);
                     foreach (Polygon2D hidePoly in customHidePolys)
                     {
-                        AddNativeBoundaryPolygon(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide);
+                        AddNativeBoundaryPolygonOrEntity(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide, nonDestructive: true);
                     }
                     targetSurface.Rebuild();
                     return true;
@@ -476,7 +484,7 @@ namespace MyFirstProject.Civil_Tool_2
                     }
                     foreach (Polygon2D hidePoly in customHidePolys)
                     {
-                        AddNativeBoundaryPolygon(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide);
+                        AddNativeBoundaryPolygonOrEntity(targetSurface, hidePoly, midOrd, SurfaceBoundaryType.Hide, nonDestructive: true);
                     }
                 }
             }
@@ -500,10 +508,10 @@ namespace MyFirstProject.Civil_Tool_2
 
                 if (allCurvesFormClosedRegions && closedRegions.Count == 1)
                 {
-                    AddNativeBoundaryPolygon(targetSurface, closedRegions[0], midOrd, SurfaceBoundaryType.Outer);
+                    AddNativeBoundaryPolygonOrEntity(targetSurface, closedRegions[0], midOrd, SurfaceBoundaryType.Outer, nonDestructive: false);
                     foreach (Polygon2D hole in holeRegions)
                     {
-                        AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
+                        AddNativeBoundaryPolygonOrEntity(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide, nonDestructive: false);
                     }
                     targetSurface.Rebuild();
                     return true;
@@ -511,7 +519,7 @@ namespace MyFirstProject.Civil_Tool_2
 
                 foreach (Polygon2D hole in holeRegions)
                 {
-                    AddNativeBoundaryPolygon(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide);
+                    AddNativeBoundaryPolygonOrEntity(targetSurface, hole, midOrd, SurfaceBoundaryType.Hide, nonDestructive: false);
                 }
             }
 
@@ -768,6 +776,7 @@ namespace MyFirstProject.Civil_Tool_2
 
                     SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
                     int emptyFinalTris = CountVisibleTriangles(targetSurface);
+                    SaveSurfaceRecipe(targetSurface, tr, CreateRecipeFromOptions(targetSurface.Database, options, ObjectId.Null));
                     if (wasLocked) { try { targetSurface.Lock = true; } catch { } }
                     tr.Commit();
 
@@ -836,6 +845,80 @@ namespace MyFirstProject.Civil_Tool_2
                 }
 
                 // Trường hợp 3: BỔ SUNG THÔNG MINH VÀO MẶT PHẲNG ĐÃ CÓ LƯỚI TAM GIÁC (AutoSmart / CustomBoundaryEntities)
+                // Nếu mặt phẳng hiện hữu là mặt phẳng đơn tạo từ Feature Line (có Recipe và chưa Paste), hợp nhất thêm vào Recipe & tái tạo sạch để đồng bộ động 100%
+                SurfaceOriginationType targetOrigCheck = SurfaceOriginationType.None;
+                try { targetOrigCheck = targetSurface.OriginationType; } catch { }
+                if (targetOrigCheck == SurfaceOriginationType.None &&
+                    !HasAnyPasteSurfaceOperation(targetSurface) &&
+                    TryReadSurfaceRecipe(targetSurface, tr, out FeatureLineSurfaceRecipe? existingStandaloneRecipe) &&
+                    existingStandaloneRecipe != null)
+                {
+                    var mergedHandleSet = new HashSet<string>(existingStandaloneRecipe.SourceHandles, StringComparer.OrdinalIgnoreCase);
+                    foreach (string h in ExtractHandlesFromIds(options.SourceEntityIds))
+                    {
+                        if (mergedHandleSet.Add(h))
+                            existingStandaloneRecipe.SourceHandles.Add(h);
+                    }
+
+                    if (options.BoundaryMode == FeatureLineBoundaryMode.CustomBoundaryEntities)
+                    {
+                        existingStandaloneRecipe.BoundaryMode = (int)FeatureLineBoundaryMode.CustomBoundaryEntities;
+                        var outerSet = new HashSet<string>(existingStandaloneRecipe.CustomOuterHandles, StringComparer.OrdinalIgnoreCase);
+                        foreach (string h in ExtractHandlesFromIds(options.CustomOuterBoundaryIds))
+                        {
+                            if (outerSet.Add(h))
+                                existingStandaloneRecipe.CustomOuterHandles.Add(h);
+                        }
+
+                        var hideSet = new HashSet<string>(existingStandaloneRecipe.CustomHideHandles, StringComparer.OrdinalIgnoreCase);
+                        foreach (string h in ExtractHandlesFromIds(options.CustomHideBoundaryIds))
+                        {
+                            if (hideSet.Add(h))
+                                existingStandaloneRecipe.CustomHideHandles.Add(h);
+                        }
+                    }
+
+                    existingStandaloneRecipe.AutoRebuild = options.AutoRebuild;
+                    if (RebuildSurfaceFromRecipeInternal(
+                            civDoc,
+                            targetSurface.Database,
+                            tr,
+                            ed,
+                            targetSurface,
+                            existingStandaloneRecipe,
+                            parentSurfaceOverride: null,
+                            out int mergedValidCurves,
+                            out int rebuiltFinalTris))
+                    {
+                        if (wasLocked)
+                        {
+                            try { targetSurface.Lock = true; } catch { }
+                        }
+
+                        tr.Commit();
+
+                        ed.WriteMessage($"\n  • Hợp nhất Recipe : Tái tạo sạch '{finalSurfaceName}' ({prevTriangleCount:N0} -> {rebuiltFinalTris:N0} tam giác | 0 mặt phẳng phụ).");
+                        ed.WriteMessage($"\n🎉 Đã bổ sung & duy trì đồng bộ động cho '{finalSurfaceName}'!");
+                        ed.WriteMessage($"\n══════════════════════════════════════════════════════════════════\n");
+
+                        return new SurfaceCreationResult
+                        {
+                            Success = true,
+                            Message = $"Đã bổ sung thành công vào mặt phẳng '{finalSurfaceName}' ({prevTriangleCount:N0} → {rebuiltFinalTris:N0} tam giác, 0 mặt phẳng phụ)!",
+                            MasterSurfaceId = targetSurfaceId,
+                            FinalSurfaceName = finalSurfaceName,
+                            IsSupplementedIntoExisting = true,
+                            PreviousTriangleCount = prevTriangleCount,
+                            SubSurfaceCount = 0,
+                            ProcessedCurveCount = mergedValidCurves,
+                            OpenCurveCount = openCount,
+                            ClosedCurveCount = closedCount,
+                            TrimmedTriangleCount = 0,
+                            FinalTriangleCount = rebuiltFinalTris
+                        };
+                    }
+                }
+
                 // Bước 3A: Tính toán chính xác hình học 3D của mảng mặt phẳng mới R_new trên biến tạm và XÓA NGAY trong cùng Transaction (0 mặt phẳng phụ!)
                 TinTopologyGraph patchGraph;
                 List<Polygon2D> newHolePolys;
@@ -1213,7 +1296,6 @@ namespace MyFirstProject.Civil_Tool_2
 
             try
             {
-                int prevTriangleCount = CountVisibleTriangles(targetSurface);
                 ObjectId subStyleId = ResolveSubSurfaceStyleId(civDoc, tr, options.SubSurfaceStyleName, targetSurface.StyleId, out string resolvedSubStyleName);
                 if (subStyleId.IsNull || !subStyleId.IsValid)
                 {
@@ -1225,6 +1307,20 @@ namespace MyFirstProject.Civil_Tool_2
                     };
                 }
 
+                // Nếu mặt phẳng gốc là mặt phẳng đơn FL hoặc mặt lai có Breakline/Outer cũ chặn biên,
+                // tự động chuẩn hóa thành mặt tổng thuần PasteSurface để luôn co giãn chính xác theo từng mặt phẳng phụ.
+                NormalizeFlMasterSurfaceToPurePasteParent(
+                    civDoc,
+                    targetSurface.Database,
+                    tr,
+                    ed,
+                    targetSurfaceId,
+                    targetSurface,
+                    subStyleId,
+                    options.AutoRebuild,
+                    out _);
+
+                int prevTriangleCount = CountVisibleTriangles(targetSurface);
                 string desiredSubName = BuildPrefixedSubSurfaceName(finalSurfaceName, options.SubSurfaceSuffixOrName);
                 ObjectId existingSubId = FindSurfaceByName(civDoc, tr, desiredSubName);
                 bool reusingExistingSub = !existingSubId.IsNull &&
@@ -1428,14 +1524,15 @@ namespace MyFirstProject.Civil_Tool_2
 
                 targetSurface.Rebuild();
 
-                // Kiểm tra an toàn: nếu mặt phẳng gốc có Outer/DataClip Boundary cũ làm cắt khuất phần mặt phẳng phụ vừa Paste -> khóa biên cũ & gỡ Outer Boundary
+                // Kiểm tra an toàn: nếu mặt phẳng gốc có Outer/DataClip Boundary cũ làm cắt khuất phần mặt phẳng phụ vừa Paste
                 if (HasRestrictiveOuterBoundary(targetSurface))
                 {
-                    List<Point2d> sampleSubCentroids = GetSampleVisibleCentroids(subSurface, maxSamples: 8);
+                    List<Point2d> probePoints = GetSampleVisibleCentroids(subSurface, maxSamples: 48);
+                    probePoints.AddRange(GetSampleBorderPoints(subSurface, maxSamples: 24));
                     bool anyClippedByOuter = false;
-                    for (int i = 0; i < sampleSubCentroids.Count; i++)
+                    for (int i = 0; i < probePoints.Count; i++)
                     {
-                        if (!IsPointVisibleOnSurface(targetSurface, sampleSubCentroids[i].X, sampleSubCentroids[i].Y))
+                        if (!IsPointVisibleOnSurface(targetSurface, probePoints[i].X, probePoints[i].Y))
                         {
                             anyClippedByOuter = true;
                             break;
@@ -1444,46 +1541,86 @@ namespace MyFirstProject.Civil_Tool_2
 
                     if (anyClippedByOuter)
                     {
-                        if (existingPasteOp != null)
+                        SurfaceOriginationType targetOrigType = SurfaceOriginationType.None;
+                        try { targetOrigType = targetSurface.OriginationType; } catch { }
+
+                        if (targetOrigType != SurfaceOriginationType.None)
                         {
-                            try
+                            // Tuyệt đối không xóa Outer Boundary của Corridor / Grading Surface để tránh bung tam giác bao lồi!
+                            ed.WriteMessage($"\n  ⚠️ [CẢNH BÁO] '{finalSurfaceName}' là mặt Corridor/Grading có Outer Boundary riêng làm cắt bớt phần mở rộng ngoài biên. Khuyên bật tùy chọn 'Tạo mặt gộp {finalSurfaceName}_Gop'.");
+                        }
+                        else if (IsPurePasteCompositeSurface(targetSurface))
+                        {
+                            RemoveRestrictiveOuterBoundaries(targetSurface);
+                            targetSurface.Rebuild();
+                        }
+                        else
+                        {
+                            if (existingPasteOp != null)
                             {
-                                existingPasteOp.Enabled = false;
-                                targetSurface.Rebuild();
+                                try
+                                {
+                                    existingPasteOp.Enabled = false;
+                                    targetSurface.Rebuild();
+                                }
+                                catch { }
                             }
-                            catch { }
-                        }
 
-                        TinTopologyGraph pureOld = oldGraph ?? BuildTinTopologyGraph(targetSurface);
-                        var borderSegs = new List<(Point3d A, Point3d B)>();
-                        for (int eIdx = 0; eIdx < pureOld.Edges.Count; eIdx++)
-                        {
-                            TinEdgeNode edge = pureOld.Edges[eIdx];
-                            if ((edge.TriA >= 0) != (edge.TriB >= 0))
+                            TinTopologyGraph pureOld = oldGraph ?? BuildTinTopologyGraph(targetSurface);
+                            SpatialTriangleGrid2D pureOldGrid = oldTriGrid ?? new SpatialTriangleGrid2D(pureOld);
+                            var borderSegs = new List<(Point3d A, Point3d B)>();
+                            for (int eIdx = 0; eIdx < pureOld.Edges.Count; eIdx++)
                             {
-                                borderSegs.Add((pureOld.Vertices[edge.U].Pos, pureOld.Vertices[edge.V].Pos));
+                                TinEdgeNode edge = pureOld.Edges[eIdx];
+                                if ((edge.TriA >= 0) != (edge.TriB >= 0))
+                                {
+                                    borderSegs.Add((pureOld.Vertices[edge.U].Pos, pureOld.Vertices[edge.V].Pos));
+                                }
                             }
+
+                            foreach (Point3dCollection chain in ChainSegmentsToPolylines(borderSegs))
+                            {
+                                try { targetSurface.BreaklinesDefinition.AddStandardBreaklines(chain, midOrd, 100000.0, 0.0, 0.0); }
+                                catch { }
+                            }
+
+                            RemoveRestrictiveOuterBoundaries(targetSurface);
+                            targetSurface.Rebuild();
+
+                            // Cắt bỏ ngay các tam giác bao lồi phát sinh bên ngoài vùng nền cũ pureOldGrid trước khi bật lại Paste
+                            if (pureOldGrid != null && pureOld.Triangles.Count > 0)
+                            {
+                                TinTopologyGraph rebuiltBaseGraph = BuildTinTopologyGraph(targetSurface);
+                                bool[] removeConvexFill = new bool[rebuiltBaseGraph.Triangles.Count];
+                                bool anyFill = false;
+                                for (int t = 0; t < rebuiltBaseGraph.Triangles.Count; t++)
+                                {
+                                    Point2d c = rebuiltBaseGraph.Triangles[t].Centroid2D;
+                                    if (!pureOldGrid.ContainsPoint(c.X, c.Y, 1e-4))
+                                    {
+                                        removeConvexFill[t] = true;
+                                        anyFill = true;
+                                    }
+                                }
+                                if (anyFill)
+                                {
+                                    ApplyRemovedTrianglesToSurface(targetSurface, rebuiltBaseGraph, removeConvexFill, midOrd, ed);
+                                }
+                            }
+
+                            if (existingPasteOp != null)
+                            {
+                                try { existingPasteOp.Enabled = true; } catch { }
+                            }
+
+                            targetSurface.Rebuild();
                         }
-
-                        foreach (Point3dCollection chain in ChainSegmentsToPolylines(borderSegs))
-                        {
-                            try { targetSurface.BreaklinesDefinition.AddStandardBreaklines(chain, midOrd, 100000.0, 0.0, 0.0); }
-                            catch { }
-                        }
-
-                        RemoveRestrictiveOuterBoundaries(targetSurface);
-
-                        if (existingPasteOp != null)
-                        {
-                            try { existingPasteOp.Enabled = true; } catch { }
-                        }
-
-                        targetSurface.Rebuild();
                     }
                 }
 
                 SetAutoRebuildSafe(subSurface, options.AutoRebuild);
                 SetAutoRebuildSafe(targetSurface, options.AutoRebuild);
+                SaveSurfaceRecipe(subSurface, tr, CreateRecipeFromOptions(targetSurface.Database, options, targetSurfaceId));
 
                 int finalTriangleCount = CountVisibleTriangles(targetSurface);
 
@@ -1553,7 +1690,7 @@ namespace MyFirstProject.Civil_Tool_2
             return false;
         }
 
-        private static bool RemoveRestrictiveOuterBoundaries(CivSurface surface)
+        internal static bool RemoveRestrictiveOuterBoundaries(CivSurface surface)
         {
             bool removedAny = false;
             try
@@ -3404,6 +3541,7 @@ namespace MyFirstProject.Civil_Tool_2
             public List<Point3d> Points3D = new List<Point3d>();
             public bool IsClosed;
             public bool WasAutoClosedGap;
+            public Point3d? RawEndBeforeAutoClose;
             public bool HasTrueArcs;
             public double TotalLength2D;
             public int AttachedTinVertexCount;
@@ -3414,6 +3552,7 @@ namespace MyFirstProject.Civil_Tool_2
             public readonly List<Point3d> Vertices3D;
             public readonly double MinX, MinY, MaxX, MaxY;
             public readonly double SignedArea;
+            public ObjectId AssociativeEntityId { get; set; } = ObjectId.Null;
             public double AbsArea => Math.Abs(SignedArea);
 
             public Polygon2D(List<Point3d> pts)
@@ -3507,6 +3646,10 @@ namespace MyFirstProject.Civil_Tool_2
                     var poly = new Polygon2D(sc.Points3D);
                     if (poly.Vertices3D.Count >= 3 && poly.AbsArea > 1e-3)
                     {
+                        if (!sc.WasAutoClosedGap && !sc.Id.IsNull && sc.Id.IsValid && !sc.Id.IsErased)
+                        {
+                            poly.AssociativeEntityId = sc.Id;
+                        }
                         rawPolys.Add(poly);
                         curvesInClosedLoops.Add(i);
                     }
@@ -3681,12 +3824,13 @@ namespace MyFirstProject.Civil_Tool_2
             bool usePointsOnly = false,
             bool allowDirectCurvedEntity = true)
         {
-            // Thử liên kết trực tiếp ObjectId nếu là FeatureLine chuẩn (không gắn reactor vào surface tạm khi usePointsOnly = true)
+            // Thử liên kết trực tiếp ObjectId cho mọi loại đường hợp lệ để Civil 3D gắn Reactor động theo đối tượng gốc
             bool canTryDirectEntity =
                 !usePointsOnly &&
-                !curve.WasAutoClosedGap &&
-                (allowDirectCurvedEntity || !curve.HasTrueArcs) &&
-                (curve.EntityTypeName == "FeatureLine" || curve.EntityTypeName == "Polyline3D");
+                !curve.Id.IsNull &&
+                curve.Id.IsValid &&
+                !curve.Id.IsErased &&
+                (allowDirectCurvedEntity || !curve.HasTrueArcs);
 
             if (canTryDirectEntity)
             {
@@ -3699,11 +3843,28 @@ namespace MyFirstProject.Civil_Tool_2
                         supplementingDistance,
                         0.0,
                         0.0);
+
+                    // Nếu đường gần kín được tự động đóng khe hở (<= closeTol), bổ sung thêm đoạn nối khép 2 điểm đầu-cuối
+                    // mà vẫn giữ nguyên liên kết động cho toàn bộ đường chính
+                    if (curve.WasAutoClosedGap && curve.RawEndBeforeAutoClose.HasValue && curve.Points3D.Count >= 3)
+                    {
+                        try
+                        {
+                            var gapColl = new Point3dCollection
+                            {
+                                curve.RawEndBeforeAutoClose.Value,
+                                curve.Points3D[0]
+                            };
+                            surface.BreaklinesDefinition.AddStandardBreaklines(gapColl, midOrdDistance, supplementingDistance, 0.0, 0.0);
+                        }
+                        catch { }
+                    }
+
                     return true;
                 }
                 catch
                 {
-                    // Tự động chuyển sang nạp Point3dCollection chính xác bên dưới
+                    // Tự động chuyển sang nạp Point3dCollection chính xác bên dưới nếu loại đối tượng không hỗ trợ liên kết trực tiếp
                 }
             }
 
@@ -3761,11 +3922,33 @@ namespace MyFirstProject.Civil_Tool_2
             return coll;
         }
 
+        private static void AddNativeBoundaryPolygonOrEntity(
+            CivSurface surface,
+            Polygon2D poly,
+            double midOrdDistance,
+            SurfaceBoundaryType bndType,
+            bool nonDestructive = false)
+        {
+            if (!poly.AssociativeEntityId.IsNull && poly.AssociativeEntityId.IsValid && !poly.AssociativeEntityId.IsErased)
+            {
+                try
+                {
+                    var bndColl = new ObjectIdCollection { poly.AssociativeEntityId };
+                    surface.BoundariesDefinition.AddBoundaries(bndColl, midOrdDistance, bndType, nonDestructive);
+                    return;
+                }
+                catch { }
+            }
+
+            AddNativeBoundaryPolygon(surface, poly, midOrdDistance, bndType, nonDestructive);
+        }
+
         private static void AddNativeBoundaryPolygon(
             CivSurface surface,
             Polygon2D poly,
             double midOrdDistance,
-            SurfaceBoundaryType bndType)
+            SurfaceBoundaryType bndType,
+            bool nonDestructive = false)
         {
             if (poly.Vertices3D.Count < 3) return;
             Point3dCollection pts = BuildCleanPoint3dCollection(poly.Vertices3D, true);
@@ -3773,7 +3956,7 @@ namespace MyFirstProject.Civil_Tool_2
 
             try
             {
-                surface.BoundariesDefinition.AddBoundaries(pts, midOrdDistance, bndType, false);
+                surface.BoundariesDefinition.AddBoundaries(pts, midOrdDistance, bndType, nonDestructive);
             }
             catch { }
         }
@@ -3811,6 +3994,10 @@ namespace MyFirstProject.Civil_Tool_2
                     var poly = new Polygon2D(info.Points3D);
                     if (poly.Vertices3D.Count >= 3 && poly.AbsArea > 1e-3)
                     {
+                        if (!info.WasAutoClosedGap && info.IsClosed)
+                        {
+                            poly.AssociativeEntityId = id;
+                        }
                         result.Add(poly);
                     }
                 }
@@ -3829,7 +4016,7 @@ namespace MyFirstProject.Civil_Tool_2
         {
             if (entId.IsNull || !entId.IsValid || entId.IsErased) return null;
 
-            CadEntity? ent = tr.GetObject(entId, OpenMode.ForWrite) as CadEntity;
+            CadEntity? ent = tr.GetObject(entId, OpenMode.ForRead) as CadEntity;
             if (ent == null) return null;
 
             var info = new SourceCurveInfo
@@ -3878,7 +4065,7 @@ namespace MyFirstProject.Civil_Tool_2
                 info.IsClosed = p3d.Closed;
                 foreach (ObjectId vId in p3d)
                 {
-                    if (tr.GetObject(vId, OpenMode.ForWrite) is PolylineVertex3d v)
+                    if (tr.GetObject(vId, OpenMode.ForRead) is PolylineVertex3d v)
                     {
                         pts.Add(v.Position);
                     }
@@ -3891,7 +4078,7 @@ namespace MyFirstProject.Civil_Tool_2
                 info.IsClosed = p2d.Closed;
                 foreach (ObjectId vId in p2d)
                 {
-                    if (tr.GetObject(vId, OpenMode.ForWrite) is Vertex2d v)
+                    if (tr.GetObject(vId, OpenMode.ForRead) is Vertex2d v)
                     {
                         pts.Add(new Point3d(v.Position.X, v.Position.Y, p2d.Elevation));
                     }
@@ -3946,6 +4133,7 @@ namespace MyFirstProject.Civil_Tool_2
                 if (gap2D > 1e-4)
                 {
                     info.WasAutoClosedGap = true;
+                    info.RawEndBeforeAutoClose = cleaned[cleaned.Count - 1];
                     cleaned.Add(cleaned[0]);
                 }
             }
@@ -4137,7 +4325,7 @@ namespace MyFirstProject.Civil_Tool_2
 
         #region CIVIL 3D SURFACE UTILITY HELPERS
 
-        private static int CountVisibleTriangles(CivSurface surface)
+        internal static int CountVisibleTriangles(CivSurface surface)
         {
             try
             {
@@ -4278,7 +4466,7 @@ namespace MyFirstProject.Civil_Tool_2
             }
         }
 
-        private static ObjectId ResolveSubSurfaceStyleId(
+        internal static ObjectId ResolveSubSurfaceStyleId(
             CivilDocument civDoc,
             Transaction tr,
             string requestedSubStyleName,
@@ -4382,7 +4570,7 @@ namespace MyFirstProject.Civil_Tool_2
             return null;
         }
 
-        private static bool HasRestrictiveOuterBoundary(CivSurface surface)
+        internal static bool HasRestrictiveOuterBoundary(CivSurface surface)
         {
             try
             {
@@ -4401,7 +4589,7 @@ namespace MyFirstProject.Civil_Tool_2
             return false;
         }
 
-        private static List<Point2d> GetSampleVisibleCentroids(CivSurface surface, int maxSamples = 8)
+        internal static List<Point2d> GetSampleVisibleCentroids(CivSurface surface, int maxSamples = 8)
         {
             var result = new List<Point2d>();
             try
@@ -4429,7 +4617,7 @@ namespace MyFirstProject.Civil_Tool_2
             return result;
         }
 
-        private static bool IsPointVisibleOnSurface(CivSurface surface, double x, double y)
+        internal static bool IsPointVisibleOnSurface(CivSurface surface, double x, double y)
         {
             try
             {
@@ -4442,6 +4630,2005 @@ namespace MyFirstProject.Civil_Tool_2
             }
         }
 
+        private static List<Point2d> GetSampleBorderPoints(CivSurface surface, int maxSamples = 24)
+        {
+            var result = new List<Point2d>();
+            try
+            {
+                TinSurfaceTriangleCollection tris = surface.GetTriangles(false);
+                foreach (TinSurfaceTriangle tri in tris)
+                {
+                    if (tri == null || !tri.IsValid) continue;
+                    TinSurfaceEdge?[] edges = { tri.Edge1, tri.Edge2, tri.Edge3 };
+                    for (int e = 0; e < edges.Length; e++)
+                    {
+                        TinSurfaceEdge? edge = edges[e];
+                        if (edge == null || !edge.IsValid) continue;
+
+                        bool t1 = edge.Triangle1 != null && edge.Triangle1.IsVisible;
+                        bool t2 = edge.Triangle2 != null && edge.Triangle2.IsVisible;
+                        if (t1 != t2)
+                        {
+                            Point3d p1 = edge.Vertex1.Location;
+                            Point3d p2 = edge.Vertex2.Location;
+                            result.Add(new Point2d(0.5 * (p1.X + p2.X), 0.5 * (p1.Y + p2.Y)));
+                            if (result.Count >= maxSamples) return result;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        internal static bool HasAnyPasteSurfaceOperation(CivSurface surface)
+        {
+            try
+            {
+                for (int i = 0; i < surface.Operations.Count; i++)
+                {
+                    if (surface.Operations[i] is SurfaceOperationPasteSurface)
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        internal static bool IsPurePasteCompositeSurface(CivSurface surface)
+        {
+            try
+            {
+                if (!HasAnyPasteSurfaceOperation(surface))
+                    return false;
+
+                if (surface.BreaklinesDefinition.Count > 0) return false;
+                if (surface.PointGroupsDefinition.Count > 0) return false;
+                if (surface.PointFilesDefinition.Count > 0) return false;
+                if (surface.ContoursDefinition.Count > 0) return false;
+                if (surface.DEMFilesDefinition.Count > 0) return false;
+                if (surface.DrawingObjectsDefinition.Count > 0) return false;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static bool NormalizeFlMasterSurfaceToPurePasteParent(
+            CivilDocument civDoc,
+            Database db,
+            Transaction tr,
+            Editor? ed,
+            ObjectId targetSurfaceId,
+            CivSurface targetSurface,
+            ObjectId subStyleId,
+            bool autoRebuild,
+            out ObjectId createdBaseSubId)
+        {
+            createdBaseSubId = ObjectId.Null;
+            try
+            {
+                SurfaceOriginationType origType = SurfaceOriginationType.None;
+                try { origType = targetSurface.OriginationType; } catch { }
+                if (origType != SurfaceOriginationType.None) return false;
+
+                if (targetSurface.PointGroupsDefinition.Count > 0 ||
+                    targetSurface.PointFilesDefinition.Count > 0 ||
+                    targetSurface.ContoursDefinition.Count > 0 ||
+                    targetSurface.DEMFilesDefinition.Count > 0 ||
+                    targetSurface.DrawingObjectsDefinition.Count > 0)
+                {
+                    return false;
+                }
+
+                string parentName = targetSurface.Name;
+                bool hasPaste = HasAnyPasteSurfaceOperation(targetSurface);
+
+                if (!hasPaste)
+                {
+                    if (!TryReadSurfaceRecipe(targetSurface, tr, out FeatureLineSurfaceRecipe? baseRecipe) || baseRecipe == null)
+                    {
+                        if (targetSurface.BreaklinesDefinition.Count == 0)
+                            return false;
+
+                        List<ObjectId> legacySrcIds = ExtractSourceCurveIdsFromSurface(
+                            targetSurface, db, tr, allowGeometricFallback: true,
+                            out _, out List<ObjectId> cOuter, out List<ObjectId> cHide);
+                        if (legacySrcIds.Count == 0)
+                            return false;
+
+                        baseRecipe = new FeatureLineSurfaceRecipe
+                        {
+                            Version = 1,
+                            SourceHandles = ExtractHandlesFromIds(legacySrcIds),
+                            CustomOuterHandles = ExtractHandlesFromIds(cOuter),
+                            CustomHideHandles = ExtractHandlesFromIds(cHide),
+                            BoundaryMode = (cOuter.Count > 0 || cHide.Count > 0)
+                                ? (int)FeatureLineBoundaryMode.CustomBoundaryEntities
+                                : (int)FeatureLineBoundaryMode.AutoSmart,
+                            AutoRebuild = autoRebuild
+                        };
+                    }
+
+                    string firstSubName = EnsureUniquePrefixedSubSurfaceName(civDoc, tr, parentName, "Phu_1");
+                    ObjectId firstSubId = TinSurface.Create(firstSubName, subStyleId);
+                    if (firstSubId.IsNull || !firstSubId.IsValid) return false;
+
+                    if (tr.GetObject(firstSubId, OpenMode.ForWrite) is not CivSurface firstSub)
+                        return false;
+
+                    bool ok = RebuildSurfaceFromRecipeInternal(
+                        civDoc,
+                        db,
+                        tr,
+                        ed ?? Application.DocumentManager.MdiActiveDocument.Editor,
+                        firstSub,
+                        baseRecipe,
+                        parentSurfaceOverride: null,
+                        out _,
+                        out _);
+
+                    if (!ok)
+                    {
+                        try { firstSub.Erase(true); } catch { }
+                        return false;
+                    }
+
+                    baseRecipe.ParentSurfaceHandle = targetSurface.Handle.ToString();
+                    SetAutoRebuildSafe(firstSub, autoRebuild);
+                    SaveSurfaceRecipe(firstSub, tr, baseRecipe);
+
+                    RemoveSurfaceRecipe(targetSurface, tr);
+                    ClearSurfaceDefinitionsAndEdits(targetSurface);
+                    targetSurface.PasteSurface(firstSubId);
+                    targetSurface.Rebuild();
+                    SetAutoRebuildSafe(targetSurface, autoRebuild);
+
+                    createdBaseSubId = firstSubId;
+                    ed?.WriteMessage($"\n  • Chuẩn hóa gốc  : Tự động tách dữ liệu gốc '{parentName}' thành '{firstSub.Name}' để mặt tổng '{parentName}' thuần PasteSurface (không bị kẹp biên cũ).");
+                    return true;
+                }
+
+                // Nhánh B: Mặt phẳng tổng ĐÃ có PasteSurface nhưng vẫn còn Breakline thừa (biên tĩnh cũ / FL gốc) hoặc Outer Boundary gây kẹp biên
+                bool hasBkl = false;
+                try { hasBkl = targetSurface.BreaklinesDefinition.Count > 0; } catch { }
+                bool hasOuter = HasRestrictiveOuterBoundary(targetSurface);
+                if (!hasBkl && !hasOuter)
+                    return false;
+
+                var pasteChildren = new List<(ObjectId ChildId, bool Enabled)>();
+                try
+                {
+                    for (int i = 0; i < targetSurface.Operations.Count; i++)
+                    {
+                        if (targetSurface.Operations[i] is SurfaceOperationPasteSurface pasteOp &&
+                            !pasteOp.SurfaceId.IsNull &&
+                            pasteOp.SurfaceId.IsValid &&
+                            !pasteOp.SurfaceId.IsErased &&
+                            pasteOp.SurfaceId != targetSurfaceId)
+                        {
+                            pasteChildren.Add((pasteOp.SurfaceId, pasteOp.Enabled));
+                        }
+                    }
+                }
+                catch { }
+
+                if (pasteChildren.Count == 0)
+                    return false;
+
+                var childManagedIds = new HashSet<ObjectId>();
+                foreach (var (childId, _) in pasteChildren)
+                {
+                    if (tr.GetObject(childId, OpenMode.ForRead) is not CivSurface childSurf) continue;
+                    if (TryReadSurfaceRecipe(childSurf, tr, out FeatureLineSurfaceRecipe? cRecipe) && cRecipe != null)
+                    {
+                        foreach (ObjectId sId in ResolveHandleList(db, cRecipe.SourceHandles))
+                            childManagedIds.Add(sId);
+                    }
+                    else
+                    {
+                        foreach (ObjectId sId in ExtractSourceCurveIdsFromSurface(childSurf, db, tr, allowGeometricFallback: true, out _, out _, out _))
+                            childManagedIds.Add(sId);
+                    }
+                }
+
+                List<ObjectId> directIds = ExtractSourceCurveIdsFromSurface(
+                    targetSurface, db, tr, allowGeometricFallback: false,
+                    out _, out List<ObjectId> directOuter, out List<ObjectId> directHide);
+                var unpromotedDirectIds = directIds.Where(id => !childManagedIds.Contains(id)).ToList();
+
+                if (unpromotedDirectIds.Count > 0)
+                {
+                    string gocName = EnsureUniquePrefixedSubSurfaceName(civDoc, tr, parentName, "Goc");
+                    ObjectId gocId = TinSurface.Create(gocName, subStyleId);
+                    if (!gocId.IsNull && gocId.IsValid &&
+                        tr.GetObject(gocId, OpenMode.ForWrite) is CivSurface gocSurf)
+                    {
+                        var gocRecipe = new FeatureLineSurfaceRecipe
+                        {
+                            Version = 1,
+                            SourceHandles = ExtractHandlesFromIds(unpromotedDirectIds),
+                            CustomOuterHandles = ExtractHandlesFromIds(directOuter),
+                            CustomHideHandles = ExtractHandlesFromIds(directHide),
+                            BoundaryMode = (directOuter.Count > 0 || directHide.Count > 0)
+                                ? (int)FeatureLineBoundaryMode.CustomBoundaryEntities
+                                : (int)FeatureLineBoundaryMode.AutoSmart,
+                            AutoRebuild = autoRebuild,
+                            ParentSurfaceHandle = targetSurface.Handle.ToString()
+                        };
+
+                        bool gocOk = RebuildSurfaceFromRecipeInternal(
+                            civDoc,
+                            db,
+                            tr,
+                            ed ?? Application.DocumentManager.MdiActiveDocument.Editor,
+                            gocSurf,
+                            gocRecipe,
+                            parentSurfaceOverride: null,
+                            out _,
+                            out _);
+
+                        if (gocOk)
+                        {
+                            SetAutoRebuildSafe(gocSurf, autoRebuild);
+                            SaveSurfaceRecipe(gocSurf, tr, gocRecipe);
+                            createdBaseSubId = gocId;
+                            pasteChildren.Insert(0, (gocId, true));
+                        }
+                        else
+                        {
+                            try { gocSurf.Erase(true); } catch { }
+                        }
+                    }
+                }
+
+                bool wasLocked = false;
+                try
+                {
+                    wasLocked = targetSurface.Lock;
+                    if (wasLocked) targetSurface.Lock = false;
+                }
+                catch { }
+
+                try
+                {
+                    RemoveSurfaceRecipe(targetSurface, tr);
+                    ClearSurfaceDefinitionsAndEdits(targetSurface);
+
+                    foreach (var (childId, enabled) in pasteChildren)
+                    {
+                        try
+                        {
+                            targetSurface.PasteSurface(childId);
+                            if (!enabled)
+                            {
+                                SurfaceOperationPasteSurface? pOp = FindPasteOperationForSubSurface(targetSurface, childId);
+                                if (pOp != null) pOp.Enabled = false;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    targetSurface.Rebuild();
+                    SetAutoRebuildSafe(targetSurface, autoRebuild);
+                    ed?.WriteMessage($"\n  • Chuẩn hóa tổng : Đã dọn sạch Breakline/Boundary tĩnh thừa trên '{parentName}' thành mặt phẳng tổng thuần PasteSurface.");
+                    return true;
+                }
+                finally
+                {
+                    if (wasLocked)
+                    {
+                        try { targetSurface.Lock = true; } catch { }
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         #endregion
+
+        #region DYNAMIC RECIPE STORAGE (XRECORD) & FEATURE LINE AUTO-SYNC
+
+        private const string FlSurfaceRecipeDictKey = "CTT_FL_SURF_RECIPE_V1";
+
+        internal sealed class FeatureLineSurfaceRecipe
+        {
+            public int Version { get; set; } = 1;
+            public List<string> SourceHandles { get; set; } = new List<string>();
+            public List<string> CustomOuterHandles { get; set; } = new List<string>();
+            public List<string> CustomHideHandles { get; set; } = new List<string>();
+            public int BoundaryMode { get; set; }
+            public double MidOrdinateDistance { get; set; } = 0.10;
+            public bool UseSupplementing { get; set; } = true;
+            public double SupplementingDistance { get; set; } = 2.00;
+            public bool LimitMaxEdgeLength { get; set; } = true;
+            public double MaxEdgeLength { get; set; } = 25.00;
+            public bool AutoCloseNearClosed { get; set; } = true;
+            public double AutoCloseTolerance { get; set; } = 0.10;
+            public bool TreatNestedClosedAsHole { get; set; } = false;
+            public bool AutoRebuild { get; set; } = true;
+            public bool OverwriteOverlapOnExisting { get; set; } = true;
+            public string ParentSurfaceHandle { get; set; } = string.Empty;
+            public ulong LastGeometryHash { get; set; } = 0;
+            public int LastExpectedTriCount { get; set; } = -1;
+
+            public TaoMatPhangOptions ToRebuildOptions(Database db)
+            {
+                return new TaoMatPhangOptions
+                {
+                    CreateNewSurface = true,
+                    SourceEntityIds = ResolveHandleList(db, SourceHandles),
+                    CustomOuterBoundaryIds = ResolveHandleList(db, CustomOuterHandles),
+                    CustomHideBoundaryIds = ResolveHandleList(db, CustomHideHandles),
+                    BoundaryMode = Enum.IsDefined(typeof(FeatureLineBoundaryMode), BoundaryMode)
+                        ? (FeatureLineBoundaryMode)BoundaryMode
+                        : FeatureLineBoundaryMode.AutoSmart,
+                    MidOrdinateDistance = MidOrdinateDistance,
+                    UseSupplementing = UseSupplementing,
+                    SupplementingDistance = SupplementingDistance,
+                    LimitMaxEdgeLength = LimitMaxEdgeLength,
+                    MaxEdgeLength = MaxEdgeLength,
+                    AutoCloseNearClosed = AutoCloseNearClosed,
+                    AutoCloseTolerance = AutoCloseTolerance,
+                    TreatNestedClosedAsHole = TreatNestedClosedAsHole,
+                    AutoRebuild = AutoRebuild,
+                    OverwriteOverlapOnExisting = OverwriteOverlapOnExisting
+                };
+            }
+        }
+
+        internal static FeatureLineSurfaceRecipe CreateRecipeFromOptions(
+            Database db,
+            TaoMatPhangOptions options,
+            ObjectId parentSurfaceId)
+        {
+            var recipe = new FeatureLineSurfaceRecipe
+            {
+                Version = 1,
+                SourceHandles = ExtractHandlesFromIds(options.SourceEntityIds),
+                CustomOuterHandles = ExtractHandlesFromIds(options.CustomOuterBoundaryIds),
+                CustomHideHandles = ExtractHandlesFromIds(options.CustomHideBoundaryIds),
+                BoundaryMode = (int)options.BoundaryMode,
+                MidOrdinateDistance = options.MidOrdinateDistance,
+                UseSupplementing = options.UseSupplementing,
+                SupplementingDistance = options.SupplementingDistance,
+                LimitMaxEdgeLength = options.LimitMaxEdgeLength,
+                MaxEdgeLength = options.MaxEdgeLength,
+                AutoCloseNearClosed = options.AutoCloseNearClosed,
+                AutoCloseTolerance = options.AutoCloseTolerance,
+                TreatNestedClosedAsHole = options.TreatNestedClosedAsHole,
+                AutoRebuild = options.AutoRebuild,
+                OverwriteOverlapOnExisting = options.OverwriteOverlapOnExisting,
+                ParentSurfaceHandle = (!parentSurfaceId.IsNull && parentSurfaceId.IsValid && !parentSurfaceId.IsErased)
+                    ? parentSurfaceId.Handle.ToString()
+                    : string.Empty
+            };
+            return recipe;
+        }
+
+        private static List<string> ExtractHandlesFromIds(IEnumerable<ObjectId>? ids)
+        {
+            var list = new List<string>();
+            if (ids == null) return list;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ObjectId id in ids)
+            {
+                if (id.IsNull || !id.IsValid || id.IsErased) continue;
+                string h = id.Handle.ToString();
+                if (!string.IsNullOrEmpty(h) && seen.Add(h))
+                {
+                    list.Add(h);
+                }
+            }
+            return list;
+        }
+
+        internal static ObjectId TryResolveEntityIdByHandle(Database db, string? handleHex)
+        {
+            if (db == null || string.IsNullOrWhiteSpace(handleHex))
+                return ObjectId.Null;
+
+            try
+            {
+                if (long.TryParse(handleHex.Trim(), System.Globalization.NumberStyles.HexNumber, null, out long val) && val > 0)
+                {
+                    if (db.TryGetObjectId(new Handle(val), out ObjectId id) &&
+                        !id.IsNull && id.IsValid && !id.IsErased)
+                    {
+                        return id;
+                    }
+                }
+            }
+            catch { }
+
+            return ObjectId.Null;
+        }
+
+        private static List<ObjectId> ResolveHandleList(Database db, IEnumerable<string>? handles)
+        {
+            var result = new List<ObjectId>();
+            if (handles == null) return result;
+
+            var seen = new HashSet<ObjectId>();
+            foreach (string h in handles)
+            {
+                ObjectId id = TryResolveEntityIdByHandle(db, h);
+                if (!id.IsNull && seen.Add(id))
+                {
+                    result.Add(id);
+                }
+            }
+            return result;
+        }
+
+        internal static ulong ComputeRecipeGeometryHash(Database db, Transaction tr, FeatureLineSurfaceRecipe recipe)
+        {
+            const ulong fnvOffset = 14695981039346656037UL;
+            const ulong fnvPrime = 1099511628211UL;
+            ulong hash = fnvOffset;
+
+            void AddLong(long v)
+            {
+                unchecked
+                {
+                    ulong uv = (ulong)v;
+                    for (int b = 0; b < 8; b++)
+                    {
+                        hash ^= (uv & 0xFFUL);
+                        hash *= fnvPrime;
+                        uv >>= 8;
+                    }
+                }
+            }
+
+            void AddString(string? s)
+            {
+                if (string.IsNullOrEmpty(s))
+                {
+                    AddLong(0);
+                    return;
+                }
+                for (int i = 0; i < s.Length; i++)
+                {
+                    unchecked
+                    {
+                        hash ^= s[i];
+                        hash *= fnvPrime;
+                    }
+                }
+            }
+
+            AddLong(recipe.BoundaryMode);
+            AddLong((long)Math.Round(recipe.MidOrdinateDistance * 1000.0));
+            AddLong(recipe.UseSupplementing ? 1 : 0);
+            AddLong((long)Math.Round(recipe.SupplementingDistance * 1000.0));
+            AddLong(recipe.LimitMaxEdgeLength ? 1 : 0);
+            AddLong((long)Math.Round(recipe.MaxEdgeLength * 1000.0));
+            AddLong(recipe.AutoCloseNearClosed ? 1 : 0);
+            AddLong((long)Math.Round(recipe.AutoCloseTolerance * 1000.0));
+            AddLong(recipe.TreatNestedClosedAsHole ? 1 : 0);
+            AddLong(recipe.OverwriteOverlapOnExisting ? 1 : 0);
+
+            double midOrd = Math.Max(0.01, recipe.MidOrdinateDistance);
+            double closeTol = recipe.AutoCloseNearClosed ? Math.Max(0.005, recipe.AutoCloseTolerance) : 0.005;
+
+            void HashHandles(List<string>? handles, int listTag)
+            {
+                AddLong(listTag);
+                if (handles == null) return;
+                for (int i = 0; i < handles.Count; i++)
+                {
+                    string h = handles[i];
+                    AddString(h);
+                    ObjectId id = TryResolveEntityIdByHandle(db, h);
+                    if (id.IsNull)
+                    {
+                        AddLong(-1);
+                        continue;
+                    }
+                    SourceCurveInfo? info = ExtractSourceCurveInfo(id, tr, midOrd, closeTol, recipe.AutoCloseNearClosed, i);
+                    if (info == null)
+                    {
+                        AddLong(-2);
+                        continue;
+                    }
+                    AddLong(info.IsClosed ? 1 : 0);
+                    AddLong(info.Points3D.Count);
+                    for (int p = 0; p < info.Points3D.Count; p++)
+                    {
+                        Point3d pt = info.Points3D[p];
+                        AddLong((long)Math.Round(pt.X * 1000.0));
+                        AddLong((long)Math.Round(pt.Y * 1000.0));
+                        AddLong((long)Math.Round(pt.Z * 1000.0));
+                    }
+                }
+            }
+
+            HashHandles(recipe.SourceHandles, 101);
+            HashHandles(recipe.CustomOuterHandles, 102);
+            HashHandles(recipe.CustomHideHandles, 103);
+
+            return hash;
+        }
+
+        internal static bool IsSupportedSourceCurveId(ObjectId id)
+        {
+            if (id.IsNull || !id.IsValid || id.IsErased) return false;
+            string dxf = id.ObjectClass?.DxfName ?? "";
+            return dxf == "AECC_FEATURE_LINE" ||
+                   dxf == "AECC_AUTO_CORRIDOR_FEATURE_LINE" ||
+                   dxf == "POLYLINE" ||
+                   dxf == "LWPOLYLINE" ||
+                   dxf == "LINE" ||
+                   dxf == "ARC";
+        }
+
+        private static ObjectId TryResolveComEntityId(object? comObj, Database db)
+        {
+            if (comObj == null || db == null) return ObjectId.Null;
+
+            try
+            {
+                ObjectId id = DBObject.FromAcadObject(comObj);
+                if (!id.IsNull && id.IsValid && !id.IsErased && id.Database == db)
+                    return id;
+            }
+            catch { }
+
+            try
+            {
+                string? handleHex = Convert.ToString(((dynamic)comObj).Handle);
+                if (!string.IsNullOrWhiteSpace(handleHex))
+                    return TryResolveEntityIdByHandle(db, handleHex);
+            }
+            catch { }
+
+            return ObjectId.Null;
+        }
+
+        internal static List<ObjectId> ExtractSourceCurveIdsFromSurface(
+            CivSurface surf,
+            Database db,
+            Transaction tr,
+            bool allowGeometricFallback,
+            out List<double[]> rawPointBreaklines,
+            out List<ObjectId> customOuterIds,
+            out List<ObjectId> customHideIds)
+        {
+            var foundIds = new List<ObjectId>();
+            var seen = new HashSet<ObjectId>();
+            rawPointBreaklines = new List<double[]>();
+            customOuterIds = new List<ObjectId>();
+            customHideIds = new List<ObjectId>();
+
+            void AddCurveId(ObjectId id)
+            {
+                if (IsSupportedSourceCurveId(id) && seen.Add(id))
+                    foundIds.Add(id);
+            }
+
+            try
+            {
+                dynamic acadSurf = surf.AcadObject;
+                foreach (object brObj in (System.Collections.IEnumerable)acadSurf.Breaklines)
+                {
+                    try
+                    {
+                        object? ents = ((dynamic)brObj).BreaklineEntities;
+                        if (ents is double[] dblArr)
+                        {
+                            if (dblArr.Length >= 6) rawPointBreaklines.Add(dblArr);
+                        }
+                        else if (ents is Array arr)
+                        {
+                            if (arr.Length >= 6 && arr.GetValue(0) is double)
+                            {
+                                var copy = new double[arr.Length];
+                                for (int k = 0; k < arr.Length; k++)
+                                    copy[k] = Convert.ToDouble(arr.GetValue(k));
+                                rawPointBreaklines.Add(copy);
+                            }
+                            else
+                            {
+                                foreach (object? elem in arr)
+                                {
+                                    AddCurveId(TryResolveComEntityId(elem, db));
+                                }
+                            }
+                        }
+                        else if (ents != null)
+                        {
+                            AddCurveId(TryResolveComEntityId(ents, db));
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                dynamic acadSurf = surf.AcadObject;
+                int bIdx = 0;
+                foreach (object boObj in (System.Collections.IEnumerable)acadSurf.Boundaries)
+                {
+                    try
+                    {
+                        ObjectId bndEntId = TryResolveComEntityId(((dynamic)boObj).BoundaryEntity, db);
+                        if (IsSupportedSourceCurveId(bndEntId))
+                        {
+                            SurfaceBoundaryType bType = SurfaceBoundaryType.Outer;
+                            try
+                            {
+                                if (bIdx < surf.BoundariesDefinition.Count)
+                                    bType = surf.BoundariesDefinition[bIdx].BoundaryType;
+                            }
+                            catch { }
+
+                            if (bType == SurfaceBoundaryType.Hide)
+                            {
+                                if (!customHideIds.Contains(bndEntId)) customHideIds.Add(bndEntId);
+                            }
+                            else if (bType == SurfaceBoundaryType.Outer)
+                            {
+                                if (!customOuterIds.Contains(bndEntId)) customOuterIds.Add(bndEntId);
+                            }
+                        }
+                    }
+                    catch { }
+                    bIdx++;
+                }
+            }
+            catch { }
+
+            // Fallback hình học cho các mặt phẳng lá cũ có Breakline nạp theo dạng Point3dCollection
+            int bklDefCount = 0;
+            try { bklDefCount = surf.BreaklinesDefinition.Count; } catch { }
+
+            if (foundIds.Count == 0 && allowGeometricFallback && bklDefCount > 0)
+            {
+                const double cellSize = 2.0;
+                var refCells = new Dictionary<(int, int), List<Point3d>>();
+                int totalRefPts = 0;
+
+                void AddRefPt(double x, double y, double z)
+                {
+                    var key = ((int)Math.Floor(x / cellSize), (int)Math.Floor(y / cellSize));
+                    if (!refCells.TryGetValue(key, out var bucket))
+                    {
+                        bucket = new List<Point3d>(4);
+                        refCells[key] = bucket;
+                    }
+                    bucket.Add(new Point3d(x, y, z));
+                    totalRefPts++;
+                }
+
+                foreach (double[] dbl in rawPointBreaklines)
+                {
+                    for (int k = 0; k + 2 < dbl.Length; k += 3)
+                        AddRefPt(dbl[k], dbl[k + 1], dbl[k + 2]);
+                }
+
+                try
+                {
+                    foreach (TinSurfaceVertex v in surf.Vertices)
+                    {
+                        if (v != null && v.IsValid)
+                        {
+                            Point3d p = v.Location;
+                            AddRefPt(p.X, p.Y, p.Z);
+                        }
+                    }
+                }
+                catch { }
+
+                bool HasNearbyRefPt(Point3d p)
+                {
+                    int gx = (int)Math.Floor(p.X / cellSize);
+                    int gy = (int)Math.Floor(p.Y / cellSize);
+                    const double tol2DSq = 0.03 * 0.03;
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            if (!refCells.TryGetValue((gx + dx, gy + dy), out var bucket)) continue;
+                            for (int i = 0; i < bucket.Count; i++)
+                            {
+                                Point3d r = bucket[i];
+                                double dSq = (r.X - p.X) * (r.X - p.X) + (r.Y - p.Y) * (r.Y - p.Y);
+                                if (dSq <= tol2DSq && Math.Abs(r.Z - p.Z) <= 0.05)
+                                    return true;
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                if (totalRefPts >= 2 &&
+                    tr.GetObject(db.BlockTableId, OpenMode.ForRead) is BlockTable bt &&
+                    tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) is BlockTableRecord ms)
+                {
+                    foreach (ObjectId entId in ms)
+                    {
+                        if (!IsSupportedSourceCurveId(entId)) continue;
+                        SourceCurveInfo? info = ExtractSourceCurveInfo(entId, tr, 0.10, 0.10, true, 0);
+                        if (info == null || info.Points3D.Count < 2) continue;
+
+                        int matched = 0;
+                        for (int i = 0; i < info.Points3D.Count; i++)
+                        {
+                            if (HasNearbyRefPt(info.Points3D[i]))
+                                matched++;
+                        }
+
+                        int required = Math.Max(2, (int)Math.Ceiling(info.Points3D.Count * 0.90));
+                        if (matched >= required)
+                        {
+                            if (info.Points3D.Count == 2)
+                            {
+                                double mx = 0.5 * (info.Points3D[0].X + info.Points3D[1].X);
+                                double my = 0.5 * (info.Points3D[0].Y + info.Points3D[1].Y);
+                                double mz = 0.5 * (info.Points3D[0].Z + info.Points3D[1].Z);
+                                try
+                                {
+                                    double sz = surf.FindElevationAtXY(mx, my);
+                                    if (Math.Abs(sz - mz) > 0.08) continue;
+                                }
+                                catch { continue; }
+                            }
+                            AddCurveId(entId);
+                        }
+                    }
+                }
+            }
+
+            return foundIds;
+        }
+
+        internal static void SaveSurfaceRecipe(CivSurface surface, Transaction tr, FeatureLineSurfaceRecipe recipe)
+        {
+            if (surface == null || surface.IsErased || recipe == null) return;
+
+            try
+            {
+                if (surface.Database != null)
+                {
+                    recipe.LastGeometryHash = ComputeRecipeGeometryHash(surface.Database, tr, recipe);
+                }
+                recipe.LastExpectedTriCount = CountVisibleTriangles(surface);
+
+                if (!surface.IsWriteEnabled)
+                    surface.UpgradeOpen();
+
+                ObjectId extDictId = surface.ExtensionDictionary;
+                if (extDictId.IsNull)
+                {
+                    surface.CreateExtensionDictionary();
+                    extDictId = surface.ExtensionDictionary;
+                }
+                if (extDictId.IsNull) return;
+
+                if (tr.GetObject(extDictId, OpenMode.ForWrite) is not DBDictionary extDict)
+                    return;
+
+                string json = JsonSerializer.Serialize(recipe);
+                using (var rb = new ResultBuffer())
+                {
+                    const int chunkLen = 200;
+                    for (int offset = 0; offset < json.Length; offset += chunkLen)
+                    {
+                        int len = Math.Min(chunkLen, json.Length - offset);
+                        rb.Add(new TypedValue((int)DxfCode.Text, json.Substring(offset, len)));
+                    }
+
+                    if (extDict.Contains(FlSurfaceRecipeDictKey))
+                    {
+                        ObjectId recId = extDict.GetAt(FlSurfaceRecipeDictKey);
+                        if (!recId.IsNull && recId.IsValid && !recId.IsErased &&
+                            tr.GetObject(recId, OpenMode.ForWrite) is Xrecord existingXrec)
+                        {
+                            existingXrec.Data = rb;
+                            return;
+                        }
+                    }
+
+                    using (var xrec = new Xrecord())
+                    {
+                        xrec.Data = rb;
+                        extDict.SetAt(FlSurfaceRecipeDictKey, xrec);
+                        tr.AddNewlyCreatedDBObject(xrec, true);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static bool TryReadSurfaceRecipe(CivSurface surface, Transaction tr, out FeatureLineSurfaceRecipe? recipe)
+        {
+            recipe = null;
+            if (surface == null || surface.IsErased) return false;
+
+            try
+            {
+                ObjectId extDictId = surface.ExtensionDictionary;
+                if (extDictId.IsNull || !extDictId.IsValid || extDictId.IsErased)
+                    return false;
+
+                if (tr.GetObject(extDictId, OpenMode.ForRead) is not DBDictionary extDict)
+                    return false;
+
+                if (!extDict.Contains(FlSurfaceRecipeDictKey))
+                    return false;
+
+                ObjectId recId = extDict.GetAt(FlSurfaceRecipeDictKey);
+                if (recId.IsNull || !recId.IsValid || recId.IsErased)
+                    return false;
+
+                if (tr.GetObject(recId, OpenMode.ForRead) is not Xrecord xrec || xrec.Data == null)
+                    return false;
+
+                var sb = new StringBuilder();
+                foreach (TypedValue tv in xrec.Data)
+                {
+                    if (tv.TypeCode == (int)DxfCode.Text && tv.Value is string chunk)
+                    {
+                        sb.Append(chunk);
+                    }
+                }
+
+                string json = sb.ToString();
+                if (string.IsNullOrWhiteSpace(json)) return false;
+
+                recipe = JsonSerializer.Deserialize<FeatureLineSurfaceRecipe>(json);
+                return recipe != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static void RemoveSurfaceRecipe(CivSurface surface, Transaction tr)
+        {
+            if (surface == null || surface.IsErased) return;
+
+            try
+            {
+                ObjectId extDictId = surface.ExtensionDictionary;
+                if (extDictId.IsNull || !extDictId.IsValid || extDictId.IsErased)
+                    return;
+
+                if (tr.GetObject(extDictId, OpenMode.ForWrite) is DBDictionary extDict &&
+                    extDict.Contains(FlSurfaceRecipeDictKey))
+                {
+                    ObjectId recId = extDict.GetAt(FlSurfaceRecipeDictKey);
+                    extDict.Remove(FlSurfaceRecipeDictKey);
+                    if (!recId.IsNull && recId.IsValid && !recId.IsErased &&
+                        tr.GetObject(recId, OpenMode.ForWrite) is DBObject obj)
+                    {
+                        obj.Erase(true);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static bool RebuildSurfaceFromRecipeInternal(
+            CivilDocument civDoc,
+            Database db,
+            Transaction tr,
+            Editor ed,
+            CivSurface targetSurface,
+            FeatureLineSurfaceRecipe recipe,
+            CivSurface? parentSurfaceOverride,
+            out int validCurveCount,
+            out int newTriCount)
+        {
+            validCurveCount = 0;
+            newTriCount = 0;
+
+            TaoMatPhangOptions rebuildOpts = recipe.ToRebuildOptions(db);
+            double midOrd = Math.Max(0.01, rebuildOpts.MidOrdinateDistance);
+            double suppDist = rebuildOpts.UseSupplementing ? Math.Max(0.20, rebuildOpts.SupplementingDistance) : 100000.0;
+            double closeTol = rebuildOpts.AutoCloseNearClosed ? Math.Max(0.005, rebuildOpts.AutoCloseTolerance) : 0.005;
+
+            var sourceCurves = new List<SourceCurveInfo>();
+            var seenIds = new HashSet<ObjectId>();
+            foreach (ObjectId rawId in rebuildOpts.SourceEntityIds)
+            {
+                if (rawId.IsNull || !rawId.IsValid || rawId.IsErased || !seenIds.Add(rawId))
+                    continue;
+
+                SourceCurveInfo? info = ExtractSourceCurveInfo(rawId, tr, midOrd, closeTol, rebuildOpts.AutoCloseNearClosed, sourceCurves.Count);
+                if (info != null && info.Points3D.Count >= 2)
+                {
+                    sourceCurves.Add(info);
+                }
+            }
+
+            validCurveCount = sourceCurves.Count;
+            if (sourceCurves.Count == 0)
+            {
+                return false;
+            }
+
+            if (sourceCurves.Count == 1 && !sourceCurves[0].IsClosed && sourceCurves[0].Points3D.Count < 3)
+            {
+                return false;
+            }
+
+            bool wasLocked = false;
+            try
+            {
+                wasLocked = targetSurface.Lock;
+                if (wasLocked) targetSurface.Lock = false;
+            }
+            catch { }
+
+            try
+            {
+                // Nếu cần giữ nguyên mặt phẳng cũ tại vùng chồng lấn -> tạm tắt Paste của chính mặt con này trên mặt cha để chụp nền cũ
+                CivSurface? parentSurf = parentSurfaceOverride;
+                if (parentSurf == null && !recipe.OverwriteOverlapOnExisting && !string.IsNullOrWhiteSpace(recipe.ParentSurfaceHandle))
+                {
+                    ObjectId pId = TryResolveEntityIdByHandle(db, recipe.ParentSurfaceHandle);
+                    if (!pId.IsNull && pId != targetSurface.ObjectId)
+                    {
+                        parentSurf = tr.GetObject(pId, OpenMode.ForWrite) as CivSurface;
+                    }
+                }
+
+                SpatialTriangleGrid2D? oldTriGrid = null;
+                if (!recipe.OverwriteOverlapOnExisting && parentSurf != null)
+                {
+                    bool wasParentLocked = false;
+                    try
+                    {
+                        wasParentLocked = parentSurf.Lock;
+                        if (wasParentLocked) parentSurf.Lock = false;
+                    }
+                    catch { }
+
+                    SurfaceOperationPasteSurface? pasteOp = FindPasteOperationForSubSurface(parentSurf, targetSurface.ObjectId);
+                    bool tempDisabledPaste = false;
+                    try
+                    {
+                        if (pasteOp != null && pasteOp.Enabled)
+                        {
+                            pasteOp.Enabled = false;
+                            parentSurf.Rebuild();
+                            tempDisabledPaste = true;
+                        }
+
+                        if (CountVisibleTriangles(parentSurf) > 0)
+                        {
+                            TinTopologyGraph oldGraph = BuildTinTopologyGraph(parentSurf);
+                            oldTriGrid = new SpatialTriangleGrid2D(oldGraph);
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        if (tempDisabledPaste && pasteOp != null)
+                        {
+                            try { pasteOp.Enabled = true; } catch { }
+                        }
+                        if (wasParentLocked)
+                        {
+                            try { parentSurf.Lock = true; } catch { }
+                        }
+                    }
+                }
+
+                ClearSurfaceDefinitionsAndEdits(targetSurface);
+
+                bool populatedOk = PopulateCleanFeatureLineSurface(
+                    targetSurface,
+                    rebuildOpts,
+                    tr,
+                    ed,
+                    sourceCurves,
+                    midOrd,
+                    suppDist,
+                    closeTol,
+                    usePointsOnlyBreaklines: false,
+                    out int addedBreaklines,
+                    out _,
+                    out _);
+
+                if (!populatedOk || addedBreaklines == 0)
+                {
+                    return false;
+                }
+
+                if (!recipe.OverwriteOverlapOnExisting && oldTriGrid != null)
+                {
+                    TinTopologyGraph subGraph = BuildTinTopologyGraph(targetSurface);
+                    if (subGraph.Triangles.Count > 0)
+                    {
+                        bool[] subRemoved = new bool[subGraph.Triangles.Count];
+                        bool anyMarked = false;
+                        for (int t = 0; t < subGraph.Triangles.Count; t++)
+                        {
+                            TinTriangleNode tri = subGraph.Triangles[t];
+                            Point2d c = tri.Centroid2D;
+                            Point3d p0 = subGraph.Vertices[tri.V0].Pos;
+                            Point3d p1 = subGraph.Vertices[tri.V1].Pos;
+                            Point3d p2 = subGraph.Vertices[tri.V2].Pos;
+
+                            if (oldTriGrid.ContainsPoint(c.X, c.Y, -1e-4) &&
+                                oldTriGrid.ContainsPoint(p0.X, p0.Y, 0.01) &&
+                                oldTriGrid.ContainsPoint(p1.X, p1.Y, 0.01) &&
+                                oldTriGrid.ContainsPoint(p2.X, p2.Y, 0.01))
+                            {
+                                subRemoved[t] = true;
+                                anyMarked = true;
+                            }
+                        }
+
+                        if (anyMarked)
+                        {
+                            ApplyRemovedTrianglesToSurface(targetSurface, subGraph, subRemoved, midOrd, ed);
+                        }
+
+                        try
+                        {
+                            foreach (TinSurfaceVertex v in targetSurface.Vertices)
+                            {
+                                if (v == null || !v.IsValid) continue;
+                                Point3d loc = v.Location;
+                                if (oldTriGrid.TryInterpolateZ(loc.X, loc.Y, out double oldZ, 0.015) &&
+                                    Math.Abs(loc.Z - oldZ) > 0.002)
+                                {
+                                    try { targetSurface.SetVertexElevation(v, oldZ); } catch { }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                SetAutoRebuildSafe(targetSurface, recipe.AutoRebuild);
+                newTriCount = CountVisibleTriangles(targetSurface);
+                if (newTriCount > 0)
+                {
+                    SaveSurfaceRecipe(targetSurface, tr, recipe);
+                }
+                return newTriCount > 0;
+            }
+            finally
+            {
+                if (wasLocked)
+                {
+                    try { targetSurface.Lock = true; } catch { }
+                }
+            }
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// Trình tự động lắng nghe thay đổi của Feature Line / Polyline nguồn và đồng bộ chính xác
+    /// cả lưới tam giác lẫn ranh giới (Boundary / DeleteLines) của mặt phẳng phụ & toàn bộ mặt phẳng tổng phụ thuộc.
+    /// </summary>
+    public static class FeatureLineDynamicSyncManager
+    {
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PostMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+        private const uint WM_NULL = 0x0000;
+
+        private const string StopSyncDomainKey = "Civil3DTools.FlSurfaceSync.StopAction";
+        private static readonly object _syncLock = new object();
+        private static bool _startedInThisAssembly = false;
+        private static bool _idleHookAttached = false;
+        private static bool _isInternalRebuilding = false;
+
+        private static readonly HashSet<IntPtr> _attachedDocPtrs = new HashSet<IntPtr>();
+        private static readonly HashSet<IntPtr> _scannedLegacyDbPtrs = new HashSet<IntPtr>();
+        private static readonly Dictionary<IntPtr, HashSet<string>> _pendingHandlesByDb = new Dictionary<IntPtr, HashSet<string>>();
+        private static readonly Dictionary<IntPtr, HashSet<string>> _pendingSurfaceHandlesByDb = new Dictionary<IntPtr, HashSet<string>>();
+        private static readonly HashSet<IntPtr> _pendingLegacyScanDbPtrs = new HashSet<IntPtr>();
+
+        public static void EnsureStarted()
+        {
+            lock (_syncLock)
+            {
+                AppDomain domain = AppDomain.CurrentDomain;
+                if (_startedInThisAssembly)
+                    return;
+
+                if (domain.GetData(StopSyncDomainKey) is Action oldStop)
+                {
+                    try { oldStop(); } catch { }
+                    domain.SetData(StopSyncDomainKey, null);
+                }
+
+                try
+                {
+                    Application.DocumentManager.DocumentCreated += OnDocumentCreated;
+                    Application.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+                    Application.DocumentManager.DocumentBecameCurrent += OnDocumentBecameCurrent;
+
+                    foreach (Document doc in Application.DocumentManager)
+                    {
+                        AttachDocument(doc);
+                    }
+
+                    domain.SetData(StopSyncDomainKey, new Action(Stop));
+                    _startedInThisAssembly = true;
+                    ScheduleIdleIfNeeded();
+                }
+                catch { }
+            }
+        }
+
+        public static void Stop()
+        {
+            lock (_syncLock)
+            {
+                try
+                {
+                    Application.DocumentManager.DocumentCreated -= OnDocumentCreated;
+                    Application.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;
+                    Application.DocumentManager.DocumentBecameCurrent -= OnDocumentBecameCurrent;
+                }
+                catch { }
+
+                try
+                {
+                    if (_idleHookAttached)
+                    {
+                        Application.Idle -= OnApplicationIdle;
+                        _idleHookAttached = false;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    foreach (Document doc in Application.DocumentManager)
+                    {
+                        DetachDocument(doc);
+                    }
+                }
+                catch { }
+
+                _attachedDocPtrs.Clear();
+                _scannedLegacyDbPtrs.Clear();
+                _pendingHandlesByDb.Clear();
+                _pendingSurfaceHandlesByDb.Clear();
+                _pendingLegacyScanDbPtrs.Clear();
+                _startedInThisAssembly = false;
+
+                try
+                {
+                    if (AppDomain.CurrentDomain.GetData(StopSyncDomainKey) is Action curStop &&
+                        curStop.Method == typeof(FeatureLineDynamicSyncManager).GetMethod(nameof(Stop)))
+                    {
+                        AppDomain.CurrentDomain.SetData(StopSyncDomainKey, null);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static void OnDocumentCreated(object sender, DocumentCollectionEventArgs e)
+        {
+            if (e?.Document != null)
+            {
+                AttachDocument(e.Document);
+                ScheduleIdleIfNeeded();
+            }
+        }
+
+        private static void OnDocumentBecameCurrent(object sender, DocumentCollectionEventArgs e)
+        {
+            if (e?.Document != null)
+            {
+                AttachDocument(e.Document);
+                ScheduleIdleIfNeeded();
+            }
+        }
+
+        private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
+        {
+            if (e?.Document != null)
+            {
+                DetachDocument(e.Document);
+            }
+        }
+
+        private static void AttachDocument(Document doc)
+        {
+            if (doc == null || doc.IsDisposed) return;
+
+            IntPtr docPtr = doc.UnmanagedObject;
+            lock (_syncLock)
+            {
+                if (_attachedDocPtrs.Contains(docPtr)) return;
+
+                try
+                {
+                    Database db = doc.Database;
+                    if (db != null && !db.IsDisposed)
+                    {
+                        db.ObjectModified += OnDatabaseObjectModified;
+                        db.ObjectErased += OnDatabaseObjectErased;
+                        IntPtr dbPtr = db.UnmanagedObject;
+                        if (!_scannedLegacyDbPtrs.Contains(dbPtr))
+                        {
+                            _pendingLegacyScanDbPtrs.Add(dbPtr);
+                        }
+                    }
+
+                    doc.CommandEnded += OnDocumentCommandEnded;
+                    doc.CommandCancelled += OnDocumentCommandEnded;
+                    _attachedDocPtrs.Add(docPtr);
+                }
+                catch { }
+            }
+        }
+
+        private static void DetachDocument(Document doc)
+        {
+            if (doc == null) return;
+
+            lock (_syncLock)
+            {
+                try
+                {
+                    Database db = doc.Database;
+                    if (db != null && !db.IsDisposed)
+                    {
+                        db.ObjectModified -= OnDatabaseObjectModified;
+                        db.ObjectErased -= OnDatabaseObjectErased;
+                        IntPtr dbPtr = db.UnmanagedObject;
+                        _pendingHandlesByDb.Remove(dbPtr);
+                        _pendingSurfaceHandlesByDb.Remove(dbPtr);
+                        _pendingLegacyScanDbPtrs.Remove(dbPtr);
+                        _scannedLegacyDbPtrs.Remove(dbPtr);
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    doc.CommandEnded -= OnDocumentCommandEnded;
+                    doc.CommandCancelled -= OnDocumentCommandEnded;
+                }
+                catch { }
+
+                try { _attachedDocPtrs.Remove(doc.UnmanagedObject); } catch { }
+            }
+        }
+
+        private static void OnDocumentCommandEnded(object sender, CommandEventArgs e)
+        {
+            if (_isInternalRebuilding) return;
+            ScheduleIdleIfNeeded();
+        }
+
+        private static void OnDatabaseObjectModified(object sender, ObjectEventArgs e)
+        {
+            HandleDatabaseObjectChanged(sender as Database, e?.DBObject);
+        }
+
+        private static void OnDatabaseObjectErased(object sender, ObjectErasedEventArgs e)
+        {
+            HandleDatabaseObjectChanged(sender as Database, e?.DBObject);
+        }
+
+        private static void HandleDatabaseObjectChanged(Database? db, DBObject? dbObj)
+        {
+            if (_isInternalRebuilding || db == null || db.IsDisposed || dbObj == null)
+                return;
+
+            if (dbObj is CivSurface modSurf)
+            {
+                string surfHandle = modSurf.Handle.ToString();
+                if (!string.IsNullOrEmpty(surfHandle))
+                {
+                    lock (_syncLock)
+                    {
+                        IntPtr dbPtr = db.UnmanagedObject;
+                        if (!_pendingSurfaceHandlesByDb.TryGetValue(dbPtr, out var sSet))
+                        {
+                            sSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            _pendingSurfaceHandlesByDb[dbPtr] = sSet;
+                        }
+                        sSet.Add(surfHandle);
+                        ScheduleIdleIfNeeded();
+                    }
+                }
+                return;
+            }
+
+            string? targetHandle = null;
+            if (dbObj is FeatureLine ||
+                dbObj is AutoCorridorFeatureLine ||
+                dbObj is Polyline ||
+                dbObj is Polyline3d ||
+                dbObj is Polyline2d ||
+                dbObj is Line ||
+                dbObj is Arc)
+            {
+                targetHandle = dbObj.Handle.ToString();
+            }
+            else if (dbObj is PolylineVertex3d || dbObj is Vertex2d)
+            {
+                ObjectId ownerId = dbObj.OwnerId;
+                if (!ownerId.IsNull)
+                {
+                    targetHandle = ownerId.Handle.ToString();
+                }
+            }
+
+            if (string.IsNullOrEmpty(targetHandle))
+                return;
+
+            lock (_syncLock)
+            {
+                IntPtr dbPtr = db.UnmanagedObject;
+                if (!_pendingHandlesByDb.TryGetValue(dbPtr, out var set))
+                {
+                    set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    _pendingHandlesByDb[dbPtr] = set;
+                }
+                set.Add(targetHandle);
+                ScheduleIdleIfNeeded();
+            }
+        }
+
+        private static void ScheduleIdleIfNeeded()
+        {
+            lock (_syncLock)
+            {
+                bool hasWork = _pendingLegacyScanDbPtrs.Count > 0 ||
+                               _pendingHandlesByDb.Count > 0 ||
+                               _pendingSurfaceHandlesByDb.Count > 0;
+                if (hasWork)
+                {
+                    if (!_idleHookAttached)
+                    {
+                        try
+                        {
+                            Application.Idle += OnApplicationIdle;
+                            _idleHookAttached = true;
+                        }
+                        catch { }
+                    }
+
+                    try
+                    {
+                        PostMessageW(Application.MainWindow.Handle, WM_NULL, IntPtr.Zero, IntPtr.Zero);
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private static bool IsCommandActive()
+        {
+            try
+            {
+                object val = Application.GetSystemVariable("CMDACTIVE");
+                return val != null && Convert.ToInt32(val) > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void OnApplicationIdle(object? sender, EventArgs e)
+        {
+            if (_isInternalRebuilding) return;
+
+            Document? activeDoc = null;
+            try { activeDoc = Application.DocumentManager.MdiActiveDocument; } catch { }
+            if (activeDoc == null || activeDoc.IsDisposed) return;
+
+            try
+            {
+                if (!activeDoc.Editor.IsQuiescent || IsCommandActive())
+                    return;
+            }
+            catch
+            {
+                return;
+            }
+
+            Database activeDb = activeDoc.Database;
+            if (activeDb == null || activeDb.IsDisposed) return;
+            IntPtr activeDbPtr = activeDb.UnmanagedObject;
+
+            bool needLegacyScan = false;
+            HashSet<string>? modifiedHandles = null;
+            HashSet<string>? modifiedSurfaceHandles = null;
+
+            lock (_syncLock)
+            {
+                needLegacyScan = _pendingLegacyScanDbPtrs.Remove(activeDbPtr);
+                if (_pendingHandlesByDb.TryGetValue(activeDbPtr, out var queued) && queued.Count > 0)
+                {
+                    modifiedHandles = new HashSet<string>(queued, StringComparer.OrdinalIgnoreCase);
+                    _pendingHandlesByDb.Remove(activeDbPtr);
+                }
+                if (_pendingSurfaceHandlesByDb.TryGetValue(activeDbPtr, out var queuedSurf) && queuedSurf.Count > 0)
+                {
+                    modifiedSurfaceHandles = new HashSet<string>(queuedSurf, StringComparer.OrdinalIgnoreCase);
+                    _pendingSurfaceHandlesByDb.Remove(activeDbPtr);
+                }
+
+                if (_pendingLegacyScanDbPtrs.Count == 0 &&
+                    _pendingHandlesByDb.Count == 0 &&
+                    _pendingSurfaceHandlesByDb.Count == 0 &&
+                    _idleHookAttached)
+                {
+                    try
+                    {
+                        Application.Idle -= OnApplicationIdle;
+                        _idleHookAttached = false;
+                    }
+                    catch { }
+                }
+            }
+
+            if (!needLegacyScan &&
+                (modifiedHandles == null || modifiedHandles.Count == 0) &&
+                (modifiedSurfaceHandles == null || modifiedSurfaceHandles.Count == 0))
+            {
+                return;
+            }
+
+            try
+            {
+                ProcessSyncForDocument(activeDoc, needLegacyScan, modifiedHandles, modifiedSurfaceHandles, forceAll: false, out _, out _);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Đồng bộ thủ công toàn bộ các mặt phẳng tạo từ Feature Line (và chuỗi mặt phẳng tổng PasteSurface) trong bản vẽ hiện hành.
+        /// </summary>
+        public static bool SyncAllInDocument(
+            Database db,
+            Editor ed,
+            bool forceAll,
+            out int updatedSubSurfaceCount,
+            out int rebuiltParentCount)
+        {
+            updatedSubSurfaceCount = 0;
+            rebuiltParentCount = 0;
+
+            Document? targetDoc = null;
+            foreach (Document d in Application.DocumentManager)
+            {
+                if (d != null && !d.IsDisposed && d.Database == db)
+                {
+                    targetDoc = d;
+                    break;
+                }
+            }
+
+            if (targetDoc == null)
+                targetDoc = Application.DocumentManager.MdiActiveDocument;
+
+            if (targetDoc == null || targetDoc.IsDisposed)
+                return false;
+
+            HashSet<string>? queuedHandles = null;
+            HashSet<string>? queuedSurfHandles = null;
+            IntPtr dbPtr = targetDoc.Database.UnmanagedObject;
+            lock (_syncLock)
+            {
+                _pendingLegacyScanDbPtrs.Remove(dbPtr);
+                if (_pendingHandlesByDb.TryGetValue(dbPtr, out var qh) && qh.Count > 0)
+                {
+                    queuedHandles = new HashSet<string>(qh, StringComparer.OrdinalIgnoreCase);
+                    _pendingHandlesByDb.Remove(dbPtr);
+                }
+                if (_pendingSurfaceHandlesByDb.TryGetValue(dbPtr, out var qs) && qs.Count > 0)
+                {
+                    queuedSurfHandles = new HashSet<string>(qs, StringComparer.OrdinalIgnoreCase);
+                    _pendingSurfaceHandlesByDb.Remove(dbPtr);
+                }
+            }
+
+            return ProcessSyncForDocument(
+                targetDoc,
+                runLegacyDiscovery: true,
+                modifiedSourceHandles: queuedHandles,
+                modifiedSurfaceHandles: queuedSurfHandles,
+                forceAll: forceAll,
+                out updatedSubSurfaceCount,
+                out rebuiltParentCount,
+                checkAllRecipeHashes: !forceAll);
+        }
+
+        private static bool ProcessSyncForDocument(
+            Document doc,
+            bool runLegacyDiscovery,
+            HashSet<string>? modifiedSourceHandles,
+            HashSet<string>? modifiedSurfaceHandles,
+            bool forceAll,
+            out int updatedSubCount,
+            out int rebuiltParentCount,
+            bool checkAllRecipeHashes = false)
+        {
+            updatedSubCount = 0;
+            rebuiltParentCount = 0;
+            if (doc == null || doc.IsDisposed) return false;
+
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+            IntPtr dbPtr = db.UnmanagedObject;
+
+            lock (_syncLock)
+            {
+                _scannedLegacyDbPtrs.Add(dbPtr);
+            }
+
+            _isInternalRebuilding = true;
+            try
+            {
+                using (DocumentLock docLock = doc.LockDocument())
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    CivilDocument? civDoc = CivilDocument.GetCivilDocument(db);
+                    if (civDoc == null)
+                    {
+                        tr.Commit();
+                        return false;
+                    }
+
+                    // 1. Tự động phát hiện, gắn Recipe cho mặt phẳng FL cũ & chuẩn hóa mặt tổng lai có Breakline/Outer thừa
+                    var healSurfaceIds = new HashSet<ObjectId>();
+                    var dirtyParentIds = new HashSet<ObjectId>();
+                    if (runLegacyDiscovery)
+                    {
+                        DiscoverAndAttachLegacyFlRecipes(civDoc, db, tr, ed, healSurfaceIds, dirtyParentIds);
+                    }
+
+                    // 2. Xác định các mặt phẳng nguồn FL bị ảnh hưởng và tái tạo chính xác lưới + ranh giới
+                    var dirtySurfaceIds = new HashSet<ObjectId>();
+
+                    foreach (ObjectId surfId in civDoc.GetSurfaceIds())
+                    {
+                        if (surfId.IsNull || !surfId.IsValid || surfId.IsErased) continue;
+                        if (tr.GetObject(surfId, OpenMode.ForRead) is not CivSurface surf) continue;
+
+                        if (!CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryReadSurfaceRecipe(
+                                surf, tr, out CTT_Tao_Mat_Phang_Tu_Featureline_Command.FeatureLineSurfaceRecipe? recipe) ||
+                            recipe == null)
+                        {
+                            continue;
+                        }
+
+                        bool shouldRebuild = forceAll || healSurfaceIds.Contains(surfId);
+                        if (!shouldRebuild && recipe.AutoRebuild)
+                        {
+                            bool triggeredBySource = false;
+                            if (modifiedSourceHandles != null && modifiedSourceHandles.Count > 0)
+                            {
+                                for (int i = 0; i < recipe.SourceHandles.Count; i++)
+                                {
+                                    if (modifiedSourceHandles.Contains(recipe.SourceHandles[i]))
+                                    {
+                                        triggeredBySource = true;
+                                        break;
+                                    }
+                                }
+                                if (!triggeredBySource)
+                                {
+                                    for (int i = 0; i < recipe.CustomOuterHandles.Count; i++)
+                                    {
+                                        if (modifiedSourceHandles.Contains(recipe.CustomOuterHandles[i]))
+                                        {
+                                            triggeredBySource = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!triggeredBySource)
+                                {
+                                    for (int i = 0; i < recipe.CustomHideHandles.Count; i++)
+                                    {
+                                        if (modifiedSourceHandles.Contains(recipe.CustomHideHandles[i]))
+                                        {
+                                            triggeredBySource = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            bool triggeredBySurface = modifiedSurfaceHandles != null &&
+                                                      modifiedSurfaceHandles.Contains(surf.Handle.ToString());
+
+                            if (checkAllRecipeHashes || triggeredBySource || triggeredBySurface)
+                            {
+                                ulong curHash = CTT_Tao_Mat_Phang_Tu_Featureline_Command.ComputeRecipeGeometryHash(db, tr, recipe);
+                                int curTris = CTT_Tao_Mat_Phang_Tu_Featureline_Command.CountVisibleTriangles(surf);
+                                if (curHash != recipe.LastGeometryHash ||
+                                    curTris != recipe.LastExpectedTriCount ||
+                                    curTris == 0)
+                                {
+                                    shouldRebuild = true;
+                                }
+                            }
+                        }
+
+                        if (!shouldRebuild) continue;
+
+                        surf.UpgradeOpen();
+                        if (CTT_Tao_Mat_Phang_Tu_Featureline_Command.RebuildSurfaceFromRecipeInternal(
+                                civDoc, db, tr, ed, surf, recipe, parentSurfaceOverride: null, out _, out _))
+                        {
+                            updatedSubCount++;
+                            dirtySurfaceIds.Add(surfId);
+                        }
+                    }
+
+                    // 3. Cascade Rebuild toàn bộ chuỗi mặt phẳng tổng (PasteSurface) theo đúng thứ tự phụ thuộc
+                    if (dirtySurfaceIds.Count > 0 || dirtyParentIds.Count > 0)
+                    {
+                        rebuiltParentCount = RebuildDownstreamPasteParentsInOrder(civDoc, tr, ed, dirtySurfaceIds, dirtyParentIds);
+                    }
+
+                    tr.Commit();
+                }
+
+                if (updatedSubCount > 0 || rebuiltParentCount > 0)
+                {
+                    try { ed.UpdateScreen(); } catch { }
+                    if (!forceAll)
+                    {
+                        ed.WriteMessage($"\n🔄 [Đồng bộ động FL] Đã cập nhật {updatedSubCount} mặt phẳng phụ & {rebuiltParentCount} mặt phẳng tổng theo ranh giới Feature Line mới.");
+                    }
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                _isInternalRebuilding = false;
+            }
+        }
+
+        private static void DiscoverAndAttachLegacyFlRecipes(
+            CivilDocument civDoc,
+            Database db,
+            Transaction tr,
+            Editor ed,
+            HashSet<ObjectId> healSurfaceIds,
+            HashSet<ObjectId> dirtyParentIds)
+        {
+            try
+            {
+                var leafCandidateIds = new List<ObjectId>();
+                var hybridParentIds = new List<ObjectId>();
+                var parentByChild = new Dictionary<ObjectId, ObjectId>();
+
+                foreach (ObjectId sId in civDoc.GetSurfaceIds())
+                {
+                    if (sId.IsNull || !sId.IsValid || sId.IsErased) continue;
+                    if (tr.GetObject(sId, OpenMode.ForRead) is not CivSurface surf) continue;
+
+                    try
+                    {
+                        for (int i = 0; i < surf.Operations.Count; i++)
+                        {
+                            if (surf.Operations[i] is SurfaceOperationPasteSurface pasteOp &&
+                                pasteOp.Enabled &&
+                                !pasteOp.SurfaceId.IsNull &&
+                                !parentByChild.ContainsKey(pasteOp.SurfaceId))
+                            {
+                                parentByChild[pasteOp.SurfaceId] = sId;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    SurfaceOriginationType origType = SurfaceOriginationType.None;
+                    try { origType = surf.OriginationType; } catch { }
+                    if (origType != SurfaceOriginationType.None) continue;
+
+                    if (surf.PointGroupsDefinition.Count > 0 ||
+                        surf.PointFilesDefinition.Count > 0 ||
+                        surf.DEMFilesDefinition.Count > 0 ||
+                        surf.ContoursDefinition.Count > 0 ||
+                        surf.DrawingObjectsDefinition.Count > 0)
+                    {
+                        continue;
+                    }
+
+                    bool hasPaste = CTT_Tao_Mat_Phang_Tu_Featureline_Command.HasAnyPasteSurfaceOperation(surf);
+                    if (hasPaste)
+                    {
+                        bool hasBkl = false;
+                        try { hasBkl = surf.BreaklinesDefinition.Count > 0; } catch { }
+                        if (hasBkl || CTT_Tao_Mat_Phang_Tu_Featureline_Command.HasRestrictiveOuterBoundary(surf))
+                        {
+                            hybridParentIds.Add(sId);
+                        }
+                        continue;
+                    }
+
+                    if (CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryReadSurfaceRecipe(surf, tr, out _))
+                        continue;
+
+                    if (surf.BreaklinesDefinition.Count == 0) continue;
+                    leafCandidateIds.Add(sId);
+                }
+
+                // Pass 1: Khôi phục & gắn Recipe cho các mặt phẳng lá tạo từ Feature Line (qua COM + fallback hình học)
+                foreach (ObjectId sId in leafCandidateIds)
+                {
+                    if (tr.GetObject(sId, OpenMode.ForRead) is not CivSurface surf) continue;
+
+                    List<ObjectId> sourceIds = CTT_Tao_Mat_Phang_Tu_Featureline_Command.ExtractSourceCurveIdsFromSurface(
+                        surf,
+                        db,
+                        tr,
+                        allowGeometricFallback: true,
+                        out _,
+                        out List<ObjectId> customOuterIds,
+                        out List<ObjectId> customHideIds);
+
+                    if (sourceIds.Count == 0) continue;
+
+                    surf.UpgradeOpen();
+                    bool customBnd = customOuterIds.Count > 0 || customHideIds.Count > 0;
+                    var recipe = new CTT_Tao_Mat_Phang_Tu_Featureline_Command.FeatureLineSurfaceRecipe
+                    {
+                        Version = 1,
+                        SourceHandles = sourceIds.Select(id => id.Handle.ToString()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                        CustomOuterHandles = customOuterIds.Select(id => id.Handle.ToString()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                        CustomHideHandles = customHideIds.Select(id => id.Handle.ToString()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                        BoundaryMode = customBnd
+                            ? (int)FeatureLineBoundaryMode.CustomBoundaryEntities
+                            : (int)FeatureLineBoundaryMode.AutoSmart,
+                        MidOrdinateDistance = 0.10,
+                        UseSupplementing = true,
+                        SupplementingDistance = 2.00,
+                        LimitMaxEdgeLength = true,
+                        MaxEdgeLength = 25.00,
+                        AutoCloseNearClosed = true,
+                        AutoCloseTolerance = 0.10,
+                        TreatNestedClosedAsHole = false,
+                        AutoRebuild = true,
+                        OverwriteOverlapOnExisting = true,
+                        ParentSurfaceHandle = parentByChild.TryGetValue(sId, out ObjectId pId) ? pId.Handle.ToString() : string.Empty
+                    };
+
+                    try { recipe.AutoRebuild = surf.AutoRebuild; } catch { }
+
+                    CTT_Tao_Mat_Phang_Tu_Featureline_Command.SaveSurfaceRecipe(surf, tr, recipe);
+
+                    int curTris = CTT_Tao_Mat_Phang_Tu_Featureline_Command.CountVisibleTriangles(surf);
+                    int bndCount = 0;
+                    try { bndCount = surf.BoundariesDefinition.Count; } catch { }
+                    if (curTris == 0 || (bndCount > 0 && customOuterIds.Count == 0 && customHideIds.Count == 0))
+                    {
+                        healSurfaceIds.Add(sId);
+                    }
+                }
+
+                // Pass 2: Chuẩn hóa các mặt tổng lai (ví dụ 'Taluy' vừa Paste vừa còn Breakline biên tĩnh cũ / Outer Boundary kẹp biên)
+                foreach (ObjectId parentId in hybridParentIds)
+                {
+                    if (tr.GetObject(parentId, OpenMode.ForWrite) is not CivSurface parentSurf) continue;
+                    ObjectId subStyleId = CTT_Tao_Mat_Phang_Tu_Featureline_Command.ResolveSubSurfaceStyleId(
+                        civDoc, tr, "_No Display", parentSurf.StyleId, out _);
+
+                    if (CTT_Tao_Mat_Phang_Tu_Featureline_Command.NormalizeFlMasterSurfaceToPurePasteParent(
+                            civDoc, db, tr, ed, parentId, parentSurf, subStyleId, parentSurf.AutoRebuild, out _))
+                    {
+                        dirtyParentIds.Add(parentId);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static int RebuildDownstreamPasteParentsInOrder(
+            CivilDocument civDoc,
+            Transaction tr,
+            Editor ed,
+            HashSet<ObjectId> seedDirtyIds,
+            HashSet<ObjectId>? seedParentIds = null)
+        {
+            var childrenToParents = new Dictionary<ObjectId, List<ObjectId>>();
+            var parentToChildren = new Dictionary<ObjectId, List<ObjectId>>();
+
+            foreach (ObjectId sId in civDoc.GetSurfaceIds())
+            {
+                if (sId.IsNull || !sId.IsValid || sId.IsErased) continue;
+                if (tr.GetObject(sId, OpenMode.ForRead) is not CivSurface surf) continue;
+
+                try
+                {
+                    for (int i = 0; i < surf.Operations.Count; i++)
+                    {
+                        if (surf.Operations[i] is SurfaceOperationPasteSurface pasteOp &&
+                            pasteOp.Enabled &&
+                            !pasteOp.SurfaceId.IsNull &&
+                            pasteOp.SurfaceId.IsValid &&
+                            !pasteOp.SurfaceId.IsErased &&
+                            pasteOp.SurfaceId != sId)
+                        {
+                            if (!childrenToParents.TryGetValue(pasteOp.SurfaceId, out var pList))
+                            {
+                                pList = new List<ObjectId>();
+                                childrenToParents[pasteOp.SurfaceId] = pList;
+                            }
+                            if (!pList.Contains(sId)) pList.Add(sId);
+
+                            if (!parentToChildren.TryGetValue(sId, out var cList))
+                            {
+                                cList = new List<ObjectId>();
+                                parentToChildren[sId] = cList;
+                            }
+                            if (!cList.Contains(pasteOp.SurfaceId)) cList.Add(pasteOp.SurfaceId);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // BFS tìm tất cả các mặt phẳng cha/ông bị ảnh hưởng
+            var affectedParents = new HashSet<ObjectId>();
+            var bfs = new Queue<ObjectId>(seedDirtyIds);
+            if (seedParentIds != null)
+            {
+                foreach (ObjectId spId in seedParentIds)
+                {
+                    if (!spId.IsNull && spId.IsValid && !spId.IsErased && affectedParents.Add(spId))
+                    {
+                        bfs.Enqueue(spId);
+                    }
+                }
+            }
+
+            while (bfs.Count > 0)
+            {
+                ObjectId childId = bfs.Dequeue();
+                if (!childrenToParents.TryGetValue(childId, out var parents)) continue;
+                foreach (ObjectId parentId in parents)
+                {
+                    if (affectedParents.Add(parentId))
+                    {
+                        bfs.Enqueue(parentId);
+                    }
+                }
+            }
+
+            if (affectedParents.Count == 0) return 0;
+
+            // Sắp xếp tô-pô từ cấp con lên cấp cha
+            var inDegree = new Dictionary<ObjectId, int>();
+            foreach (ObjectId pId in affectedParents)
+            {
+                int deg = 0;
+                if (parentToChildren.TryGetValue(pId, out var children))
+                {
+                    foreach (ObjectId cId in children)
+                    {
+                        if (affectedParents.Contains(cId)) deg++;
+                    }
+                }
+                inDegree[pId] = deg;
+            }
+
+            var orderedParents = new List<ObjectId>(affectedParents.Count);
+            var topoQ = new Queue<ObjectId>();
+            foreach (var kvp in inDegree)
+            {
+                if (kvp.Value == 0) topoQ.Enqueue(kvp.Key);
+            }
+
+            while (topoQ.Count > 0)
+            {
+                ObjectId cur = topoQ.Dequeue();
+                orderedParents.Add(cur);
+                if (childrenToParents.TryGetValue(cur, out var nextParents))
+                {
+                    foreach (ObjectId np in nextParents)
+                    {
+                        if (!inDegree.ContainsKey(np)) continue;
+                        inDegree[np]--;
+                        if (inDegree[np] == 0) topoQ.Enqueue(np);
+                    }
+                }
+            }
+
+            if (orderedParents.Count < affectedParents.Count)
+            {
+                foreach (ObjectId pId in affectedParents)
+                {
+                    if (!orderedParents.Contains(pId))
+                        orderedParents.Add(pId);
+                }
+            }
+
+            int rebuiltCount = 0;
+            foreach (ObjectId parentId in orderedParents)
+            {
+                if (tr.GetObject(parentId, OpenMode.ForWrite) is not CivSurface parentSurf)
+                    continue;
+
+                bool wasLocked = false;
+                try
+                {
+                    wasLocked = parentSurf.Lock;
+                    if (wasLocked) parentSurf.Lock = false;
+                }
+                catch { }
+
+                try
+                {
+                    parentSurf.Rebuild();
+
+                    SurfaceOriginationType origType = SurfaceOriginationType.None;
+                    try { origType = parentSurf.OriginationType; } catch { }
+                    if (origType == SurfaceOriginationType.None &&
+                        CTT_Tao_Mat_Phang_Tu_Featureline_Command.HasRestrictiveOuterBoundary(parentSurf) &&
+                        CTT_Tao_Mat_Phang_Tu_Featureline_Command.IsPurePasteCompositeSurface(parentSurf))
+                    {
+                        bool anyChildClipped = false;
+                        if (parentToChildren.TryGetValue(parentId, out var childIds))
+                        {
+                            foreach (ObjectId cId in childIds)
+                            {
+                                if (tr.GetObject(cId, OpenMode.ForRead) is not CivSurface childSurf) continue;
+                                var samples = CTT_Tao_Mat_Phang_Tu_Featureline_Command.GetSampleVisibleCentroids(childSurf, 24);
+                                for (int s = 0; s < samples.Count; s++)
+                                {
+                                    if (!CTT_Tao_Mat_Phang_Tu_Featureline_Command.IsPointVisibleOnSurface(parentSurf, samples[s].X, samples[s].Y))
+                                    {
+                                        anyChildClipped = true;
+                                        break;
+                                    }
+                                }
+                                if (anyChildClipped) break;
+                            }
+                        }
+
+                        if (anyChildClipped)
+                        {
+                            CTT_Tao_Mat_Phang_Tu_Featureline_Command.RemoveRestrictiveOuterBoundaries(parentSurf);
+                            parentSurf.Rebuild();
+                        }
+                    }
+
+                    rebuiltCount++;
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\n⚠️ Không thể rebuild mặt phẳng tổng '{parentSurf.Name}': {ex.Message}");
+                }
+                finally
+                {
+                    if (wasLocked)
+                    {
+                        try { parentSurf.Lock = true; } catch { }
+                    }
+                }
+            }
+
+            return rebuiltCount;
+        }
     }
 }

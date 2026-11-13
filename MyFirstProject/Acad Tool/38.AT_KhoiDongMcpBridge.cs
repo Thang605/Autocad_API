@@ -121,6 +121,8 @@ namespace Civil3DCsharp
                     CancellationToken token = _cts.Token;
                     Task.Run(() => ListenLoopAsync(_listener, token), token);
                 }
+
+                try { MyFirstProject.Civil_Tool_2.FeatureLineDynamicSyncManager.EnsureStarted(); } catch { }
             }
             catch
             {
@@ -820,6 +822,12 @@ namespace Civil3DCsharp
                     case "rebuild":
                     case "rebuild_all":
                         return CheckAndRebuildCivilObjects(doc, root, targetName);
+
+                    case "sync_fl_surfaces":
+                        return ExecuteSyncFlSurfacesRequest(doc, root);
+
+                    case "test_fl_dynamic_sync":
+                        return ExecuteTestFlDynamicSyncRequest(doc, root, targetName);
 
                     case "query_elevation":
                     case "surface_elevation":
@@ -1756,6 +1764,232 @@ namespace Civil3DCsharp
                     design_elevation = r.DesignElevation,
                     cut_fill = r.CutFill
                 }).ToList()
+            };
+        }
+
+        private static object ExecuteSyncFlSurfacesRequest(Document doc, JsonElement root)
+        {
+            Database db = doc.Database;
+            bool forceAll = GetBool(root, "force_all", false);
+
+            bool syncOk = MyFirstProject.Civil_Tool_2.FeatureLineDynamicSyncManager.SyncAllInDocument(
+                db,
+                doc.Editor,
+                forceAll,
+                out int updatedSubCount,
+                out int rebuiltParentCount);
+
+            var surfaceReports = new List<object>();
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                CivilDocument cdoc = CivilDocument.GetCivilDocument(db);
+                foreach (ObjectId sId in cdoc.GetSurfaceIds())
+                {
+                    if (sId.IsNull || sId.IsErased) continue;
+                    if (tr.GetObject(sId, OpenMode.ForRead) is not CivSurface surf) continue;
+
+                    int tris = 0, pts = 0, bklCount = 0, bndCount = 0, pasteCount = 0;
+                    double area2d = 0.0, minZ = 0.0, maxZ = 0.0;
+                    bool hasRecipe = false;
+                    int recipeSourceCount = 0;
+                    var recipeSources = new List<string>();
+
+                    try
+                    {
+                        var gp = surf.GetGeneralProperties();
+                        pts = gp.NumberOfPoints;
+                        minZ = Math.Round(gp.MinimumElevation, 3);
+                        maxZ = Math.Round(gp.MaximumElevation, 3);
+                    }
+                    catch { }
+
+                    if (surf is CivilTinSurface tin)
+                    {
+                        try { tris = tin.GetTriangles(false).Count; } catch { }
+                        try { area2d = Math.Round(tin.GetTerrainProperties().SurfaceArea2D, 3); } catch { }
+                        try { bklCount = tin.BreaklinesDefinition.Count; } catch { }
+                        try { bndCount = tin.BoundariesDefinition.Count; } catch { }
+                        try
+                        {
+                            for (int i = 0; i < tin.Operations.Count; i++)
+                            {
+                                if (tin.Operations[i] is SurfaceOperationPasteSurface) pasteCount++;
+                            }
+                        }
+                        catch { }
+
+                        if (MyFirstProject.Civil_Tool_2.CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryReadSurfaceRecipe(
+                                tin, tr, out var recipe) && recipe != null)
+                        {
+                            hasRecipe = true;
+                            recipeSourceCount = recipe.SourceHandles.Count;
+                            recipeSources.AddRange(recipe.SourceHandles);
+                        }
+                    }
+
+                    surfaceReports.Add(new
+                    {
+                        name = surf.Name,
+                        handle = surf.Handle.ToString(),
+                        triangles = tris,
+                        points = pts,
+                        area_2d_m2 = area2d,
+                        min_elevation = minZ,
+                        max_elevation = maxZ,
+                        breakline_count = bklCount,
+                        boundary_count = bndCount,
+                        paste_count = pasteCount,
+                        has_fl_recipe = hasRecipe,
+                        recipe_source_count = recipeSourceCount,
+                        recipe_sources = recipeSources
+                    });
+                }
+                tr.Commit();
+            }
+
+            return new
+            {
+                status = syncOk ? "success" : "error",
+                action = "sync_fl_surfaces",
+                updated_sub_surfaces = updatedSubCount,
+                rebuilt_parent_surfaces = rebuiltParentCount,
+                surfaces = surfaceReports
+            };
+        }
+
+        private static object ExecuteTestFlDynamicSyncRequest(Document doc, JsonElement root, string targetName)
+        {
+            Database db = doc.Database;
+            string flHandleArg = GetStr(root, "feature_line_handle", "").Trim();
+
+            ObjectId subSurfId = ObjectId.Null;
+            ObjectId parentSurfId = ObjectId.Null;
+            ObjectId sourceCurveId = ObjectId.Null;
+            string subName = "", parentName = "", curveHandle = "";
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                CivilDocument cdoc = CivilDocument.GetCivilDocument(db);
+                foreach (ObjectId sId in cdoc.GetSurfaceIds())
+                {
+                    if (sId.IsNull || sId.IsErased) continue;
+                    if (tr.GetObject(sId, OpenMode.ForRead) is not CivilTinSurface tin) continue;
+                    if (!string.IsNullOrWhiteSpace(targetName) &&
+                        !string.Equals(tin.Name, targetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (MyFirstProject.Civil_Tool_2.CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryReadSurfaceRecipe(
+                            tin, tr, out var recipe) && recipe != null && recipe.SourceHandles.Count > 0)
+                    {
+                        subSurfId = sId;
+                        subName = tin.Name;
+
+                        if (!string.IsNullOrWhiteSpace(flHandleArg))
+                        {
+                            sourceCurveId = MyFirstProject.Civil_Tool_2.CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryResolveEntityIdByHandle(db, flHandleArg);
+                        }
+                        if (sourceCurveId.IsNull)
+                        {
+                            sourceCurveId = MyFirstProject.Civil_Tool_2.CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryResolveEntityIdByHandle(db, recipe.SourceHandles[0]);
+                        }
+                        if (!string.IsNullOrWhiteSpace(recipe.ParentSurfaceHandle))
+                        {
+                            parentSurfId = MyFirstProject.Civil_Tool_2.CTT_Tao_Mat_Phang_Tu_Featureline_Command.TryResolveEntityIdByHandle(db, recipe.ParentSurfaceHandle);
+                        }
+                        break;
+                    }
+                }
+
+                if (!parentSurfId.IsNull && tr.GetObject(parentSurfId, OpenMode.ForRead) is CivilTinSurface pSurf)
+                    parentName = pSurf.Name;
+                if (!sourceCurveId.IsNull)
+                    curveHandle = sourceCurveId.Handle.ToString();
+
+                tr.Commit();
+            }
+
+            if (subSurfId.IsNull || sourceCurveId.IsNull)
+            {
+                return new
+                {
+                    status = "error",
+                    message = $"Không tìm thấy mặt phẳng có Recipe FL hoặc đường nguồn hợp lệ (target_name='{targetName}')."
+                };
+            }
+
+            object CaptureStats(ObjectId sId)
+            {
+                if (sId.IsNull || sId.IsErased) return new { missing = true };
+                using Transaction tr = db.TransactionManager.StartTransaction();
+                if (tr.GetObject(sId, OpenMode.ForRead) is not CivilTinSurface tin) return new { missing = true };
+                int tris = 0;
+                double area2d = 0.0, minZ = 0.0, maxZ = 0.0;
+                try { tris = tin.GetTriangles(false).Count; } catch { }
+                try { area2d = Math.Round(tin.GetTerrainProperties().SurfaceArea2D, 3); } catch { }
+                try
+                {
+                    var gp = tin.GetGeneralProperties();
+                    minZ = Math.Round(gp.MinimumElevation, 3);
+                    maxZ = Math.Round(gp.MaximumElevation, 3);
+                }
+                catch { }
+                tr.Commit();
+                return new { triangles = tris, area_2d_m2 = area2d, min_elevation = minZ, max_elevation = maxZ };
+            }
+
+            var before = new { sub = CaptureStats(subSurfId), parent = CaptureStats(parentSurfId) };
+
+            var shiftVec = new Vector3d(0.40, 0.40, 0.20);
+            using (Transaction tr1 = db.TransactionManager.StartTransaction())
+            {
+                if (tr1.GetObject(sourceCurveId, OpenMode.ForWrite) is Entity ent)
+                {
+                    ent.TransformBy(Matrix3d.Displacement(shiftVec));
+                }
+                tr1.Commit();
+            }
+
+            MyFirstProject.Civil_Tool_2.FeatureLineDynamicSyncManager.SyncAllInDocument(
+                db, doc.Editor, false, out int shiftUpdatedSubs, out int shiftRebuiltParents);
+            var shifted = new
+            {
+                updated_sub_surfaces = shiftUpdatedSubs,
+                rebuilt_parent_surfaces = shiftRebuiltParents,
+                sub = CaptureStats(subSurfId),
+                parent = CaptureStats(parentSurfId)
+            };
+
+            using (Transaction tr2 = db.TransactionManager.StartTransaction())
+            {
+                if (tr2.GetObject(sourceCurveId, OpenMode.ForWrite) is Entity ent)
+                {
+                    ent.TransformBy(Matrix3d.Displacement(-shiftVec));
+                }
+                tr2.Commit();
+            }
+
+            MyFirstProject.Civil_Tool_2.FeatureLineDynamicSyncManager.SyncAllInDocument(
+                db, doc.Editor, false, out int restoreUpdatedSubs, out int restoreRebuiltParents);
+            var restored = new
+            {
+                updated_sub_surfaces = restoreUpdatedSubs,
+                rebuilt_parent_surfaces = restoreRebuiltParents,
+                sub = CaptureStats(subSurfId),
+                parent = CaptureStats(parentSurfId)
+            };
+
+            return new
+            {
+                status = "success",
+                action = "test_fl_dynamic_sync",
+                sub_surface = subName,
+                parent_surface = parentName,
+                feature_line_handle = curveHandle,
+                before,
+                shifted,
+                restored
             };
         }
 
