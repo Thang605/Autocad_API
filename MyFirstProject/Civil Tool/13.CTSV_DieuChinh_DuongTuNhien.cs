@@ -85,10 +85,12 @@ namespace Civil3DCsharp
                     return;
                 }
                 
+                RXClass rxSectionView = RXClass.GetClass(typeof(SectionView));
                 foreach (ObjectId entId in btr)
                 {
                     try
                     {
+                        if (!entId.ObjectClass.IsDerivedFrom(rxSectionView)) continue;
                         if (tr.GetObject(entId, OpenMode.ForWrite) is SectionView sv)
                         {
                             ObjectId svSampleLineId = sv.SampleLineId;

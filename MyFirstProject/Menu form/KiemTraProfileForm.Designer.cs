@@ -448,6 +448,8 @@ namespace MyFirstProject.Menu_form
             this.Name = "KiemTraProfileForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Kiểm Tra Profile Theo Tiêu Chuẩn Thiết Kế Đường";
+            this.AcceptButton = this.btnCheck;
+            this.CancelButton = this.btnClose;
             this.Load += new System.EventHandler(this.KiemTraProfileForm_Load);
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();

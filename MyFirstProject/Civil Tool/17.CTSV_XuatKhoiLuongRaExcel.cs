@@ -183,11 +183,12 @@ namespace Civil3DCsharp
                 BlockTableRecord? btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
                 if (btr == null) return result;
 
+                var alignmentClass = RXClass.GetClass(typeof(Alignment));
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
-                        if (tr.GetObject(entityId, OpenMode.ForRead) is Alignment alignment)
+                        if (entityId.ObjectClass.IsDerivedFrom(alignmentClass) && tr.GetObject(entityId, OpenMode.ForRead) is Alignment alignment)
                         {
                             ObjectIdCollection sampleLineGroupIds = alignment.GetSampleLineGroupIds();
 
@@ -938,21 +939,31 @@ namespace Civil3DCsharp
                 var allAeccTables = new List<Autodesk.AutoCAD.DatabaseServices.Entity>();
                 var allYellowTexts = new List<(string Text, double X, double Y)>();
 
+                var dbTextClass = RXClass.GetClass(typeof(DBText));
+                var mTextClass = RXClass.GetClass(typeof(MText));
+
                 foreach (ObjectId entityId in btr)
                 {
                     try
                     {
+                        string dxfName = entityId.ObjectClass.DxfName;
+                        bool isTable = dxfName.Contains("AECC") && dxfName.Contains("TABLE");
+                        bool isText = entityId.ObjectClass.IsDerivedFrom(dbTextClass);
+                        bool isMText = entityId.ObjectClass.IsDerivedFrom(mTextClass);
+
+                        if (!isTable && !isText && !isMText) continue;
+
                         var dbObj = tr.GetObject(entityId, OpenMode.ForRead);
-                        if (dbObj is Autodesk.AutoCAD.DatabaseServices.Entity ent && ent.GetRXClass().DxfName.Contains("AECC") && ent.GetRXClass().DxfName.Contains("TABLE"))
+                        if (isTable && dbObj is Autodesk.AutoCAD.DatabaseServices.Entity ent)
                         {
                             allAeccTables.Add(ent);
                         }
                         // Thu thập text vàng (ColorIndex = 2)
-                        else if (dbObj is DBText dbText && dbText.ColorIndex == 2)
+                        else if (isText && dbObj is DBText dbText && dbText.ColorIndex == 2)
                         {
                             allYellowTexts.Add((dbText.TextString ?? "", dbText.Position.X, dbText.Position.Y));
                         }
-                        else if (dbObj is MText mText && mText.ColorIndex == 2)
+                        else if (isMText && dbObj is MText mText && mText.ColorIndex == 2)
                         {
                             string cleanText = CleanMTextFormatting(mText.Contents ?? "");
                             allYellowTexts.Add((cleanText, mText.Location.X, mText.Location.Y));

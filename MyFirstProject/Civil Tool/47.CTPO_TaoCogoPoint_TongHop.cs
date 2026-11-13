@@ -801,12 +801,20 @@ namespace Civil3DCsharp
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
+                var dbTextClass = RXClass.GetClass(typeof(DBText));
+                var mTextClass = RXClass.GetClass(typeof(MText));
                 foreach (ObjectId id in btr)
                 {
                     if (id.IsNull || id.IsErased) continue;
+
+                    bool isText = id.ObjectClass.IsDerivedFrom(dbTextClass);
+                    bool isMText = id.ObjectClass.IsDerivedFrom(mTextClass);
+
+                    if (!isText && !isMText) continue;
+
                     AcadDBObject obj = tr.GetObject(id, OpenMode.ForRead);
 
-                    if (obj is DBText dt)
+                    if (isText && obj is DBText dt)
                     {
                         string clean = CleanMTextString(dt.TextString);
                         double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
@@ -826,7 +834,7 @@ namespace Civil3DCsharp
                             NumericValue = num
                         });
                     }
-                    else if (obj is MText mt)
+                    else if (isMText && obj is MText mt)
                     {
                         string clean = CleanMTextString(mt.Contents);
                         double? num = TryParseDouble(clean, out double v) ? v : (double?)null;
@@ -1231,15 +1239,23 @@ namespace Civil3DCsharp
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
+                var dbTextClass = RXClass.GetClass(typeof(DBText));
+                var mTextClass = RXClass.GetClass(typeof(MText));
                 foreach (ObjectId id in btr)
                 {
                     if (id.IsNull || id.IsErased) continue;
+
+                    bool isText = id.ObjectClass.IsDerivedFrom(dbTextClass);
+                    bool isMText = id.ObjectClass.IsDerivedFrom(mTextClass);
+
+                    if (!isText && !isMText) continue;
+
                     AcadDBObject dbo = tr.GetObject(id, OpenMode.ForRead);
-                    if (dbo is DBText dt && dt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                    if (isText && dbo is DBText dt && dt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
                     {
                         list.Add(id);
                     }
-                    else if (dbo is MText mt && mt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
+                    else if (isMText && dbo is MText mt && mt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
                     {
                         list.Add(id);
                     }
@@ -1257,9 +1273,12 @@ namespace Civil3DCsharp
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
+                var circleClass = RXClass.GetClass(typeof(Circle));
                 foreach (ObjectId id in btr)
                 {
                     if (id.IsNull || id.IsErased) continue;
+                    if (!id.ObjectClass.IsDerivedFrom(circleClass)) continue;
+
                     Circle? circle = tr.GetObject(id, OpenMode.ForRead) as Circle;
                     if (circle != null && circle.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
                     {
@@ -1279,9 +1298,12 @@ namespace Civil3DCsharp
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
+                var dbPointClass = RXClass.GetClass(typeof(DBPoint));
                 foreach (ObjectId id in btr)
                 {
                     if (id.IsNull || id.IsErased) continue;
+                    if (!id.ObjectClass.IsDerivedFrom(dbPointClass)) continue;
+
                     DBPoint? pt = tr.GetObject(id, OpenMode.ForRead) as DBPoint;
                     if (pt != null && pt.Layer.Equals(layerName, StringComparison.OrdinalIgnoreCase))
                     {

@@ -400,6 +400,9 @@ namespace Civil3DCsharp
                 lblTitle, tabMain, grpLog, btnExecute, btnClose
             });
 
+            this.AcceptButton = btnExecute;
+            this.CancelButton = btnClose;
+
             this.FormClosing += (s, e) => SaveCurrentSettings();
             this.ResumeLayout(false);
         }

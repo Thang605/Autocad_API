@@ -365,6 +365,7 @@ namespace MyFirstProject.Acad_Tool
             this.Controls.Add(btnCancel);
 
             this.CancelButton = btnCancel;
+            this.AcceptButton = btnExecute;
             this.FormClosing += Clip3dSolidForm_FormClosing;
 
             UpdateLayerUiState();
