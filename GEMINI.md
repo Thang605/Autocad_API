@@ -37,11 +37,40 @@
 
 ---
 
-## 4. 🎯 QUY TẮC TINH GỌN FILE KHI TẠO LỆNH MỚI
-- Khi tạo lệnh mới, **CHỈ tập trung vào các file cốt lõi**:
-  1. **File Form UI**: `TenLenhForm.cs` (giao diện, controls, persistent state).
-  2. **File Lệnh Logic**: `TenLenh.cs` (command methods, xử lý CAD/Civil 3D transaction).
-  3. *(Tùy chọn)*: Thêm 1 dòng vào `ClassicMenu.cs` nếu cần mục trên thanh Menu.
+## 4. 🗂️ KIẾN TRÚC 1 LỆNH = 1 THƯ MỤC NHIỀU FILE NHỎ (BẮT BUỘC CHO LỆNH MỚI)
+> Mục tiêu: mỗi file đủ nhỏ để AI agent đọc/sửa trọn vẹn trong 1 lần, sửa 1 chỗ không phải tải lại 3000–4000 dòng.
+
+- **Tạo khung lệnh bằng script, KHÔNG viết tay từ đầu**:
+  `powershell -ExecutionPolicy Bypass -NoProfile -File "c:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API\NewCommand.ps1" -Name CTT_Ten_Lenh -Title "Tên hiển thị" -Description "Mô tả" -Register`
+  - `-Name` phải đúng chuẩn mục 7 (script tự kiểm tra regex và trùng tên lệnh).
+  - `-Register` tự thêm 1 dòng vào `Menu form\ClassicMenu.cs` và `Menu form\ToolPaletteDataReader.cs` (nhóm mặc định theo tiền tố, đổi bằng `-Group C1..C10 / A1..A9`).
+  - `-BaseName` (tùy chọn) = tên thư mục/class, mặc định bỏ tiền tố và dấu `_` (`CTT_Tao_Mat_Phang` → `TaoMatPhang`).
+- **Cấu trúc thư mục chuẩn** `MyFirstProject\Commands\<Prefix>\<BaseName>\` (namespace `MyFirstProject.Commands.<Prefix>.<BaseName>`):
+
+  | File | Trách nhiệm | Giới hạn |
+  |---|---|---|
+  | `<Name>.Command.cs` | Chỉ `[CommandMethod]`: mở Form bằng `ShowModalDialog`, gọi Service, bọc `CommandGuard.Run` | ≤ 80 dòng |
+  | `<Base>Options.cs` | POCO thông số người dùng (không tham chiếu WinForms) | ≤ 150 dòng |
+  | `<Base>Service.cs` (+ `<Base>Service.<Phan>.cs` partial) | Transaction, đọc/ghi CAD/Civil 3D, `OpenMode.ForWrite` khi sửa | ≤ 400 dòng/file |
+  | `<Base>Core.cs` / `Core\*.cs` (khi cần) | Thuật toán thuần (hình học, tính toán) – không mở Transaction, dễ test | ≤ 400 dòng/file |
+  | `<Base>Form.cs` | Khởi tạo, sự kiện, Pick trên canvas (`StartUserInteraction`) | ≤ 400 dòng |
+  | `<Base>Form.Layout.cs` (+ `Form.Layout.<Nhom>.cs`) | Dựng giao diện, mỗi GroupBox 1 hàm `Build…Group()` | ≤ 300 dòng/file |
+  | `<Base>Form.Settings.cs` | Persistent state: biến `static _last…`, `SaveCurrentSettings()`, `RestoreLastSettings()` | ≤ 200 dòng |
+
+- **Giới hạn kích thước (bắt buộc)**:
+  - File: mục tiêu **≤ 400 dòng**, tối đa **800 dòng** → vượt thì tách thêm `partial class` theo chủ đề (`Service.Trim.cs`, `Form.Layout.Options.cs`...).
+  - Phương thức: mục tiêu **≤ 60 dòng**, tối đa **120 dòng** → tách hàm con có tên rõ nghĩa.
+  - Class lồng nhau (`private sealed class` hình học, lưới không gian...) dài > 100 dòng phải đưa ra file riêng.
+- **Bắt buộc dùng thư viện chung `MyFirstProject\Shared\` trước khi viết helper mới** (không copy-paste helper giữa các lệnh):
+  - `Shared\UI\FormBuilder.cs`: `ApplyStandardStyle`, `BuildBody`, `ActionButton` (cao 40px, `UseMnemonic=false`), `ButtonBar`, `Label/CheckBox/Radio/Number`, `CreateToolTip`, `StandardFonts` (Segoe UI dùng chung, không tạo/dispose Font riêng).
+  - `Shared\UI\FieldGroup.cs`: GroupBox + lưới 3 cột (nhãn | ô nhập | nút Pick) – `AddRow`, `AddFullRow`.
+  - `Shared\UI\DrawingComboBoxes.cs`: nạp Layer/TextStyle/DimStyle/Linetype/Block/Surface/Alignment vào `ComboBox` (`Fill`, `SelectByName`, `GetSelectedName`, `GetSelectedId`).
+  - `Shared\UI\PersistentState.cs`: `IsAlive(id[, db])`, `FilterAlive`, `RestoreFormSize`, `CaptureFormSize`, `SetValueSafe`.
+  - `Shared\Civil\SurfaceHelpers.cs`: `FindSurfaceByName`, `GetSurfaceNames`, `EnsureUniqueSurfaceName`, `FindSurfaceStyleId`, `FindAlignmentByName` (mở `ForRead`).
+  - `Shared\Cad\ZoomHelper.cs`: `ZoomToExtents`, `ZoomToEntities`. `Shared\Cad\CommandGuard.cs`: `Run(...)` bắt lỗi + `LockDocument` tùy chọn.
+  - Helper mới dùng được cho ≥ 2 lệnh → thêm vào `Shared\` (đúng thư mục `UI` / `Cad` / `Civil`), không để trong thư mục lệnh.
+- **Quy trình làm lệnh mới**: (1) chốt spec thông số → (2) chạy `NewCommand.ps1` → (3) viết `Options` → (4) `Core`/`Service` → (5) `Form.Layout` + `Form` → (6) build `BuildProject.ps1` 0 lỗi → (7) commit.
+- **Lệnh cũ** (các thư mục `Acad Tool`, `Civil Tool`, `Civil Tool 2`...): giữ nguyên, chỉ tách theo kiến trúc mới khi cần sửa lớn; khi tách **không đổi logic**, không đổi tên lệnh/menu.
 - **KHÔNG** tạo hay chỉnh sửa các file phụ trợ thừa thãi (như chatbot, doc trợ giúp gõ tay...).
 
 ---

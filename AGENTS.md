@@ -66,7 +66,29 @@
   - `CTS_`: Civil 3D Section / SampleLine Tools (e.g., `CTS_Doi_Ten_Coc_Quy_Tac`)
   - `CTT_`: Civil 3D TIN Surface Tools
 
-### 5. Focus Areas for Automated Code Checks (Jules Agents)
+### 5. Command Folder Architecture (1 Command = 1 Folder of Small Files)
+- **Goal**: every file must be small enough for an AI agent to read and edit in one pass.
+- **Scaffold new commands with `NewCommand.ps1`** (repo root), never hand-write from scratch:
+  `powershell -ExecutionPolicy Bypass -NoProfile -File .\NewCommand.ps1 -Name CTT_Ten_Lenh -Title "Display title" -Description "Tooltip" -Register`
+  - Validates the name (rule 4) and duplicate `[CommandMethod]` names; `-Register` adds one line to `Menu form/ClassicMenu.cs` and `Menu form/ToolPaletteDataReader.cs` (group defaults by prefix, override with `-Group C1..C10 / A1..A9`).
+- **Folder layout** `MyFirstProject/Commands/<Prefix>/<BaseName>/`, namespace `MyFirstProject.Commands.<Prefix>.<BaseName>`:
+  | File | Responsibility | Limit |
+  |---|---|---|
+  | `<Name>.Command.cs` | Only `[CommandMethod]`: show Form via `ShowModalDialog`, call Service, wrap with `CommandGuard.Run` | ≤ 80 lines |
+  | `<Base>Options.cs` | Plain parameter object (no WinForms references) | ≤ 150 lines |
+  | `<Base>Service.cs` (+ `<Base>Service.<Topic>.cs` partials) | Transactions, CAD/Civil 3D reads/writes (`OpenMode.ForWrite` when modifying) | ≤ 400 lines/file |
+  | `<Base>Core.cs` / `Core/*.cs` (optional) | Pure algorithms (geometry, math), no Transactions | ≤ 400 lines/file |
+  | `<Base>Form.cs` | Constructor, events, canvas picking (`StartUserInteraction`) | ≤ 400 lines |
+  | `<Base>Form.Layout.cs` (+ `Form.Layout.<Group>.cs`) | UI construction, one `Build…Group()` method per `GroupBox` | ≤ 300 lines/file |
+  | `<Base>Form.Settings.cs` | Persistent state: `static _last…` fields, `SaveCurrentSettings()`, `RestoreLastSettings()` | ≤ 200 lines |
+- **Size limits**: files target ≤ 400 lines, hard max 800 (split further with `partial class` by topic); methods target ≤ 60 lines, hard max 120; nested helper classes > 100 lines go to their own file.
+- **Use the shared library `MyFirstProject/Shared/` before writing any new helper** (no copy-pasting helpers between commands):
+  - `Shared/UI/FormBuilder.cs` (`ApplyStandardStyle`, `BuildBody`, `ActionButton` 40px + `UseMnemonic=false`, `ButtonBar`, `Label/CheckBox/Radio/Number`, `CreateToolTip`, shared `StandardFonts` — never dispose these), `Shared/UI/FieldGroup.cs` (GroupBox + 3-column label|field|pick grid), `Shared/UI/DrawingComboBoxes.cs` (Layer/TextStyle/DimStyle/Linetype/Block/Surface/Alignment dropdowns), `Shared/UI/PersistentState.cs` (`IsAlive`, `FilterAlive`, `RestoreFormSize`, `CaptureFormSize`, `SetValueSafe`).
+  - `Shared/Civil/SurfaceHelpers.cs` (`FindSurfaceByName`, `GetSurfaceNames`, `EnsureUniqueSurfaceName`, `FindSurfaceStyleId`, `FindAlignmentByName`, all `ForRead`), `Shared/Cad/ZoomHelper.cs`, `Shared/Cad/CommandGuard.cs`.
+  - A helper useful to ≥ 2 commands belongs in `Shared/` (`UI` / `Cad` / `Civil`), not inside a command folder.
+- **Legacy commands** (`Acad Tool`, `Civil Tool`, `Civil Tool 2`, ...) stay where they are; split them into the new layout only when doing substantial work, with **zero logic changes** and unchanged command names / menu entries.
+
+### 6. Focus Areas for Automated Code Checks (Jules Agents)
 - **🛡️ Sentinel (Defensive Coding & Reliability)**:
   - Check for unhandled exceptions in `[CommandMethod]` entry points (`try-catch` logging to `ed.WriteMessage`), null dereferences on `tr.GetObject(...)`, invalid/erased `ObjectId` access, `eLockViolation` (missing `doc.LockDocument()` in modeless contexts), and unclosed streams/files when reading/writing Excel/CSV/JSON.
 - **⚡ Bolt (Performance Optimization)**:
@@ -74,4 +96,6 @@
   - Avoid opening the same `ObjectId` repeatedly inside nested loops; cache retrieved data or pre-filter with `SelectionFilter`.
   - Optimize geometry/solid boolean operations and batch `Table` updates (`SuppressRegenerateTable(true)`).
 - **🎨 Palette (WinForms UX & Accessibility)**:
-  - Improve WinForms usability: keyboard shortcuts (`AcceptButton`, `CancelButton`), input validation feedback, clear Vietnamese labels/tooltips, `UseWaitCursor` / progress indication during heavy CAD operations, and proper `Dispose()` of GDI+ resources (`Font`, `Color`, `Pen`).
+  - Improve WinForms usability: keyboard shortcuts (`AcceptButton`, `CancelButton`), input validation feedback, clear Vietnamese labels/tooltips, `UseWaitCursor` / progress indication during heavy CAD operations, and proper `Dispose()` of GDI+ resources (`Font`, `Color`, `Pen`) — except the shared `StandardFonts`, which live for the whole session.
+- **📐 Structure (all agents)**:
+  - In new code, flag files > 800 lines, methods > 120 lines, and helpers duplicated instead of using `MyFirstProject/Shared/`. Do not mix structural moves with logic changes in the same PR.
