@@ -1,83 +1,81 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
-using Autodesk.Civil.ApplicationServices;
-using Autodesk.Civil.DatabaseServices;
-using Autodesk.Civil.DatabaseServices.Styles;
 
 using MyFirstProject.Shared.UI;
-
-using CivSurface = Autodesk.Civil.DatabaseServices.Surface;
 
 namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 {
     /// <summary>
-    /// Form lệnh CTC_Tao_Corridor_Theo_Cau_Kien - phần SỰ KIỆN và LOGIC UI.
+    /// Form lệnh CTC_Tao_Corridor_Theo_Cau_Kien — Quét FeatureLine theo Site &amp; Cập nhật 1 Corridor tổng.
     /// </summary>
     public partial class TaoCorridorTheoCauKienForm : Form
     {
+        private const string SurfaceOptionUseDefault = "(Theo mặc định)";
+        private const string SurfaceOptionNone = "(Không gán)";
+        private const string StatusNewText = "✨ Mới thêm";
+        private const string StatusExistingText = "✓ Đã có (Giữ LT)";
+
         private readonly Database _db;
         private readonly Editor _ed;
-        private bool _updatingRadioMode = false;
-        private readonly List<ObjectId> _sourceCorridorsToMerge = new List<ObjectId>();
+        private bool _suppressGridEvents = false;
+        private bool _suppressSelectorEvents = false;
+        private int _orphanDeletedBaselinesCount = 0;
 
-        // Danh mục dữ liệu từ bản vẽ
         private readonly List<(string Name, ObjectId Id)> _corridorList = new List<(string, ObjectId)>();
+        private readonly Dictionary<ObjectId, SiteCorridorRecipe> _corridorRecipes = new Dictionary<ObjectId, SiteCorridorRecipe>();
+        private readonly HashSet<ObjectId> _clonedFlTargetIds = new HashSet<ObjectId>();
         private readonly List<(string Name, ObjectId Id)> _assemblyList = new List<(string, ObjectId)>();
         private readonly List<(string Name, ObjectId Id)> _surfaceList = new List<(string, ObjectId)>();
         private readonly List<(string Name, ObjectId Id)> _codeSetStyleList = new List<(string, ObjectId)>();
-        private readonly List<(string Name, ObjectId Id)> _alignmentList = new List<(string, ObjectId)>();
-
-        public static readonly string[] ComponentCategories = new[]
-        {
-            "Lòng đường chính",
-            "Dải phân cách giữa",
-            "Vỉa hè & Bó vỉa Trái",
-            "Vỉa hè & Bó vỉa Phải",
-            "Rãnh biên / Tường chắn",
-            "Nhánh nút giao rẽ phải",
-            "Taluy Đào / Đắp",
-            "Cấu kiện tùy chỉnh"
-        };
-
-        public static readonly string[] SourceTypeNames = new[]
-        {
-            "Alignment + Profile",
-            "Feature Line"
-        };
+        private readonly List<SiteCatalogItem> _siteList = new List<SiteCatalogItem>();
+        private readonly List<ObjectId> _sourceCorridorsToMerge = new List<ObjectId>();
 
         public bool FormAccepted { get; private set; } = false;
         public TaoCorridorTheoCauKienOptions Options { get; private set; } = new TaoCorridorTheoCauKienOptions();
 
-        // UI Controls
-        private RadioButton radSeparateCorridor = null!;
-        private RadioButton radSingleOrExistingCorridor = null!;
+        // Controls (khởi tạo trong *.Layout*.cs)
+        private ToolTip _toolTip = null!;
+        private System.Windows.Forms.ComboBox cmbSite = null!;
+        private System.Windows.Forms.Button btnPickSiteFromFl = null!;
+        private System.Windows.Forms.Button btnRescanSite = null!;
+        private CheckBox chkRemoveDeletedBaselines = null!;
+
         private System.Windows.Forms.ComboBox cmbExistingCorridor = null!;
+        private System.Windows.Forms.TextBox txtCorridorName = null!;
         private System.Windows.Forms.Button btnPickExistingCorridor = null!;
         private System.Windows.Forms.Button btnMergeExistingCorridors = null!;
         private CheckBox chkDeleteMergedSourceCorridors = null!;
-        private System.Windows.Forms.TextBox txtCorridorPrefix = null!;
-        private System.Windows.Forms.ComboBox cmbCodeSetStyle = null!;
+
+        private System.Windows.Forms.ComboBox cmbDefaultAssembly = null!;
         private System.Windows.Forms.ComboBox cmbDefaultSurface = null!;
+        private System.Windows.Forms.ComboBox cmbCodeSetStyle = null!;
         private NumericUpDown numFreqTangent = null!;
         private NumericUpDown numFreqCurve = null!;
-        private CheckBox chkAutoRebuild = null!;
+
+        private FlowLayoutPanel pnlBatchToolbar = null!;
+        private System.Windows.Forms.ComboBox cmbFilterStyleLayer = null!;
+        private System.Windows.Forms.Button btnSelectByGroup = null!;
+        private System.Windows.Forms.ComboBox cmbBatchAssembly = null!;
+        private System.Windows.Forms.Button btnApplyBatchAssembly = null!;
+        private System.Windows.Forms.Button btnPickAssemblyForRow = null!;
+        private System.Windows.Forms.ComboBox cmbBatchSurface = null!;
+        private System.Windows.Forms.Button btnApplyBatchSurface = null!;
+        private System.Windows.Forms.Button btnZoomToRow = null!;
 
         private DataGridView dgvComponents = null!;
         private System.Windows.Forms.Label lblEmptyListNotice = null!;
-        private TableLayoutPanel pnlSubActions = null!;
-        private System.Windows.Forms.Button btnAddAlignmentComponent = null!;
-        private System.Windows.Forms.Button btnAddFeatureLineComponent = null!;
-        private System.Windows.Forms.Button btnRestoreSavedRows = null!;
-        private System.Windows.Forms.Button btnPickBaselineForRow = null!;
-        private System.Windows.Forms.Button btnPickAssemblyForRow = null!;
         private System.Windows.Forms.Button btnPickOffsetTargetsForRow = null!;
+        private System.Windows.Forms.Button btnClearOffsetTargetsForRow = null!;
+        private System.Windows.Forms.Button btnAddFeatureLineComponent = null!;
+        private System.Windows.Forms.Button btnAddAlignmentComponent = null!;
         private System.Windows.Forms.Button btnRemoveSelectedRow = null!;
-        private System.Windows.Forms.Button btnClearAllRows = null!;
+        private CheckBox chkAutoRebuild = null!;
 
         private System.Windows.Forms.Label lblSummary = null!;
         private System.Windows.Forms.Button btnExecute = null!;
@@ -94,99 +92,16 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             UpdateSummaryLabel();
         }
 
-        private void LoadDrawingCatalogs()
-        {
-            _corridorList.Clear();
-            _assemblyList.Clear();
-            _surfaceList.Clear();
-            _codeSetStyleList.Clear();
-            _alignmentList.Clear();
-
-            using (Transaction tr = _db.TransactionManager.StartTransaction())
-            {
-                CivilDocument cdoc = CivilDocument.GetCivilDocument(_db);
-
-                foreach (ObjectId id in cdoc.CorridorCollection)
-                {
-                    if (tr.GetObject(id, OpenMode.ForRead) is Corridor corr)
-                        _corridorList.Add((corr.Name, id));
-                }
-
-                foreach (ObjectId id in cdoc.AssemblyCollection)
-                {
-                    if (tr.GetObject(id, OpenMode.ForRead) is Assembly asm)
-                        _assemblyList.Add((asm.Name, id));
-                }
-
-                foreach (ObjectId id in cdoc.GetSurfaceIds())
-                {
-                    if (tr.GetObject(id, OpenMode.ForRead) is CivSurface surf)
-                        _surfaceList.Add((surf.Name, id));
-                }
-
-                foreach (ObjectId id in cdoc.Styles.CodeSetStyles)
-                {
-                    if (tr.GetObject(id, OpenMode.ForRead) is CodeSetStyle css)
-                        _codeSetStyleList.Add((css.Name, id));
-                }
-
-                foreach (ObjectId id in cdoc.GetAlignmentIds())
-                {
-                    if (tr.GetObject(id, OpenMode.ForRead) is Alignment al)
-                        _alignmentList.Add((al.Name, id));
-                }
-
-                tr.Commit();
-            }
-        }
-
-        private void SetBuildModeUI(CorridorComponentBuildMode mode)
-        {
-            if (_updatingRadioMode) return;
-            _updatingRadioMode = true;
-            try
-            {
-                bool singleMode = mode == CorridorComponentBuildMode.SingleOrExistingCorridor;
-                radSingleOrExistingCorridor.Checked = singleMode;
-                radSeparateCorridor.Checked = !singleMode;
-                radSingleOrExistingCorridor.Font = singleMode ? StandardFonts.Bold : StandardFonts.Regular;
-                radSeparateCorridor.Font = !singleMode ? StandardFonts.Bold : StandardFonts.Regular;
-
-                cmbExistingCorridor.Enabled = singleMode;
-                btnPickExistingCorridor.Enabled = singleMode;
-                btnMergeExistingCorridors.Enabled = singleMode;
-                chkDeleteMergedSourceCorridors.Enabled = singleMode;
-            }
-            finally
-            {
-                _updatingRadioMode = false;
-            }
-            UpdateSummaryLabel();
-        }
-
-        /// <summary>
-        /// Chỉ hiển thị bảng danh sách cấu kiện khi đã chọn ít nhất 1 Alignment hoặc FeatureLine.
-        /// </summary>
         private void UpdateComponentListVisibility()
         {
-            bool hasComponents = dgvComponents.Rows.Count > 0;
-            dgvComponents.Visible = hasComponents;
-            lblEmptyListNotice.Visible = !hasComponents;
+            bool hasRows = dgvComponents.Rows.Count > 0;
+            dgvComponents.Visible = hasRows;
+            lblEmptyListNotice.Visible = !hasRows;
 
-            btnPickBaselineForRow.Visible = hasComponents;
-            btnPickAssemblyForRow.Visible = hasComponents;
-            btnRemoveSelectedRow.Visible = hasComponents;
-            btnClearAllRows.Visible = hasComponents;
-            btnPickOffsetTargetsForRow.Visible = hasComponents;
-
-            int validSavedCount = _savedRows.Count(r =>
-                r.BaselineEntityIds != null &&
-                r.BaselineEntityIds.Any(id => PersistentState.IsAlive(id, _db)));
-            btnRestoreSavedRows.Visible = !hasComponents && validSavedCount > 0;
-            if (btnRestoreSavedRows.Visible)
-            {
-                btnRestoreSavedRows.Text = $"Nạp lại ĐT lần trước ({validSavedCount})";
-            }
+            pnlBatchToolbar.Visible = hasRows;
+            btnPickOffsetTargetsForRow.Visible = hasRows;
+            btnClearOffsetTargetsForRow.Visible = hasRows;
+            btnRemoveSelectedRow.Visible = hasRows;
         }
 
         private void AddRowToGrid(CorridorComponentRowItem item)
@@ -197,36 +112,98 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             string asmName = item.AssemblyName;
             if (string.IsNullOrEmpty(asmName) || !_assemblyList.Any(a => a.Name.Equals(asmName, StringComparison.OrdinalIgnoreCase)))
             {
-                asmName = _assemblyList.Count > 0 ? _assemblyList[0].Name : "";
+                if (cmbDefaultAssembly.SelectedIndex >= 0 && cmbDefaultAssembly.SelectedIndex < _assemblyList.Count)
+                {
+                    asmName = _assemblyList[cmbDefaultAssembly.SelectedIndex].Name;
+                    item.AssemblyId = _assemblyList[cmbDefaultAssembly.SelectedIndex].Id;
+                }
+                else if (_assemblyList.Count > 0)
+                {
+                    asmName = _assemblyList[0].Name;
+                    item.AssemblyId = _assemblyList[0].Id;
+                }
                 item.AssemblyName = asmName;
-                if (_assemblyList.Count > 0) item.AssemblyId = _assemblyList[0].Id;
             }
             else
             {
                 item.AssemblyId = _assemblyList.First(a => a.Name.Equals(asmName, StringComparison.OrdinalIgnoreCase)).Id;
             }
 
-            string category = ComponentCategories.Contains(item.ComponentCategory)
-                ? item.ComponentCategory
-                : ComponentCategories[0];
+            string surfName = SurfaceOptionUseDefault;
+            if (item.DisableSurfaceTarget)
+                surfName = SurfaceOptionNone;
+            else if (!item.UseDefaultSurface && !item.TargetSurfaceId.IsNull)
+            {
+                var foundSurf = _surfaceList.FirstOrDefault(s => s.Id == item.TargetSurfaceId);
+                if (!foundSurf.Id.IsNull) surfName = foundSurf.Name;
+            }
+            item.TargetSurfaceName = surfName;
 
-            string srcTypeStr = item.SourceType == ComponentBaselineSourceType.FeatureLine
-                ? SourceTypeNames[1]
-                : SourceTypeNames[0];
+            string statusText = item.HasExistingCorridorRegion ? StatusExistingText : StatusNewText;
+            string styleLayerText = !string.IsNullOrEmpty(item.FeatureLineStyleName)
+                ? $"{item.FeatureLineStyleName} | {item.FeatureLineLayer}"
+                : (!string.IsNullOrEmpty(item.FeatureLineLayer) ? item.FeatureLineLayer : (item.SourceType == ComponentBaselineSourceType.FeatureLine ? "FeatureLine" : "Alignment"));
 
             int rowIdx = dgvComponents.Rows.Add(
                 item.IsEnabled,
-                category,
-                item.ComponentName,
-                srcTypeStr,
+                statusText,
                 item.BaselineDisplayText,
+                styleLayerText,
                 asmName,
+                surfName,
+                item.OffsetTargetsDisplay,
                 item.StartStation.ToString("F2"),
                 item.EndStation.ToString("F2"),
-                item.FrequencyTangent.ToString("F1"),
-                item.OffsetTargetsDisplay
-            );
-            dgvComponents.Rows[rowIdx].Tag = item;
+                item.FrequencyTangent.ToString("F1"));
+
+            DataGridViewRow gridRow = dgvComponents.Rows[rowIdx];
+            gridRow.Tag = item;
+
+            if (item.HasExistingCorridorRegion)
+            {
+                gridRow.Cells["colStatus"].Style.BackColor = Color.FromArgb(230, 247, 236);
+                gridRow.Cells["colStatus"].Style.ForeColor = Color.FromArgb(16, 124, 65);
+                LockExistingRegionStationCells(gridRow, item);
+            }
+            else
+            {
+                gridRow.Cells["colStatus"].Style.BackColor = Color.FromArgb(255, 248, 225);
+                gridRow.Cells["colStatus"].Style.ForeColor = Color.FromArgb(145, 85, 0);
+            }
+        }
+
+        private static void LockExistingRegionStationCells(DataGridViewRow gridRow, CorridorComponentRowItem item)
+        {
+            Color lockBg = Color.FromArgb(242, 244, 247);
+            Color lockFg = Color.FromArgb(90, 95, 105);
+            string tip = string.IsNullOrEmpty(item.ExistingStationSummary)
+                ? "Region đã có sẵn trên Corridor — Lý trình được giữ nguyên tuyệt đối khi cập nhật."
+                : item.ExistingStationSummary;
+
+            foreach (string colName in new[] { "colStartSta", "colEndSta" })
+            {
+                DataGridViewCell cell = gridRow.Cells[colName];
+                cell.ReadOnly = true;
+                cell.Style.BackColor = lockBg;
+                cell.Style.ForeColor = lockFg;
+                cell.ToolTipText = tip;
+            }
+            gridRow.Cells["colStatus"].ToolTipText = tip;
+        }
+
+        private void DgvComponents_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (_suppressGridEvents || e.RowIndex < 0) return;
+
+            SyncGridRowToModel(e.RowIndex);
+            if (dgvComponents.Rows[e.RowIndex].Tag is CorridorComponentRowItem item && item.HasExistingCorridorRegion)
+            {
+                string col = dgvComponents.Columns[e.ColumnIndex].Name;
+                if (col == "colAssembly") item.AssemblyModifiedByUser = true;
+                else if (col == "colTargetSurface") item.SurfaceTargetModifiedByUser = true;
+                else if (col == "colFreq") item.FrequencyModifiedByUser = true;
+            }
+            UpdateSummaryLabel();
         }
 
         private void SyncGridRowToModel(int rowIndex)
@@ -236,116 +213,142 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             if (row.Tag is not CorridorComponentRowItem item) return;
 
             item.IsEnabled = Convert.ToBoolean(row.Cells["colEnable"].Value ?? true);
-            item.ComponentCategory = Convert.ToString(row.Cells["colCategory"].Value) ?? ComponentCategories[0];
-            item.ComponentName = (Convert.ToString(row.Cells["colName"].Value) ?? "CauKien").Trim();
-
-            string srcStr = Convert.ToString(row.Cells["colSourceType"].Value) ?? SourceTypeNames[0];
-            item.SourceType = srcStr == SourceTypeNames[1]
-                ? ComponentBaselineSourceType.FeatureLine
-                : ComponentBaselineSourceType.AlignmentAndProfile;
 
             string asmName = Convert.ToString(row.Cells["colAssembly"].Value) ?? "";
             item.AssemblyName = asmName;
             var foundAsm = _assemblyList.FirstOrDefault(a => a.Name.Equals(asmName, StringComparison.OrdinalIgnoreCase));
             if (!foundAsm.Id.IsNull) item.AssemblyId = foundAsm.Id;
 
-            if (double.TryParse(Convert.ToString(row.Cells["colStartSta"].Value), out double sSta))
-                item.StartStation = Math.Max(0.0, sSta);
-            if (double.TryParse(Convert.ToString(row.Cells["colEndSta"].Value), out double eSta))
-                item.EndStation = Math.Max(0.0, eSta);
+            string surfName = Convert.ToString(row.Cells["colTargetSurface"].Value) ?? SurfaceOptionUseDefault;
+            item.TargetSurfaceName = surfName;
+            if (surfName == SurfaceOptionUseDefault)
+            {
+                item.UseDefaultSurface = true;
+                item.DisableSurfaceTarget = false;
+                item.TargetSurfaceId = ObjectId.Null;
+            }
+            else if (surfName == SurfaceOptionNone)
+            {
+                item.UseDefaultSurface = false;
+                item.DisableSurfaceTarget = true;
+                item.TargetSurfaceId = ObjectId.Null;
+            }
+            else
+            {
+                item.UseDefaultSurface = false;
+                item.DisableSurfaceTarget = false;
+                var foundSurf = _surfaceList.FirstOrDefault(s => s.Name.Equals(surfName, StringComparison.OrdinalIgnoreCase));
+                item.TargetSurfaceId = foundSurf.Id;
+            }
+
+            if (!item.HasExistingCorridorRegion)
+            {
+                if (double.TryParse(Convert.ToString(row.Cells["colStartSta"].Value), out double sSta))
+                    item.StartStation = Math.Max(0.0, sSta);
+                if (double.TryParse(Convert.ToString(row.Cells["colEndSta"].Value), out double eSta))
+                    item.EndStation = Math.Max(0.0, eSta);
+            }
+
             if (double.TryParse(Convert.ToString(row.Cells["colFreq"].Value), out double freq) && freq >= 0.5)
                 item.FrequencyTangent = freq;
         }
 
-        private void UpdateSummaryLabel()
-        {
-            int total = dgvComponents.Rows.Count;
-            int enabledCount = 0;
-            int totalBaselines = 0;
-
-            for (int i = 0; i < total; i++)
-            {
-                if (dgvComponents.Rows[i].Tag is CorridorComponentRowItem item)
-                {
-                    bool en = Convert.ToBoolean(dgvComponents.Rows[i].Cells["colEnable"].Value ?? true);
-                    if (en)
-                    {
-                        enabledCount++;
-                        totalBaselines += item.BaselineEntityIds.Count;
-                    }
-                }
-            }
-
-            bool isSingleMode = radSingleOrExistingCorridor.Checked;
-            string prefix = string.IsNullOrWhiteSpace(txtCorridorPrefix?.Text) ? "COR_" : txtCorridorPrefix.Text.Trim();
-            string newMergedName = prefix.EndsWith("_") ? $"{prefix}Gop_CauKien" : prefix;
-
-            string modeText = !isSingleMode
-                ? $"Tách riêng {enabledCount} Corridor theo từng cấu kiện"
-                : (cmbExistingCorridor.SelectedIndex > 0
-                    ? $"Gộp tất cả vào Corridor '{cmbExistingCorridor.SelectedItem}'"
-                    : $"Gộp tất cả vào 1 Corridor '{newMergedName}'");
-
-            lblSummary.Text = total == 0
-                ? $"Chưa chọn Alignment / FeatureLine — Chế độ: {modeText}"
-                : $"Tổng hợp: {enabledCount}/{total} cấu kiện ({totalBaselines} đường dẫn Baseline) — Chế độ: {modeText}";
-        }
-
         private void BtnRemoveSelectedRow_Click(object? sender, EventArgs e)
         {
-            if (dgvComponents.CurrentRow == null || dgvComponents.CurrentRow.Index < 0) return;
-            dgvComponents.Rows.RemoveAt(dgvComponents.CurrentRow.Index);
+            var targets = GetTargetRowIndices();
+            if (targets.Count == 0) return;
+
+            _suppressGridEvents = true;
+            try
+            {
+                foreach (int rIdx in targets.OrderByDescending(x => x))
+                    dgvComponents.Rows.RemoveAt(rIdx);
+            }
+            finally { _suppressGridEvents = false; }
+
             UpdateComponentListVisibility();
             UpdateSummaryLabel();
         }
 
-        private void BtnClearAllRows_Click(object? sender, EventArgs e)
+        private void UpdateSummaryLabel()
         {
-            dgvComponents.Rows.Clear();
-            _sourceCorridorsToMerge.Clear();
-            UpdateComponentListVisibility();
-            UpdateSummaryLabel();
+            int newEnabled = 0, existingEnabled = 0, disabledCount = 0;
+            for (int i = 0; i < dgvComponents.Rows.Count; i++)
+            {
+                if (dgvComponents.Rows[i].Tag is not CorridorComponentRowItem item) continue;
+                bool enabled = Convert.ToBoolean(dgvComponents.Rows[i].Cells["colEnable"].Value ?? true);
+                if (!enabled) disabledCount++;
+                else if (item.HasExistingCorridorRegion) existingEnabled++;
+                else newEnabled++;
+            }
+
+            bool isUpdateMode = cmbExistingCorridor.SelectedIndex > 0;
+            btnExecute.Text = isUpdateMode ? "🔄 Cập Nhật Corridor Tổng" : "🏗 Tạo Corridor Tổng";
+            btnExecute.BackColor = isUpdateMode ? Color.FromArgb(16, 124, 65) : Color.FromArgb(0, 120, 215);
+
+            string targetName = isUpdateMode ? Convert.ToString(cmbExistingCorridor.SelectedItem) ?? "" : txtCorridorName.Text.Trim();
+            if (dgvComponents.Rows.Count == 0 && _orphanDeletedBaselinesCount == 0)
+            {
+                lblSummary.Text = $"Chưa có danh sách FL — Đích: 1 Corridor tổng '{targetName}'";
+                return;
+            }
+
+            int removeCount = chkRemoveDeletedBaselines.Checked ? _orphanDeletedBaselinesCount + (isUpdateMode ? disabledCount : 0) : 0;
+            lblSummary.Text = $"Corridor '{targetName}': +{newEnabled} FL mới | ={existingEnabled} Region cũ (giữ nguyên LT) | -{removeCount} gỡ bỏ";
         }
 
         private void BtnExecute_Click(object? sender, EventArgs e)
         {
             SaveCurrentSettings();
 
-            var currentRows = new List<CorridorComponentRowItem>();
+            var allRows = new List<CorridorComponentRowItem>();
+            int enabledCount = 0;
             for (int i = 0; i < dgvComponents.Rows.Count; i++)
             {
                 SyncGridRowToModel(i);
                 if (dgvComponents.Rows[i].Tag is CorridorComponentRowItem item &&
-                    item.IsEnabled &&
                     item.BaselineEntityIds.Count > 0 &&
-                    !item.AssemblyId.IsNull)
+                    (!item.IsEnabled || !item.AssemblyId.IsNull))
                 {
-                    currentRows.Add(item);
+                    allRows.Add(item);
+                    if (item.IsEnabled) enabledCount++;
                 }
             }
 
-            if (currentRows.Count == 0)
+            bool canRemoveStale = cmbExistingCorridor.SelectedIndex > 0 && chkRemoveDeletedBaselines.Checked && _orphanDeletedBaselinesCount > 0;
+            if (enabledCount == 0 && !canRemoveStale)
             {
                 MessageBox.Show(
-                    "Vui lòng chọn ít nhất 1 Alignment hoặc Feature Line để hiển thị và lắp ghép cấu kiện.",
-                    "Chưa chọn Alignment / FeatureLine",
+                    "Vui lòng chọn Site FeatureLine hoặc ít nhất 1 Alignment / FeatureLine có bật áp mặt cắt.",
+                    "Chưa có dữ liệu thực thi",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
             }
 
+            SiteCatalogItem? site = GetSelectedSiteItem();
+            ObjectId targetCorrId = GetSelectedTargetCorridorId();
+            string corrName = targetCorrId.IsNull
+                ? (string.IsNullOrWhiteSpace(txtCorridorName.Text) ? "COR_Tong" : txtCorridorName.Text.Trim())
+                : _corridorList.FirstOrDefault(c => c.Id == targetCorrId).Name;
+
             Options = new TaoCorridorTheoCauKienOptions
             {
-                BuildMode = _lastBuildMode,
-                ExistingCorridorId = _lastExistingCorridorId,
-                CorridorNamePrefix = string.IsNullOrWhiteSpace(_lastCorridorPrefix) ? "COR_" : _lastCorridorPrefix,
+                ExistingCorridorId = targetCorrId,
+                CorridorName = corrName,
+                HasSiteSelection = site != null,
+                SelectedSiteId = site?.SiteId ?? ObjectId.Null,
+                SelectedSiteName = site?.SiteName ?? "",
+                IsSiteLessMode = site?.IsSiteLess ?? false,
+                DefaultAssemblyId = _lastDefaultAssemblyId,
                 SelectedCodeSetStyleId = _lastCodeSetStyleId,
                 DefaultTargetSurfaceId = _lastDefaultSurfaceId,
                 DefaultFreqTangent = (double)numFreqTangent.Value,
                 DefaultFreqCurve = (double)numFreqCurve.Value,
                 AutoRebuild = chkAutoRebuild.Checked,
+                RemoveDeletedBaselines = chkRemoveDeletedBaselines.Checked,
                 DeleteMergedSourceCorridors = chkDeleteMergedSourceCorridors.Checked,
-                ComponentRows = currentRows,
+                ComponentRows = allRows,
                 SourceCorridorsToMerge = new List<ObjectId>(_sourceCorridorsToMerge)
             };
 

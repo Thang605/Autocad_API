@@ -11,8 +11,7 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 {
     /// <summary>
-    /// Xây dựng và gộp Corridor theo từng cấu kiện.
-    /// File lệnh chỉ mở Form và gọi Service qua CommandGuard.Run.
+    /// Quét danh sách FeatureLine theo Site để xây dựng và cập nhật 1 Corridor tổng (giữ nguyên lý trình Region đã có).
     /// </summary>
     public class CTC_Tao_Corridor_Theo_Cau_Kien_Command
     {
@@ -21,9 +20,9 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         {
             CommandGuard.Run("CTC_Tao_Corridor_Theo_Cau_Kien", (doc, db, ed) =>
             {
-                ed.WriteMessage("\n==================================================================");
-                ed.WriteMessage("\n  CTC_Tao_Corridor_Theo_Cau_Kien: XÂY DỰNG & GỘP CORRIDOR THEO CẤU KIỆN");
-                ed.WriteMessage("\n==================================================================\n");
+                ed.WriteMessage("\n=========================================================================");
+                ed.WriteMessage("\n  CTC_Tao_Corridor_Theo_Cau_Kien: QUÉT FEATURELINE THEO SITE → CORRIDOR TỔNG");
+                ed.WriteMessage("\n=========================================================================\n");
 
                 TaoCorridorTheoCauKienOptions options;
                 using (var form = new TaoCorridorTheoCauKienForm(db, ed))
@@ -31,7 +30,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                     DialogResult result = Application.ShowModalDialog(form);
                     if (result != DialogResult.OK || !form.FormAccepted)
                     {
-                        ed.WriteMessage("\n[Hủy bỏ] Đã hủy thao tác xây dựng Corridor theo cấu kiện.");
+                        ed.WriteMessage("\n[Hủy bỏ] Đã hủy thao tác tạo / cập nhật Corridor tổng.");
                         return;
                     }
                     options = form.Options;

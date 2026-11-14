@@ -14,7 +14,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         {
             using (EditorUserInteraction ui = _ed.StartUserInteraction(this))
             {
-                var peo = new PromptEntityOptions("\nChọn Corridor đích hiện có trên bản vẽ để gộp vào: ");
+                var peo = new PromptEntityOptions("\nChọn Corridor tổng đích hiện có trên bản vẽ: ");
                 peo.SetRejectMessage("\nĐối tượng được chọn phải là Corridor.");
                 peo.AddAllowedClass(typeof(Corridor), true);
 
@@ -23,10 +23,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 {
                     int idx = _corridorList.FindIndex(c => c.Id == per.ObjectId);
                     if (idx >= 0)
-                    {
                         cmbExistingCorridor.SelectedIndex = idx + 1;
-                        SetBuildModeUI(CorridorComponentBuildMode.SingleOrExistingCorridor);
-                    }
                 }
             }
         }
@@ -34,14 +31,11 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         private void BtnMergeExistingCorridors_Click(object? sender, EventArgs e)
         {
             var pickedCorridorIds = PickEntitiesOnCanvas(
-                "\nChọn các Corridor trên bản vẽ cần gộp chung: ",
+                "\nChọn các Corridor trên bản vẽ cần gộp thêm vào Corridor tổng: ",
                 typeof(Corridor));
 
             if (pickedCorridorIds.Count == 0) return;
 
-            SetBuildModeUI(CorridorComponentBuildMode.SingleOrExistingCorridor);
-
-            // Nếu chưa chọn Corridor đích trong ComboBox thì lấy Corridor đầu tiên được chọn làm Corridor đích
             if (cmbExistingCorridor.SelectedIndex == 0 && pickedCorridorIds.Count > 0)
             {
                 int firstIdx = _corridorList.FindIndex(c => c.Id == pickedCorridorIds[0]);
@@ -49,42 +43,45 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                     cmbExistingCorridor.SelectedIndex = firstIdx + 1;
             }
 
-            ObjectId targetCorrId = cmbExistingCorridor.SelectedIndex > 0 && cmbExistingCorridor.SelectedIndex - 1 < _corridorList.Count
-                ? _corridorList[cmbExistingCorridor.SelectedIndex - 1].Id
-                : ObjectId.Null;
+            ObjectId targetCorrId = GetSelectedTargetCorridorId();
+            var existingEntities = CollectGridBaselineEntityIds();
 
             using (Transaction tr = _db.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId corrId in pickedCorridorIds)
+                _suppressGridEvents = true;
+                try
                 {
-                    if (corrId == targetCorrId)
-                        continue;
+                    foreach (ObjectId corrId in pickedCorridorIds)
+                    {
+                        if (corrId == targetCorrId) continue;
+                        if (tr.GetObject(corrId, OpenMode.ForRead) is not Corridor corr) continue;
 
-                    if (tr.GetObject(corrId, OpenMode.ForRead) is not Corridor corr)
-                        continue;
+                        if (!_sourceCorridorsToMerge.Contains(corrId))
+                            _sourceCorridorsToMerge.Add(corrId);
 
-                    if (!_sourceCorridorsToMerge.Contains(corrId))
-                        _sourceCorridorsToMerge.Add(corrId);
-
-                    AppendCorridorRegionsToGrid(tr, corr, corrId);
+                        AppendCorridorRegionsToGrid(tr, corr, corrId, existingEntities);
+                    }
                 }
+                finally { _suppressGridEvents = false; }
                 tr.Commit();
             }
 
+            RefreshStyleLayerFilterComboBox();
             UpdateComponentListVisibility();
             UpdateSummaryLabel();
         }
 
-        private void AppendCorridorRegionsToGrid(Transaction tr, Corridor corr, ObjectId corrId)
+        private void AppendCorridorRegionsToGrid(
+            Transaction tr, Corridor corr, ObjectId corrId, HashSet<ObjectId> existingEntities)
         {
             foreach (Baseline bl in corr.Baselines)
             {
                 bool isFl = bl.IsFeatureLineBased();
                 ObjectId baseEntId = isFl ? bl.FeatureLineId : bl.AlignmentId;
-                if (baseEntId.IsNull || !baseEntId.IsValid || baseEntId.IsErased)
+                if (baseEntId.IsNull || !baseEntId.IsValid || baseEntId.IsErased || existingEntities.Contains(baseEntId))
                     continue;
 
-                string entDisplay = DescribeSingleBaselineEntity(tr, baseEntId);
+                string entDisplay = DescribeSingleBaselineEntity(tr, baseEntId, out string styleName, out string layerName);
 
                 foreach (BaselineRegion rg in bl.BaselineRegions)
                 {
@@ -104,15 +101,16 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                     catch { }
 
                     ExtractRegionTargets(rg, out ObjectId surfTargetId, out List<ObjectId> offsetTargetIds);
+                    var surfTuple = _surfaceList.FirstOrDefault(s => s.Id == surfTargetId);
 
-                    var rowItem = new CorridorComponentRowItem
+                    AddRowToGrid(new CorridorComponentRowItem
                     {
                         IsEnabled = true,
-                        ComponentCategory = isFl ? "Taluy Đào / Đắp" : "Lòng đường chính",
-                        ComponentName = $"{corr.Name}",
                         SourceType = isFl ? ComponentBaselineSourceType.FeatureLine : ComponentBaselineSourceType.AlignmentAndProfile,
                         BaselineEntityIds = new List<ObjectId> { baseEntId },
                         BaselineDisplayText = entDisplay,
+                        FeatureLineStyleName = styleName,
+                        FeatureLineLayer = layerName,
                         ExplicitProfileId = isFl ? ObjectId.Null : bl.ProfileId,
                         AssemblyId = rg.AssemblyId,
                         AssemblyName = asmName,
@@ -120,13 +118,14 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                         EndStation = rg.EndStation,
                         FrequencyTangent = freqT,
                         FrequencyCurve = freqC,
-                        TargetSurfaceId = surfTargetId,
+                        UseDefaultSurface = surfTuple.Id.IsNull,
+                        DisableSurfaceTarget = false,
+                        TargetSurfaceId = surfTuple.Id,
+                        TargetSurfaceName = !surfTuple.Id.IsNull ? surfTuple.Name : SurfaceOptionUseDefault,
                         OffsetElevationTargetIds = offsetTargetIds,
                         OffsetTargetsDisplay = offsetTargetIds.Count > 0 ? $"[{offsetTargetIds.Count} đối tượng]" : "(Không)",
                         SourceCorridorId = corrId
-                    };
-
-                    AddRowToGrid(rowItem);
+                    });
                 }
             }
         }

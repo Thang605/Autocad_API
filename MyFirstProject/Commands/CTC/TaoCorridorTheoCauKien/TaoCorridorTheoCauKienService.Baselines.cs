@@ -10,49 +10,117 @@ using Exception = System.Exception;
 
 namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 {
+    internal sealed class ExistingBaselineSnapshot
+    {
+        public Dictionary<ObjectId, List<Baseline>> FlBaselines { get; } = new Dictionary<ObjectId, List<Baseline>>();
+        public Dictionary<(ObjectId AlignId, ObjectId ProfId), List<Baseline>> AlignBaselines { get; } =
+            new Dictionary<(ObjectId, ObjectId), List<Baseline>>();
+    }
+
     internal static partial class TaoCorridorTheoCauKienService
     {
-        private static bool ProcessSingleBaselineEntity(
+        private static ExistingBaselineSnapshot CaptureExistingBaselineSnapshot(
+            Database db, Corridor corridor, Dictionary<string, string> clonedMap)
+        {
+            var snap = new ExistingBaselineSnapshot();
+            var clonedToSource = new Dictionary<ObjectId, ObjectId>();
+
+            foreach (var kv in clonedMap)
+            {
+                if (TryResolveHandle(db, kv.Key, out ObjectId srcId) &&
+                    TryResolveHandle(db, kv.Value, out ObjectId clnId))
+                {
+                    clonedToSource[clnId] = srcId;
+                }
+            }
+
+            foreach (Baseline bl in corridor.Baselines)
+            {
+                if (bl.BaselineRegions.Count == 0)
+                    continue;
+
+                if (bl.IsFeatureLineBased())
+                {
+                    ObjectId flId = bl.FeatureLineId;
+                    if (flId.IsNull || !flId.IsValid || flId.IsErased) continue;
+
+                    AddBaselineToMap(snap.FlBaselines, flId, bl);
+                    if (clonedToSource.TryGetValue(flId, out ObjectId srcId))
+                        AddBaselineToMap(snap.FlBaselines, srcId, bl);
+                }
+                else
+                {
+                    var key = (bl.AlignmentId, bl.ProfileId);
+                    if (!snap.AlignBaselines.TryGetValue(key, out var list))
+                    {
+                        list = new List<Baseline>();
+                        snap.AlignBaselines[key] = list;
+                    }
+                    list.Add(bl);
+                }
+            }
+
+            return snap;
+        }
+
+        private static void AddBaselineToMap(Dictionary<ObjectId, List<Baseline>> map, ObjectId id, Baseline bl)
+        {
+            if (!map.TryGetValue(id, out var list))
+            {
+                list = new List<Baseline>();
+                map[id] = list;
+            }
+            if (!list.Contains(bl))
+                list.Add(bl);
+        }
+
+        private static void ProcessComponentRow(
             Transaction tr,
             Database db,
             Editor ed,
             TaoCorridorTheoCauKienOptions options,
             CorridorComponentRowItem row,
             Corridor targetCorridor,
-            ObjectId entityId,
-            ref int totalBaselinesAdded,
-            ref int totalRegionsAdded)
+            ExistingBaselineSnapshot snapshot,
+            HashSet<ObjectId> handledPreExisting,
+            Dictionary<string, string> runtimeClonedMap,
+            ref int addedBaselines,
+            ref int addedRegions,
+            ref int keptExistingRegions)
         {
-            if (entityId.IsNull || !entityId.IsValid || entityId.IsErased)
-                return false;
+            if (!row.IsEnabled || row.BaselineEntityIds.Count == 0 || row.AssemblyId.IsNull)
+                return;
 
-            try
+            foreach (ObjectId entityId in row.BaselineEntityIds)
             {
-                bool updatedExistingRegion;
-                string entityDisplayName;
+                if (entityId.IsNull || !entityId.IsValid || entityId.IsErased)
+                    continue;
 
-                Baseline? baseline = row.SourceType == ComponentBaselineSourceType.FeatureLine
-                    ? PrepareFeatureLineBaseline(tr, db, ed, options, row, targetCorridor, entityId, out entityDisplayName, out updatedExistingRegion, ref totalBaselinesAdded)
-                    : PrepareAlignmentBaseline(tr, ed, options, row, targetCorridor, entityId, out entityDisplayName, out updatedExistingRegion, ref totalBaselinesAdded);
-
-                if (updatedExistingRegion)
-                    return true;
-
-                if (baseline == null)
-                    return false;
-
-                CreateAndConfigureRegion(ed, options, row, targetCorridor, baseline, entityDisplayName);
-                totalRegionsAdded++;
-                return true;
-            }
-            catch (Exception exBl)
-            {
-                ed.WriteMessage($"\n  ⚠ Lỗi khi thêm đường dẫn ({entityId.Handle}): {exBl.Message}");
-                return false;
+                try
+                {
+                    if (row.SourceType == ComponentBaselineSourceType.FeatureLine)
+                    {
+                        ProcessFeatureLineEntity(
+                            tr, db, ed, options, row, targetCorridor, entityId,
+                            snapshot, handledPreExisting, runtimeClonedMap,
+                            ref addedBaselines, ref addedRegions, ref keptExistingRegions);
+                    }
+                    else
+                    {
+                        ProcessAlignmentEntity(
+                            tr, ed, options, row, targetCorridor, entityId,
+                            snapshot, handledPreExisting,
+                            ref addedBaselines, ref addedRegions, ref keptExistingRegions);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ed.WriteMessage($"\n  ⚠ Lỗi xử lý đường dẫn ({entityId.Handle}): {ex.Message}");
+                }
             }
         }
 
-        private static Baseline? PrepareFeatureLineBaseline(
+        private static void ProcessFeatureLineEntity(
             Transaction tr,
             Database db,
             Editor ed,
@@ -60,127 +128,116 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             CorridorComponentRowItem row,
             Corridor targetCorridor,
             ObjectId entityId,
-            out string entityDisplayName,
-            out bool updatedExistingRegion,
-            ref int totalBaselinesAdded)
+            ExistingBaselineSnapshot snapshot,
+            HashSet<ObjectId> handledPreExisting,
+            Dictionary<string, string> runtimeClonedMap,
+            ref int addedBaselines,
+            ref int addedRegions,
+            ref int keptExistingRegions)
         {
-            entityDisplayName = "";
-            updatedExistingRegion = false;
-
-            if (tr.GetObject(entityId, OpenMode.ForRead) is not FeatureLine fl)
-                return null;
-
-            EnsureFeatureLineHasName(tr, fl);
-            entityDisplayName = fl.Name;
-            ObjectId resolvedFlId = fl.ObjectId;
-
-            double flStart = 0.0;
-            double flEnd = fl.Length2D;
-            double reqStart = row.StartStation > flStart && row.StartStation < flEnd ? row.StartStation : flStart;
-            double reqEnd = row.EndStation > reqStart && row.EndStation <= flEnd + 0.05
-                ? Math.Min(flEnd, row.EndStation)
-                : flEnd;
-
-            // Kiểm tra nếu đã tồn tại Region trùng khớp hoàn toàn trong Corridor đích
-            if (TryFindExistingMatchingRegion(targetCorridor, true, resolvedFlId, ObjectId.Null, row.AssemblyId, reqStart, reqEnd, out Baseline? matchedBl, out BaselineRegion? matchedRg) &&
-                matchedBl != null && matchedRg != null)
+            // BẮT BUỘC: Nếu Baseline đã có Region sẵn trên Corridor tổng → GIỮ NGUYÊN 100% LÝ TRÌNH, KHÔNG THÊM MỚI
+            if (snapshot.FlBaselines.TryGetValue(entityId, out var existingBls) && existingBls.Count > 0)
             {
-                UpdateExistingRegionSettings(ed, options, row, matchedBl, matchedRg);
-                updatedExistingRegion = true;
-                return matchedBl;
+                if (handledPreExisting.Add(entityId))
+                    UpdatePreExistingBaselineRegions(ed, options, row, existingBls, ref keptExistingRegions);
+                return;
             }
 
-            // Tìm Baseline cùng FeatureLine chưa bị giao cắt khoảng lý trình, nếu không có thì thêm Baseline mới
-            Baseline? baseline = FindReusableBaseline(targetCorridor, true, resolvedFlId, ObjectId.Null, reqStart, reqEnd);
+            if (tr.GetObject(entityId, OpenMode.ForRead) is not FeatureLine fl)
+                return;
+
+            EnsureFeatureLineHasName(fl);
+            string displayName = fl.Name;
+            ObjectId resolvedFlId = fl.ObjectId;
+
+            double reqStart = row.StartStation > 0.0 && row.StartStation < fl.Length2D ? row.StartStation : 0.0;
+            double reqEnd = row.EndStation > reqStart && row.EndStation <= fl.Length2D + 0.05
+                ? Math.Min(fl.Length2D, row.EndStation)
+                : fl.Length2D;
+
+            Baseline? baseline = FindNonOverlappingOrEmptyBaseline(targetCorridor, true, resolvedFlId, ObjectId.Null, reqStart, reqEnd);
             if (baseline == null)
             {
-                string blName = GetUniqueBaselineName(targetCorridor, $"BL_{row.ComponentName}_{entityDisplayName}");
+                string blName = GetUniqueBaselineName(targetCorridor, $"BL_{displayName}");
                 try
                 {
                     baseline = targetCorridor.Baselines.Add(blName, resolvedFlId);
                 }
                 catch
                 {
-                    // Trường hợp FeatureLine là AutoCorridorFeatureLine thuộc chính Corridor đích (tự tham chiếu)
-                    // → Tạo bản sao FeatureLine độc lập từ tọa độ 3D để cho phép gộp chung vào 1 Corridor
-                    ObjectId clonedFlId = CloneFeatureLineAsIndependent(tr, db, fl, $"FL_{row.ComponentName}_{fl.Handle}");
-                    if (!clonedFlId.IsNull)
-                    {
-                        resolvedFlId = clonedFlId;
-                        baseline = targetCorridor.Baselines.Add(blName, resolvedFlId);
-                        ed.WriteMessage($"\n  ℹ Đã chuyển đổi FeatureLine phụ thuộc '{entityDisplayName}' thành FeatureLine độc lập để gộp vào Corridor '{targetCorridor.Name}'.");
-                    }
-                    else
-                    {
-                        throw;
-                    }
+                    ObjectId clonedFlId = CloneFeatureLineAsIndependent(tr, db, fl, $"FL_Cln_{fl.Handle}");
+                    if (clonedFlId.IsNull) throw;
+
+                    runtimeClonedMap[GetHandleHex(fl.ObjectId)] = GetHandleHex(clonedFlId);
+                    resolvedFlId = clonedFlId;
+                    baseline = targetCorridor.Baselines.Add(blName, resolvedFlId);
+                    ed.WriteMessage($"\n  ℹ Chuyển đổi FeatureLine phụ thuộc '{displayName}' thành bản sao độc lập để thêm vào Corridor tổng.");
                 }
-                totalBaselinesAdded++;
+                addedBaselines++;
             }
 
-            return baseline;
+            if (baseline != null)
+            {
+                CreateAndConfigureRegion(ed, options, row, targetCorridor, baseline, displayName);
+                addedRegions++;
+            }
         }
 
-        private static Baseline? PrepareAlignmentBaseline(
+        private static void ProcessAlignmentEntity(
             Transaction tr,
             Editor ed,
             TaoCorridorTheoCauKienOptions options,
             CorridorComponentRowItem row,
             Corridor targetCorridor,
             ObjectId entityId,
-            out string entityDisplayName,
-            out bool updatedExistingRegion,
-            ref int totalBaselinesAdded)
+            ExistingBaselineSnapshot snapshot,
+            HashSet<ObjectId> handledPreExisting,
+            ref int addedBaselines,
+            ref int addedRegions,
+            ref int keptExistingRegions)
         {
-            entityDisplayName = "";
-            updatedExistingRegion = false;
-
             if (tr.GetObject(entityId, OpenMode.ForRead) is not Alignment align)
-                return null;
+                return;
 
             ObjectId profileId = SelectDesignProfileId(tr, align, row.ExplicitProfileId);
             if (profileId.IsNull)
             {
                 ed.WriteMessage($"\n  ⚠ Tuyến '{align.Name}' chưa có Profile (Trắc dọc). Bỏ qua tuyến này.");
-                return null;
+                return;
+            }
+
+            var key = (align.ObjectId, profileId);
+            if (snapshot.AlignBaselines.TryGetValue(key, out var existingBls) && existingBls.Count > 0)
+            {
+                if (handledPreExisting.Add(entityId))
+                    UpdatePreExistingBaselineRegions(ed, options, row, existingBls, ref keptExistingRegions);
+                return;
             }
 
             var prof = tr.GetObject(profileId, OpenMode.ForRead) as Profile;
-            entityDisplayName = align.Name;
-            ObjectId resolvedAlignId = align.ObjectId;
-            ObjectId resolvedProfId = profileId;
+            double reqStart = row.StartStation > align.StartingStation && row.StartStation < align.EndingStation
+                ? row.StartStation : align.StartingStation;
+            double reqEnd = row.EndStation > reqStart && row.EndStation <= align.EndingStation + 0.05
+                ? Math.Min(align.EndingStation, row.EndStation) : align.EndingStation;
 
-            double alStart = align.StartingStation;
-            double alEnd = align.EndingStation;
-            double reqStart = row.StartStation > alStart && row.StartStation < alEnd ? row.StartStation : alStart;
-            double reqEnd = row.EndStation > reqStart && row.EndStation <= alEnd + 0.05
-                ? Math.Min(alEnd, row.EndStation)
-                : alEnd;
-
-            if (TryFindExistingMatchingRegion(targetCorridor, false, resolvedAlignId, resolvedProfId, row.AssemblyId, reqStart, reqEnd, out Baseline? matchedBl, out BaselineRegion? matchedRg) &&
-                matchedBl != null && matchedRg != null)
-            {
-                UpdateExistingRegionSettings(ed, options, row, matchedBl, matchedRg);
-                updatedExistingRegion = true;
-                return matchedBl;
-            }
-
-            Baseline? baseline = FindReusableBaseline(targetCorridor, false, resolvedAlignId, resolvedProfId, reqStart, reqEnd);
+            Baseline? baseline = FindNonOverlappingOrEmptyBaseline(targetCorridor, false, align.ObjectId, profileId, reqStart, reqEnd);
             if (baseline == null)
             {
-                string blName = GetUniqueBaselineName(targetCorridor, $"BL_{row.ComponentName}_{align.Name}_{prof?.Name}");
-                baseline = targetCorridor.Baselines.Add(blName, resolvedAlignId, resolvedProfId);
-                totalBaselinesAdded++;
+                string blName = GetUniqueBaselineName(targetCorridor, $"BL_{align.Name}_{prof?.Name}");
+                baseline = targetCorridor.Baselines.Add(blName, align.ObjectId, profileId);
+                addedBaselines++;
             }
 
-            return baseline;
+            if (baseline != null)
+            {
+                CreateAndConfigureRegion(ed, options, row, targetCorridor, baseline, align.Name);
+                addedRegions++;
+            }
         }
 
-        private static void EnsureFeatureLineHasName(Transaction tr, FeatureLine fl)
+        private static void EnsureFeatureLineHasName(FeatureLine fl)
         {
-            if (!string.IsNullOrWhiteSpace(fl.Name))
-                return;
-
+            if (!string.IsNullOrWhiteSpace(fl.Name)) return;
             try
             {
                 fl.UpgradeOpen();
@@ -194,8 +251,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             try
             {
                 Point3dCollection pts = srcFl.GetPoints(Autodesk.Civil.FeatureLinePointType.AllPoints);
-                if (pts == null || pts.Count < 2)
-                    return ObjectId.Null;
+                if (pts == null || pts.Count < 2) return ObjectId.Null;
 
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
@@ -210,17 +266,13 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 
                 ObjectId newFlId = FeatureLine.Create(desiredName, poly3dId);
                 if (!poly3dId.IsNull && !poly3dId.IsErased)
-                {
-                    var tmpPoly = tr.GetObject(poly3dId, OpenMode.ForWrite, false);
-                    tmpPoly?.Erase();
-                }
+                    tr.GetObject(poly3dId, OpenMode.ForWrite, false)?.Erase();
 
                 if (!newFlId.IsNull && tr.GetObject(newFlId, OpenMode.ForWrite) is FeatureLine newFl)
                 {
                     newFl.Layer = srcFl.Layer;
-                    EnsureFeatureLineHasName(tr, newFl);
+                    EnsureFeatureLineHasName(newFl);
                 }
-
                 return newFlId;
             }
             catch
@@ -229,17 +281,13 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             }
         }
 
-        /// <summary>
-        /// Ưu tiên chọn Đường đỏ thiết kế (Layout Profile / tên bắt đầu bằng DD- hoặc TK-) thay vì đường tự nhiên (EG/TN)
-        /// </summary>
         private static ObjectId SelectDesignProfileId(Transaction tr, Alignment align, ObjectId explicitProfileId)
         {
             if (!explicitProfileId.IsNull && explicitProfileId.IsValid && !explicitProfileId.IsErased)
                 return explicitProfileId;
 
             ObjectIdCollection profileIds = align.GetProfileIds();
-            if (profileIds == null || profileIds.Count == 0)
-                return ObjectId.Null;
+            if (profileIds == null || profileIds.Count == 0) return ObjectId.Null;
 
             ObjectId layoutCandidate = ObjectId.Null;
             ObjectId firstValid = ObjectId.Null;
@@ -257,9 +305,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 }
 
                 if (prof.ProfileType == ProfileType.FG && layoutCandidate.IsNull)
-                {
                     layoutCandidate = pid;
-                }
             }
 
             return !layoutCandidate.IsNull ? layoutCandidate : firstValid;
@@ -271,13 +317,9 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             foreach (Baseline bl in corridor.Baselines)
                 existingNames.Add(bl.Name);
 
-            if (!existingNames.Contains(baseName))
-                return baseName;
-
+            if (!existingNames.Contains(baseName)) return baseName;
             int index = 2;
-            while (existingNames.Contains($"{baseName}_{index}"))
-                index++;
-
+            while (existingNames.Contains($"{baseName}_{index}")) index++;
             return $"{baseName}_{index}";
         }
     }

@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -6,7 +7,7 @@ using MyFirstProject.Shared.UI;
 using ColumnStyle = System.Windows.Forms.ColumnStyle;
 using FlowDirection = System.Windows.Forms.FlowDirection;
 using Size = System.Drawing.Size;
-using WinFormsButton = System.Windows.Forms.Button;
+using WinFormsComboBox = System.Windows.Forms.ComboBox;
 using WinFormsLabel = System.Windows.Forms.Label;
 
 namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
@@ -17,7 +18,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         {
             var grpComponents = new GroupBox
             {
-                Text = "2. Chọn Đường dẫn (Alignment / FeatureLine) && Danh sách Cấu kiện Corridor",
+                Text = "2. Danh Sách FeatureLine Trong Site — Gán Mặt Cắt (Assembly) && Target",
                 Dock = DockStyle.Fill,
                 Padding = new Padding(10, 6, 10, 8),
                 Margin = new Padding(0, 0, 0, 6)
@@ -35,7 +36,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             grp2Layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             grp2Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            grp2Layout.Controls.Add(BuildComponentsToolbar(), 0, 0);
+            grp2Layout.Controls.Add(BuildBatchAssignToolbar(), 0, 0);
             grp2Layout.Controls.Add(BuildEmptyListNotice(), 0, 1);
             grp2Layout.Controls.Add(BuildComponentsGrid(), 0, 2);
             grp2Layout.Controls.Add(BuildSubActionsBar(), 0, 3);
@@ -44,9 +45,9 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             return grpComponents;
         }
 
-        private Control BuildComponentsToolbar()
+        private Control BuildBatchAssignToolbar()
         {
-            var pnlToolbar = new FlowLayoutPanel
+            pnlBatchToolbar = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
@@ -55,102 +56,83 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 Margin = new Padding(0, 2, 0, 6)
             };
 
-            btnAddAlignmentComponent = new WinFormsButton
+            var lblFilter = FormBuilder.Label("Lọc nhanh Style/Layer:");
+            cmbFilterStyleLayer = new WinFormsComboBox
             {
-                Text = "+ Chọn Alignment (Tuyến)",
-                Size = new Size(200, 40),
-                BackColor = Color.FromArgb(228, 242, 255),
-                Font = StandardFonts.Bold,
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 6, 2)
+                Width = 175,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 7, 4, 2)
             };
-            btnAddAlignmentComponent.Click += BtnAddAlignmentComponent_Click;
 
-            btnAddFeatureLineComponent = new WinFormsButton
-            {
-                Text = "+ Chọn FeatureLine",
-                Size = new Size(180, 40),
-                BackColor = Color.FromArgb(228, 242, 255),
-                Font = StandardFonts.Bold,
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 6, 2)
-            };
-            btnAddFeatureLineComponent.Click += BtnAddFeatureLineComponent_Click;
+            btnSelectByGroup = FormBuilder.ActionButton("Chọn nhóm", ButtonKind.Normal, 95);
+            btnSelectByGroup.Margin = new Padding(0, 0, 10, 2);
+            btnSelectByGroup.Click += BtnSelectByGroup_Click;
 
-            btnRestoreSavedRows = new WinFormsButton
+            var lblAsm = FormBuilder.Label("Mặt cắt:");
+            cmbBatchAssembly = new WinFormsComboBox
             {
-                Text = "Nạp lại ĐT lần trước",
-                Size = new Size(170, 40),
-                UseMnemonic = false,
-                Visible = false,
-                Margin = new Padding(0, 0, 6, 2)
+                Width = 165,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 7, 4, 2)
             };
-            btnRestoreSavedRows.Click += BtnRestoreSavedRows_Click;
+            foreach (var asm in _assemblyList)
+                cmbBatchAssembly.Items.Add(asm.Name);
+            if (cmbBatchAssembly.Items.Count > 0)
+                cmbBatchAssembly.SelectedIndex = 0;
 
-            btnPickBaselineForRow = new WinFormsButton
-            {
-                Text = "Đổi Đường dẫn dòng chọn",
-                Size = new Size(190, 40),
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 6, 2)
-            };
-            btnPickBaselineForRow.Click += BtnPickBaselineForRow_Click;
+            btnApplyBatchAssembly = FormBuilder.ActionButton("Gán Mặt cắt", ButtonKind.Normal, 105);
+            btnApplyBatchAssembly.BackColor = Color.FromArgb(228, 242, 255);
+            btnApplyBatchAssembly.UseVisualStyleBackColor = false;
+            btnApplyBatchAssembly.Margin = new Padding(0, 0, 4, 2);
+            btnApplyBatchAssembly.Click += BtnApplyBatchAssembly_Click;
 
-            btnPickAssemblyForRow = new WinFormsButton
-            {
-                Text = "Pick Assembly trên CAD",
-                Size = new Size(175, 40),
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 6, 2)
-            };
+            btnPickAssemblyForRow = FormBuilder.ActionButton("Pick Mặt cắt CAD", ButtonKind.Normal, 130);
+            btnPickAssemblyForRow.Margin = new Padding(0, 0, 10, 2);
             btnPickAssemblyForRow.Click += BtnPickAssemblyForRow_Click;
 
-            btnRemoveSelectedRow = new WinFormsButton
+            var lblSurf = FormBuilder.Label("Surface:");
+            cmbBatchSurface = new WinFormsComboBox
             {
-                Text = "Xóa dòng",
-                Size = new Size(85, 40),
-                ForeColor = Color.DarkRed,
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 6, 2)
+                Width = 140,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 7, 4, 2)
             };
-            btnRemoveSelectedRow.Click += BtnRemoveSelectedRow_Click;
+            cmbBatchSurface.Items.Add(SurfaceOptionUseDefault);
+            cmbBatchSurface.Items.Add(SurfaceOptionNone);
+            foreach (var s in _surfaceList)
+                cmbBatchSurface.Items.Add(s.Name);
+            cmbBatchSurface.SelectedIndex = 0;
 
-            btnClearAllRows = new WinFormsButton
-            {
-                Text = "Xóa tất cả",
-                Size = new Size(95, 40),
-                ForeColor = Color.DarkRed,
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 0, 2)
-            };
-            btnClearAllRows.Click += BtnClearAllRows_Click;
+            btnApplyBatchSurface = FormBuilder.ActionButton("Gán Surface", ButtonKind.Normal, 100);
+            btnApplyBatchSurface.Margin = new Padding(0, 0, 8, 2);
+            btnApplyBatchSurface.Click += BtnApplyBatchSurface_Click;
 
-            pnlToolbar.Controls.AddRange(new Control[]
+            btnZoomToRow = FormBuilder.ActionButton("🔍 Zoom ĐT", ButtonKind.Normal, 95);
+            btnZoomToRow.Margin = new Padding(0, 0, 0, 2);
+            btnZoomToRow.Click += BtnZoomToRow_Click;
+
+            pnlBatchToolbar.Controls.AddRange(new Control[]
             {
-                btnAddAlignmentComponent,
-                btnAddFeatureLineComponent,
-                btnRestoreSavedRows,
-                btnPickBaselineForRow,
-                btnPickAssemblyForRow,
-                btnRemoveSelectedRow,
-                btnClearAllRows
+                lblFilter, cmbFilterStyleLayer, btnSelectByGroup,
+                lblAsm, cmbBatchAssembly, btnApplyBatchAssembly, btnPickAssemblyForRow,
+                lblSurf, cmbBatchSurface, btnApplyBatchSurface, btnZoomToRow
             });
-            return pnlToolbar;
+            return pnlBatchToolbar;
         }
 
         private Control BuildEmptyListNotice()
         {
             lblEmptyListNotice = new WinFormsLabel
             {
-                Text = "👉 Danh sách cấu kiện chỉ hiển thị sau khi bạn chọn Alignment hoặc FeatureLine.\r\n" +
-                       "Hãy bấm nút [+ Chọn Alignment (Tuyến)] hoặc [+ Chọn FeatureLine] ở phía trên để chọn đối tượng trên bản vẽ.",
+                Text = "👉 Danh sách chỉ hiển thị sau khi bạn chọn một [Site nguồn FeatureLine], [Pick FL lấy Site], hoặc chọn Corridor tổng / Alignment.\r\n" +
+                       "Sau khi chọn Site, toàn bộ FeatureLine trong Site sẽ được liệt kê tại đây; lý trình các Region đã có trên Corridor được giữ nguyên tuyệt đối.",
                 Dock = DockStyle.Fill,
                 AutoSize = true,
                 Padding = new Padding(14, 18, 14, 18),
                 BackColor = Color.FromArgb(248, 250, 252),
                 ForeColor = Color.FromArgb(60, 80, 110),
                 BorderStyle = BorderStyle.FixedSingle,
-                Font = EmptyNoticeFont,
+                Font = StandardFonts.Regular,
                 UseMnemonic = false,
                 Margin = new Padding(0, 4, 0, 6)
             };
@@ -166,7 +148,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 AllowUserToDeleteRows = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
+                MultiSelect = true,
                 RowHeadersWidth = 26,
                 RowTemplate = { Height = 28 },
                 ColumnHeadersHeight = 32,
@@ -174,11 +156,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 Margin = new Padding(0, 0, 0, 6)
             };
             SetupDataGridViewColumns();
-            dgvComponents.CellValueChanged += (s, e) =>
-            {
-                if (e.RowIndex >= 0) SyncGridRowToModel(e.RowIndex);
-                UpdateSummaryLabel();
-            };
+            dgvComponents.CellValueChanged += DgvComponents_CellValueChanged;
             dgvComponents.CurrentCellDirtyStateChanged += (s, e) =>
             {
                 if (dgvComponents.IsCurrentCellDirty)
@@ -192,66 +170,79 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         {
             dgvComponents.Columns.Clear();
 
-            var colEnable = new DataGridViewCheckBoxColumn { Name = "colEnable", HeaderText = "Bật", FillWeight = 38, MinimumWidth = 42 };
-            var colCategory = new DataGridViewComboBoxColumn { Name = "colCategory", HeaderText = "Nhóm Cấu Kiện", FillWeight = 135, MinimumWidth = 125, FlatStyle = FlatStyle.Flat };
-            colCategory.Items.AddRange(ComponentCategories);
+            var colEnable = new DataGridViewCheckBoxColumn { Name = "colEnable", HeaderText = "Bật", FillWeight = 36, MinimumWidth = 40 };
+            var colStatus = new DataGridViewTextBoxColumn { Name = "colStatus", HeaderText = "Trạng Thái", FillWeight = 105, MinimumWidth = 105, ReadOnly = true };
+            var colBaseline = new DataGridViewTextBoxColumn { Name = "colBaseline", HeaderText = "Đường Dẫn (FeatureLine / Tuyến)", FillWeight = 175, MinimumWidth = 155, ReadOnly = true };
+            var colStyleLayer = new DataGridViewTextBoxColumn { Name = "colStyleLayer", HeaderText = "Style | Layer", FillWeight = 135, MinimumWidth = 120, ReadOnly = true };
 
-            var colName = new DataGridViewTextBoxColumn { Name = "colName", HeaderText = "Tên Cấu Kiện / Corridor", FillWeight = 130, MinimumWidth = 120 };
-            var colSourceType = new DataGridViewComboBoxColumn { Name = "colSourceType", HeaderText = "Loại Đường Dẫn", FillWeight = 115, MinimumWidth = 110, FlatStyle = FlatStyle.Flat };
-            colSourceType.Items.AddRange(SourceTypeNames);
-
-            var colBaseline = new DataGridViewTextBoxColumn { Name = "colBaseline", HeaderText = "Đường Dẫn (Alignment / FeatureLine)", FillWeight = 195, MinimumWidth = 160, ReadOnly = true };
-            var colAssembly = new DataGridViewComboBoxColumn { Name = "colAssembly", HeaderText = "Mặt Cắt Cấu Kiện (Assembly)", FillWeight = 155, MinimumWidth = 140, FlatStyle = FlatStyle.Flat };
+            var colAssembly = new DataGridViewComboBoxColumn { Name = "colAssembly", HeaderText = "Mặt Cắt (Assembly)", FillWeight = 145, MinimumWidth = 130, FlatStyle = FlatStyle.Flat };
             foreach (var asm in _assemblyList)
                 colAssembly.Items.Add(asm.Name);
 
-            var colStartSta = new DataGridViewTextBoxColumn { Name = "colStartSta", HeaderText = "Lý Trình Đầu", FillWeight = 75, MinimumWidth = 75 };
-            var colEndSta = new DataGridViewTextBoxColumn { Name = "colEndSta", HeaderText = "Lý Trình Cuối (0=Hết)", FillWeight = 95, MinimumWidth = 90 };
-            var colFreq = new DataGridViewTextBoxColumn { Name = "colFreq", HeaderText = "Bước Cọc (m)", FillWeight = 72, MinimumWidth = 70 };
-            var colTargets = new DataGridViewTextBoxColumn { Name = "colTargets", HeaderText = "Target Mở Rộng / Cao Độ", FillWeight = 115, MinimumWidth = 105, ReadOnly = true };
+            var colTargetSurface = new DataGridViewComboBoxColumn { Name = "colTargetSurface", HeaderText = "Target Bề Mặt", FillWeight = 125, MinimumWidth = 115, FlatStyle = FlatStyle.Flat };
+            colTargetSurface.Items.Add(SurfaceOptionUseDefault);
+            colTargetSurface.Items.Add(SurfaceOptionNone);
+            foreach (var surf in _surfaceList)
+                colTargetSurface.Items.Add(surf.Name);
+
+            var colTargets = new DataGridViewTextBoxColumn { Name = "colTargets", HeaderText = "Target Mở Rộng / Cao Độ", FillWeight = 120, MinimumWidth = 110, ReadOnly = true };
+            var colStartSta = new DataGridViewTextBoxColumn { Name = "colStartSta", HeaderText = "LT Đầu", FillWeight = 70, MinimumWidth = 68 };
+            var colEndSta = new DataGridViewTextBoxColumn { Name = "colEndSta", HeaderText = "LT Cuối (0=Hết)", FillWeight = 82, MinimumWidth = 78 };
+            var colFreq = new DataGridViewTextBoxColumn { Name = "colFreq", HeaderText = "Bước Cọc (m)", FillWeight = 66, MinimumWidth = 64 };
 
             dgvComponents.Columns.AddRange(new DataGridViewColumn[]
             {
-                colEnable, colCategory, colName, colSourceType,
-                colBaseline, colAssembly, colStartSta, colEndSta, colFreq, colTargets
+                colEnable, colStatus, colBaseline, colStyleLayer,
+                colAssembly, colTargetSurface, colTargets,
+                colStartSta, colEndSta, colFreq
             });
         }
 
         private Control BuildSubActionsBar()
         {
-            pnlSubActions = new TableLayoutPanel
+            var pnlSubActions = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
                 AutoSize = true,
                 Margin = new Padding(0)
             };
-            pnlSubActions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            pnlSubActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
-            btnPickOffsetTargetsForRow = new WinFormsButton
-            {
-                Text = "Gán Target Mở rộng / Cao độ (Alignment, FeatureLine, Polyline) cho dòng chọn...",
-                Size = new Size(540, 40),
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 16, 0)
-            };
+            btnPickOffsetTargetsForRow = FormBuilder.ActionButton("Gán Target Mở rộng/Cao độ (Pick CAD)...", ButtonKind.Normal, 290);
+            btnPickOffsetTargetsForRow.Margin = new Padding(0, 0, 6, 2);
             btnPickOffsetTargetsForRow.Click += BtnPickOffsetTargetsForRow_Click;
 
-            chkAutoRebuild = new CheckBox
-            {
-                Text = "Tự động Rebuild Corridor ngay sau khi lắp ghép các cấu kiện",
-                AutoSize = true,
-                Checked = true,
-                UseMnemonic = false,
-                Font = StandardFonts.Bold,
-                Anchor = AnchorStyles.Left,
-                Margin = new Padding(4, 8, 0, 0)
-            };
+            btnClearOffsetTargetsForRow = FormBuilder.ActionButton("Xóa Target ĐT", ButtonKind.Normal, 110);
+            btnClearOffsetTargetsForRow.Margin = new Padding(0, 0, 10, 2);
+            btnClearOffsetTargetsForRow.Click += BtnClearOffsetTargetsForRow_Click;
 
-            pnlSubActions.Controls.Add(btnPickOffsetTargetsForRow, 0, 0);
-            pnlSubActions.Controls.Add(chkAutoRebuild, 1, 0);
+            btnAddFeatureLineComponent = FormBuilder.ActionButton("+ Pick thêm FL lẻ", ButtonKind.Normal, 135);
+            btnAddFeatureLineComponent.Margin = new Padding(0, 0, 6, 2);
+            btnAddFeatureLineComponent.Click += BtnAddFeatureLineComponent_Click;
+
+            btnAddAlignmentComponent = FormBuilder.ActionButton("+ Thêm Alignment", ButtonKind.Normal, 135);
+            btnAddAlignmentComponent.Margin = new Padding(0, 0, 12, 2);
+            btnAddAlignmentComponent.Click += BtnAddAlignmentComponent_Click;
+
+            btnRemoveSelectedRow = FormBuilder.ActionButton("Bỏ dòng", ButtonKind.Normal, 85);
+            btnRemoveSelectedRow.ForeColor = Color.DarkRed;
+            btnRemoveSelectedRow.Margin = new Padding(0, 0, 12, 2);
+            btnRemoveSelectedRow.Click += BtnRemoveSelectedRow_Click;
+
+            chkAutoRebuild = FormBuilder.CheckBox("Tự Rebuild Corridor sau khi cập nhật", isChecked: true);
+            chkAutoRebuild.Font = StandardFonts.Bold;
+            chkAutoRebuild.Margin = new Padding(2, 10, 0, 2);
+
+            pnlSubActions.Controls.AddRange(new Control[]
+            {
+                btnPickOffsetTargetsForRow,
+                btnClearOffsetTargetsForRow,
+                btnAddFeatureLineComponent,
+                btnAddAlignmentComponent,
+                btnRemoveSelectedRow,
+                chkAutoRebuild
+            });
             return pnlSubActions;
         }
     }

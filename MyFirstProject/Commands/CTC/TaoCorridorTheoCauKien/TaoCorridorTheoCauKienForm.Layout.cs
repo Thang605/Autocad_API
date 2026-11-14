@@ -6,7 +6,6 @@ using MyFirstProject.Shared.UI;
 
 using ColumnStyle = System.Windows.Forms.ColumnStyle;
 using FlowDirection = System.Windows.Forms.FlowDirection;
-using Font = System.Drawing.Font;
 using Size = System.Drawing.Size;
 using WinFormsButton = System.Windows.Forms.Button;
 using WinFormsComboBox = System.Windows.Forms.ComboBox;
@@ -17,17 +16,17 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 {
     public partial class TaoCorridorTheoCauKienForm
     {
-        private static readonly Font EmptyNoticeFont = new Font("Segoe UI", 9.5F, FontStyle.Italic);
-        private static readonly Font FooterBoldFont = new Font("Segoe UI", 9.5F, FontStyle.Bold);
-
         private void BuildLayout()
         {
-            Text = "CTC_Tao_Corridor_Theo_Cau_Kien — Xây Dựng & Gộp Corridor Theo Cấu Kiện (Modular BIM)";
+            SuspendLayout();
+            Text = "CTC_Tao_Corridor_Theo_Cau_Kien — Quét FeatureLine Theo Site & Cập Nhật Corridor Tổng";
             Font = StandardFonts.Regular;
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.Sizable;
-            MinimumSize = new Size(1050, 620);
-            PersistentState.RestoreFormSize(this, _lastFormSize);
+            MinimizeBox = false;
+            MaximizeBox = true;
+            MinimumSize = new Size(1120, 680);
+            _toolTip = FormBuilder.CreateToolTip(this);
 
             FormClosing += (s, e) => SaveCurrentSettings();
 
@@ -49,16 +48,22 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             mainLayout.Controls.Add(BuildComponentsGroup(), 0, 2);
             mainLayout.Controls.Add(BuildFooterBar(), 0, 3);
 
+            Controls.Add(mainLayout);
             AcceptButton = btnExecute;
             CancelButton = btnCancel;
-            Controls.Add(mainLayout);
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            ResumeLayout(false);
+            PerformLayout();
+
+            PersistentState.RestoreFormSize(this, _lastFormSize);
         }
 
         private Control BuildHeaderBanner()
         {
             return new WinFormsLabel
             {
-                Text = "XÂY DỰNG & GỘP CORRIDOR THEO TỪNG CẤU KIỆN (LÒNG ĐƯỜNG, DẢI PHÂN CÁCH, VỈA HÈ, RÃNH, TALUY)",
+                Text = "QUÉT FEATURELINE THEO SITE — TẠO & CẬP NHẬT 1 CORRIDOR TỔNG (GIỮ NGUYÊN LÝ TRÌNH REGION ĐÃ CÓ)",
                 AutoSize = true,
                 Font = StandardFonts.Title,
                 ForeColor = Color.FromArgb(0, 70, 150),
@@ -71,7 +76,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         {
             var grpGeneral = new GroupBox
             {
-                Text = "1. Phương thức tổ chức / Gộp Corridor && Thông số mặc định",
+                Text = "1. Nguồn Site FeatureLine && Corridor Tổng Đích",
                 Dock = DockStyle.Fill,
                 AutoSize = true,
                 Padding = new Padding(10, 6, 10, 8),
@@ -90,108 +95,73 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             grp1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             grp1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            radSeparateCorridor = new RadioButton
-            {
-                Text = "Tách riêng mỗi Cấu kiện thành 1 Corridor độc lập (Mỗi dòng cấu kiện tạo 1 Corridor riêng)",
-                AutoSize = true,
-                Checked = false,
-                AutoCheck = false,
-                UseMnemonic = false,
-                Margin = new Padding(3, 2, 3, 2)
-            };
-            radSeparateCorridor.Click += (s, e) => SetBuildModeUI(CorridorComponentBuildMode.SeparateCorridorPerComponent);
-
-            grp1Layout.Controls.Add(radSeparateCorridor, 0, 0);
-            grp1Layout.Controls.Add(BuildMergeModeRow(), 0, 1);
+            grp1Layout.Controls.Add(BuildSiteSourceRow(), 0, 0);
+            grp1Layout.Controls.Add(BuildTargetCorridorRow(), 0, 1);
             grp1Layout.Controls.Add(BuildDefaultParamsRow(), 0, 2);
 
             grpGeneral.Controls.Add(grp1Layout);
             return grpGeneral;
         }
 
-        private Control BuildMergeModeRow()
+        private Control BuildSiteSourceRow()
         {
-            var pnlSingleRow = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true,
-                AutoSize = true,
-                Margin = new Padding(0, 2, 0, 4)
-            };
+            var pnl = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, AutoSize = true, Margin = new Padding(0, 0, 0, 4) };
 
-            radSingleOrExistingCorridor = new RadioButton
-            {
-                Text = "Gộp tất cả cấu kiện vào 1 Corridor (Tạo mới hoặc thêm vào Corridor có sẵn):",
-                AutoSize = true,
-                Checked = true,
-                AutoCheck = false,
-                Font = StandardFonts.Bold,
-                UseMnemonic = false,
-                Margin = new Padding(3, 6, 8, 2)
-            };
-            radSingleOrExistingCorridor.Click += (s, e) => SetBuildModeUI(CorridorComponentBuildMode.SingleOrExistingCorridor);
+            var lblSite = FormBuilder.Label("Site nguồn FeatureLine:", bold: true);
+            cmbSite = new WinFormsComboBox { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 6, 8, 2) };
+            PopulateSiteComboBox();
+            cmbSite.SelectedIndexChanged += (s, e) => OnSiteSelectionChanged();
 
-            cmbExistingCorridor = new WinFormsComboBox
-            {
-                Width = 240,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Margin = new Padding(0, 3, 8, 2)
-            };
-            cmbExistingCorridor.Items.Add("(Tạo 1 Corridor gộp mới từ Tiền tố)");
-            foreach (var c in _corridorList)
-                cmbExistingCorridor.Items.Add(c.Name);
-            cmbExistingCorridor.SelectedIndex = 0;
-            cmbExistingCorridor.SelectedIndexChanged += (s, e) =>
-            {
-                if (cmbExistingCorridor.SelectedIndex > 0)
-                    SetBuildModeUI(CorridorComponentBuildMode.SingleOrExistingCorridor);
-                else
-                    UpdateSummaryLabel();
-            };
+            btnPickSiteFromFl = FormBuilder.ActionButton("Pick FL lấy Site...", ButtonKind.Normal, 145);
+            btnPickSiteFromFl.Margin = new Padding(0, 0, 6, 2);
+            btnPickSiteFromFl.Click += BtnPickSiteFromFl_Click;
 
-            btnPickExistingCorridor = new WinFormsButton
-            {
-                Text = "Pick Corridor đích...",
-                Size = new Size(145, 34),
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 8, 2)
-            };
+            btnRescanSite = FormBuilder.ActionButton("🔄 Quét lại Site", ButtonKind.Normal, 130);
+            btnRescanSite.Margin = new Padding(0, 0, 12, 2);
+            btnRescanSite.Click += BtnRescanSite_Click;
+
+            chkRemoveDeletedBaselines = FormBuilder.CheckBox("Tự gỡ FL đã xóa khỏi Site khi Cập nhật", isChecked: true);
+            chkRemoveDeletedBaselines.Margin = new Padding(2, 10, 0, 2);
+            chkRemoveDeletedBaselines.CheckedChanged += (s, e) => UpdateSummaryLabel();
+
+            pnl.Controls.AddRange(new Control[] { lblSite, cmbSite, btnPickSiteFromFl, btnRescanSite, chkRemoveDeletedBaselines });
+            return pnl;
+        }
+
+        private Control BuildTargetCorridorRow()
+        {
+            var pnl = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
+
+            var lblTarget = FormBuilder.Label("Corridor tổng đích:", bold: true);
+            cmbExistingCorridor = new WinFormsComboBox { Width = 250, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 6, 8, 2) };
+            PopulateCorridorComboBox();
+            cmbExistingCorridor.SelectedIndexChanged += (s, e) => OnTargetCorridorSelectionChanged();
+
+            var lblName = FormBuilder.Label("Tên mới:");
+            lblName.Margin = new Padding(0, 9, 4, 2);
+            txtCorridorName = new WinFormsTextBox { Text = "COR_Tong", Width = 155, Margin = new Padding(0, 6, 8, 2) };
+            txtCorridorName.TextChanged += (s, e) => UpdateSummaryLabel();
+
+            btnPickExistingCorridor = FormBuilder.ActionButton("Pick Corridor...", ButtonKind.Normal, 130);
+            btnPickExistingCorridor.Margin = new Padding(0, 0, 6, 2);
             btnPickExistingCorridor.Click += BtnPickExistingCorridor_Click;
 
-            btnMergeExistingCorridors = new WinFormsButton
-            {
-                Text = "Gộp các Corridor có sẵn...",
-                Size = new Size(185, 34),
-                BackColor = Color.FromArgb(255, 244, 214),
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 8, 2)
-            };
+            btnMergeExistingCorridors = FormBuilder.ActionButton("Gộp thêm Corridor...", ButtonKind.Normal, 155);
+            btnMergeExistingCorridors.BackColor = Color.FromArgb(255, 244, 214);
+            btnMergeExistingCorridors.UseVisualStyleBackColor = false;
+            btnMergeExistingCorridors.Margin = new Padding(0, 0, 8, 2);
             btnMergeExistingCorridors.Click += BtnMergeExistingCorridors_Click;
 
-            chkDeleteMergedSourceCorridors = new CheckBox
-            {
-                Text = "Xóa Corridor nguồn sau khi gộp",
-                AutoSize = true,
-                Checked = true,
-                UseMnemonic = false,
-                Margin = new Padding(2, 7, 0, 2)
-            };
+            chkDeleteMergedSourceCorridors = FormBuilder.CheckBox("Xóa Corridor nguồn khi gộp", isChecked: true);
+            chkDeleteMergedSourceCorridors.Margin = new Padding(2, 10, 0, 2);
 
-            pnlSingleRow.Controls.AddRange(new Control[]
-            {
-                radSingleOrExistingCorridor,
-                cmbExistingCorridor,
-                btnPickExistingCorridor,
-                btnMergeExistingCorridors,
-                chkDeleteMergedSourceCorridors
-            });
-            return pnlSingleRow;
+            pnl.Controls.AddRange(new Control[] { lblTarget, cmbExistingCorridor, lblName, txtCorridorName, btnPickExistingCorridor, btnMergeExistingCorridors, chkDeleteMergedSourceCorridors });
+            return pnl;
         }
 
         private Control BuildDefaultParamsRow()
         {
-            var pnlParamsRow = new FlowLayoutPanel
+            var pnl = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
@@ -200,37 +170,62 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 Margin = new Padding(0, 2, 0, 0)
             };
 
-            var lblPrefix = new WinFormsLabel { Text = "Tên / Tiền tố Corridor:", AutoSize = true, UseMnemonic = false, Margin = new Padding(3, 6, 4, 2) };
-            txtCorridorPrefix = new WinFormsTextBox { Text = "COR_", Width = 105, Margin = new Padding(0, 3, 14, 2) };
-            txtCorridorPrefix.TextChanged += (s, e) => UpdateSummaryLabel();
+            var lblDefAsm = FormBuilder.Label("Mặt cắt mặc định (FL mới):");
+            cmbDefaultAssembly = new WinFormsComboBox
+            {
+                Width = 190,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 4, 12, 2)
+            };
+            foreach (var asm in _assemblyList)
+                cmbDefaultAssembly.Items.Add(asm.Name);
+            if (cmbDefaultAssembly.Items.Count > 0)
+                cmbDefaultAssembly.SelectedIndex = 0;
 
-            var lblCodeSet = new WinFormsLabel { Text = "Code Set Style:", AutoSize = true, UseMnemonic = false, Margin = new Padding(0, 6, 4, 2) };
-            cmbCodeSetStyle = new WinFormsComboBox { Width = 175, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 3, 14, 2) };
+            var lblDefSurface = FormBuilder.Label("Bề mặt EG mặc định:");
+            cmbDefaultSurface = new WinFormsComboBox
+            {
+                Width = 155,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 4, 12, 2)
+            };
+            cmbDefaultSurface.Items.Add("(Không gán Surface)");
+            foreach (var s in _surfaceList)
+                cmbDefaultSurface.Items.Add(s.Name);
+            int egIdx = _surfaceList.FindIndex(x =>
+                x.Name.Contains("EG", StringComparison.OrdinalIgnoreCase) ||
+                x.Name.Contains("TN", StringComparison.OrdinalIgnoreCase));
+            cmbDefaultSurface.SelectedIndex = egIdx >= 0 ? egIdx + 1 : (_surfaceList.Count > 0 ? 1 : 0);
+
+            var lblCodeSet = FormBuilder.Label("Code Set:");
+            cmbCodeSetStyle = new WinFormsComboBox
+            {
+                Width = 140,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 4, 12, 2)
+            };
             foreach (var css in _codeSetStyleList)
                 cmbCodeSetStyle.Items.Add(css.Name);
             if (cmbCodeSetStyle.Items.Count > 0)
                 cmbCodeSetStyle.SelectedIndex = 0;
 
-            var lblDefSurface = new WinFormsLabel { Text = "Bề mặt tự nhiên (EG):", AutoSize = true, UseMnemonic = false, Margin = new Padding(0, 6, 4, 2) };
-            cmbDefaultSurface = new WinFormsComboBox { Width = 155, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 3, 14, 2) };
-            cmbDefaultSurface.Items.Add("(Không gán Surface)");
-            foreach (var s in _surfaceList)
-                cmbDefaultSurface.Items.Add(s.Name);
-            int egIdx = _surfaceList.FindIndex(x => x.Name.Contains("EG", StringComparison.OrdinalIgnoreCase) || x.Name.Contains("TN", StringComparison.OrdinalIgnoreCase));
-            cmbDefaultSurface.SelectedIndex = egIdx >= 0 ? egIdx + 1 : (_surfaceList.Count > 0 ? 1 : 0);
+            var lblFreqT = FormBuilder.Label("Bước cọc Thẳng/Cong (m):");
+            numFreqTangent = FormBuilder.Number(1m, 200m, 10m, 1, 1m);
+            numFreqTangent.Width = 58;
+            numFreqTangent.Margin = new Padding(0, 4, 4, 2);
 
-            var lblFreqT = new WinFormsLabel { Text = "Bước cọc Thẳng / Cong (m):", AutoSize = true, UseMnemonic = false, Margin = new Padding(0, 6, 4, 2) };
-            numFreqTangent = new NumericUpDown { Width = 60, Minimum = 1m, Maximum = 200m, DecimalPlaces = 1, Value = 10m, Margin = new Padding(0, 3, 4, 2) };
-            numFreqCurve = new NumericUpDown { Width = 60, Minimum = 0.5m, Maximum = 200m, DecimalPlaces = 1, Value = 5m, Margin = new Padding(0, 3, 0, 2) };
+            numFreqCurve = FormBuilder.Number(0.5m, 200m, 5m, 1, 0.5m);
+            numFreqCurve.Width = 58;
+            numFreqCurve.Margin = new Padding(0, 4, 0, 2);
 
-            pnlParamsRow.Controls.AddRange(new Control[]
+            pnl.Controls.AddRange(new Control[]
             {
-                lblPrefix, txtCorridorPrefix,
-                lblCodeSet, cmbCodeSetStyle,
+                lblDefAsm, cmbDefaultAssembly,
                 lblDefSurface, cmbDefaultSurface,
+                lblCodeSet, cmbCodeSetStyle,
                 lblFreqT, numFreqTangent, numFreqCurve
             });
-            return pnlParamsRow;
+            return pnl;
         }
 
         private Control BuildFooterBar()
@@ -241,7 +236,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 ColumnCount = 3,
                 RowCount = 1,
                 AutoSize = true,
-                Margin = new Padding(0, 2, 0, 0)
+                Margin = new Padding(0, 4, 0, 0)
             };
             pnlFooter.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             pnlFooter.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -251,33 +246,19 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             {
                 Text = "Sẵn sàng.",
                 AutoSize = true,
-                Font = FooterBoldFont,
+                Font = StandardFonts.Bold,
                 ForeColor = Color.FromArgb(0, 100, 60),
                 UseMnemonic = false,
                 Anchor = AnchorStyles.Left,
-                Margin = new Padding(2, 8, 8, 0)
+                Margin = new Padding(2, 10, 8, 0)
             };
 
-            btnExecute = new WinFormsButton
-            {
-                Text = "Xây Dựng / Gộp Corridor",
-                Size = new Size(255, 42),
-                BackColor = Color.FromArgb(0, 120, 215),
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
-                Font = FooterBoldFont,
-                UseMnemonic = false,
-                Margin = new Padding(0, 0, 8, 0)
-            };
+            btnExecute = FormBuilder.ActionButton("🏗 Tạo Corridor Tổng", ButtonKind.Primary, 235);
+            btnExecute.Margin = new Padding(0, 0, 8, 0);
             btnExecute.Click += BtnExecute_Click;
 
-            btnCancel = new WinFormsButton
-            {
-                Text = "Đóng",
-                Size = new Size(110, 42),
-                UseMnemonic = false,
-                Margin = new Padding(0)
-            };
+            btnCancel = FormBuilder.ActionButton("Đóng", ButtonKind.Normal, 110);
+            btnCancel.Margin = new Padding(0);
             btnCancel.Click += (s, e) =>
             {
                 FormAccepted = false;

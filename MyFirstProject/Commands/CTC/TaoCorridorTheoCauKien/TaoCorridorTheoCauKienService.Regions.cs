@@ -26,7 +26,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 ? Math.Min(blEnd, row.EndStation)
                 : blEnd;
 
-            string regName = GetUniqueRegionName(baseline, $"RG_{row.ComponentName}_{entityDisplayName}_{regStart:F1}_{regEnd:F1}");
+            string regName = GetUniqueRegionName(baseline, $"RG_{entityDisplayName}_{regStart:F1}_{regEnd:F1}");
             BaselineRegion region = baseline.BaselineRegions.Add(regName, row.AssemblyId, regStart, regEnd);
 
             ApplyRegionFrequency(
@@ -34,74 +34,81 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 row.FrequencyTangent > 0 ? row.FrequencyTangent : options.DefaultFreqTangent,
                 row.FrequencyCurve > 0 ? row.FrequencyCurve : options.DefaultFreqCurve);
 
-            ObjectId surfaceTargetId = !row.TargetSurfaceId.IsNull ? row.TargetSurfaceId : options.DefaultTargetSurfaceId;
+            ObjectId surfaceTargetId = ResolveDesiredSurfaceId(options, row);
             ApplyComponentTargets(region, surfaceTargetId, row.OffsetElevationTargetIds, ed);
 
-            ed.WriteMessage($"\n  ✓ Đã gộp vào Corridor '{targetCorridor.Name}': Baseline '{baseline.Name}' & Region '{region.Name}' ({regStart:F2}m → {regEnd:F2}m)");
+            ed.WriteMessage($"\n  [+] Mới thêm '{baseline.Name}' → Region '{region.Name}' ({regStart:F2}m → {regEnd:F2}m) [Assembly: {row.AssemblyName}]");
         }
 
-        private static void UpdateExistingRegionSettings(
+        /// <summary>
+        /// Cập nhật Region đã có sẵn trên Corridor tổng: TUYỆT ĐỐI KHÔNG chỉnh sửa StartStation / EndStation.
+        /// Chỉ cập nhật Assembly / Target / Bước cọc khi người dùng chủ động thay đổi trên bảng.
+        /// </summary>
+        private static void UpdatePreExistingBaselineRegions(
             Editor ed,
             TaoCorridorTheoCauKienOptions options,
             CorridorComponentRowItem row,
-            Baseline matchedBl,
-            BaselineRegion matchedRg)
+            List<Baseline> existingBaselines,
+            ref int keptExistingRegions)
         {
-            ApplyRegionFrequency(
-                matchedRg,
-                row.FrequencyTangent > 0 ? row.FrequencyTangent : options.DefaultFreqTangent,
-                row.FrequencyCurve > 0 ? row.FrequencyCurve : options.DefaultFreqCurve);
+            bool anyUserEdit = row.AssemblyModifiedByUser ||
+                               row.SurfaceTargetModifiedByUser ||
+                               row.OffsetTargetsModifiedByUser ||
+                               row.FrequencyModifiedByUser;
 
-            ObjectId surfTargetId = !row.TargetSurfaceId.IsNull ? row.TargetSurfaceId : options.DefaultTargetSurfaceId;
-            ApplyComponentTargets(matchedRg, surfTargetId, row.OffsetElevationTargetIds, ed);
-            ed.WriteMessage($"\n  ✓ Đã cập nhật Region hiện có '{matchedRg.Name}' trên Baseline '{matchedBl.Name}'");
-        }
-
-        private static bool TryFindExistingMatchingRegion(
-            Corridor corridor,
-            bool isFeatureLine,
-            ObjectId primaryId,
-            ObjectId profileId,
-            ObjectId assemblyId,
-            double regStart,
-            double regEnd,
-            out Baseline? matchedBaseline,
-            out BaselineRegion? matchedRegion)
-        {
-            matchedBaseline = null;
-            matchedRegion = null;
-
-            foreach (Baseline bl in corridor.Baselines)
+            foreach (Baseline bl in existingBaselines)
             {
-                bool blIsFl = bl.IsFeatureLineBased();
-                if (blIsFl != isFeatureLine) continue;
-
-                if (isFeatureLine)
-                {
-                    if (bl.FeatureLineId != primaryId) continue;
-                }
-                else
-                {
-                    if (bl.AlignmentId != primaryId || bl.ProfileId != profileId) continue;
-                }
-
                 foreach (BaselineRegion rg in bl.BaselineRegions)
                 {
-                    if (rg.AssemblyId == assemblyId &&
-                        Math.Abs(rg.StartStation - regStart) < 0.05 &&
-                        Math.Abs(rg.EndStation - regEnd) < 0.05)
+                    keptExistingRegions++;
+                    if (!anyUserEdit)
                     {
-                        matchedBaseline = bl;
-                        matchedRegion = rg;
-                        return true;
+                        ed.WriteMessage($"\n  [=] Giữ nguyên hoàn toàn Region '{rg.Name}' ({rg.StartStation:F2}m → {rg.EndStation:F2}m).");
+                        continue;
                     }
+
+                    if (row.AssemblyModifiedByUser && bl.BaselineRegions.Count == 1 &&
+                        !row.AssemblyId.IsNull && rg.AssemblyId != row.AssemblyId)
+                    {
+                        try
+                        {
+                            rg.AssemblyId = row.AssemblyId;
+                            ed.WriteMessage($"\n  [~] Đổi Mặt cắt Region '{rg.Name}' → '{row.AssemblyName}' (giữ nguyên lý trình {rg.StartStation:F2}→{rg.EndStation:F2}m).");
+                        }
+                        catch (Exception exAsm)
+                        {
+                            ed.WriteMessage($"\n  ⚠ Không đổi được Assembly cho '{rg.Name}': {exAsm.Message}");
+                        }
+                    }
+
+                    if (row.FrequencyModifiedByUser)
+                    {
+                        ApplyRegionFrequency(
+                            rg,
+                            row.FrequencyTangent > 0 ? row.FrequencyTangent : options.DefaultFreqTangent,
+                            row.FrequencyCurve > 0 ? row.FrequencyCurve : options.DefaultFreqCurve);
+                    }
+
+                    if (row.SurfaceTargetModifiedByUser || row.OffsetTargetsModifiedByUser)
+                    {
+                        ApplySelectiveTargetsOnExistingRegion(rg, options, row, ed);
+                    }
+
+                    ed.WriteMessage($"\n  [=] Giữ nguyên lý trình Region '{rg.Name}' ({rg.StartStation:F2}m → {rg.EndStation:F2}m).");
                 }
             }
-
-            return false;
         }
 
-        private static Baseline? FindReusableBaseline(
+        private static ObjectId ResolveDesiredSurfaceId(TaoCorridorTheoCauKienOptions options, CorridorComponentRowItem row)
+        {
+            if (row.DisableSurfaceTarget)
+                return ObjectId.Null;
+            if (row.UseDefaultSurface)
+                return options.DefaultTargetSurfaceId;
+            return !row.TargetSurfaceId.IsNull ? row.TargetSurfaceId : options.DefaultTargetSurfaceId;
+        }
+
+        private static Baseline? FindNonOverlappingOrEmptyBaseline(
             Corridor corridor,
             bool isFeatureLine,
             ObjectId primaryId,
@@ -111,8 +118,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
         {
             foreach (Baseline bl in corridor.Baselines)
             {
-                bool blIsFl = bl.IsFeatureLineBased();
-                if (blIsFl != isFeatureLine) continue;
+                if (bl.IsFeatureLineBased() != isFeatureLine) continue;
 
                 if (isFeatureLine)
                 {
@@ -122,6 +128,9 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 {
                     if (bl.AlignmentId != primaryId || bl.ProfileId != profileId) continue;
                 }
+
+                if (bl.BaselineRegions.Count == 0)
+                    return bl;
 
                 bool overlaps = false;
                 foreach (BaselineRegion rg in bl.BaselineRegions)
@@ -146,13 +155,9 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             foreach (BaselineRegion rg in baseline.BaselineRegions)
                 existingNames.Add(rg.Name);
 
-            if (!existingNames.Contains(baseName))
-                return baseName;
-
+            if (!existingNames.Contains(baseName)) return baseName;
             int index = 2;
-            while (existingNames.Contains($"{baseName}_{index}"))
-                index++;
-
+            while (existingNames.Contains($"{baseName}_{index}")) index++;
             return $"{baseName}_{index}";
         }
 
@@ -186,28 +191,55 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             bool hasOffsets = offsetElevationIds != null && offsetElevationIds.Count > 0;
             if (!hasSurface && !hasOffsets) return;
 
+            ApplyTargetsCore(region, updateSurface: hasSurface, surfaceId: surfaceId, updateOffsets: hasOffsets, offsetElevationIds: offsetElevationIds, ed: ed);
+        }
+
+        private static void ApplySelectiveTargetsOnExistingRegion(
+            BaselineRegion region,
+            TaoCorridorTheoCauKienOptions options,
+            CorridorComponentRowItem row,
+            Editor ed)
+        {
+            ObjectId desiredSurfaceId = ResolveDesiredSurfaceId(options, row);
+            ApplyTargetsCore(
+                region,
+                updateSurface: row.SurfaceTargetModifiedByUser,
+                surfaceId: desiredSurfaceId,
+                updateOffsets: row.OffsetTargetsModifiedByUser,
+                offsetElevationIds: row.OffsetElevationTargetIds,
+                ed: ed);
+        }
+
+        private static void ApplyTargetsCore(
+            BaselineRegion region,
+            bool updateSurface,
+            ObjectId surfaceId,
+            bool updateOffsets,
+            List<ObjectId>? offsetElevationIds,
+            Editor ed)
+        {
             try
             {
                 SubassemblyTargetInfoCollection targets = region.GetTargets();
                 if (targets == null || targets.Count == 0) return;
 
                 bool modified = false;
-
                 foreach (SubassemblyTargetInfo ti in targets)
                 {
                     string targetTypeStr = ti.TargetType.ToString();
 
-                    if (hasSurface && targetTypeStr.Contains("Surface", StringComparison.OrdinalIgnoreCase))
+                    if (updateSurface && targetTypeStr.Contains("Surface", StringComparison.OrdinalIgnoreCase))
                     {
                         try
                         {
-                            ti.TargetIds = new ObjectIdCollection { surfaceId };
+                            bool validSurf = !surfaceId.IsNull && surfaceId.IsValid && !surfaceId.IsErased;
+                            ti.TargetIds = validSurf ? new ObjectIdCollection { surfaceId } : new ObjectIdCollection();
                             ti.TargetToOption = SubassemblyTargetToOption.Nearest;
                             modified = true;
                         }
                         catch { }
                     }
-                    else if (hasOffsets && offsetElevationIds != null &&
+                    else if (updateOffsets &&
                              (targetTypeStr.Contains("Offset", StringComparison.OrdinalIgnoreCase) ||
                               targetTypeStr.Contains("Width", StringComparison.OrdinalIgnoreCase) ||
                               targetTypeStr.Contains("Elevation", StringComparison.OrdinalIgnoreCase)))
@@ -215,26 +247,24 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                         try
                         {
                             var col = new ObjectIdCollection();
-                            foreach (ObjectId id in offsetElevationIds)
+                            if (offsetElevationIds != null)
                             {
-                                if (!id.IsNull && id.IsValid && !id.IsErased)
-                                    col.Add(id);
+                                foreach (ObjectId id in offsetElevationIds)
+                                {
+                                    if (!id.IsNull && id.IsValid && !id.IsErased)
+                                        col.Add(id);
+                                }
                             }
-                            if (col.Count > 0)
-                            {
-                                ti.TargetIds = col;
-                                ti.TargetToOption = SubassemblyTargetToOption.Nearest;
-                                modified = true;
-                            }
+                            ti.TargetIds = col;
+                            ti.TargetToOption = SubassemblyTargetToOption.Nearest;
+                            modified = true;
                         }
                         catch { }
                     }
                 }
 
                 if (modified)
-                {
                     region.SetTargets(targets);
-                }
             }
             catch (Exception ex)
             {

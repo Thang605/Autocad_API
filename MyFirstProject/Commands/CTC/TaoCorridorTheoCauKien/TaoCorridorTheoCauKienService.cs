@@ -11,7 +11,8 @@ using Exception = System.Exception;
 namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 {
     /// <summary>
-    /// Xử lý CAD / Civil 3D cho lệnh CTC_Tao_Corridor_Theo_Cau_Kien.
+    /// Xử lý đồng bộ danh sách FeatureLine theo Site vào 1 Corridor tổng,
+    /// giữ nguyên tuyệt đối lý trình của các Region đã có sẵn.
     /// </summary>
     internal static partial class TaoCorridorTheoCauKienService
     {
@@ -22,54 +23,49 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 try
                 {
                     CivilDocument cdoc = CivilDocument.GetCivilDocument(db);
-                    var touchedCorridors = new HashSet<ObjectId>();
-
-                    int totalComponentsProcessed = 0;
-                    int totalBaselinesAdded = 0;
-                    int totalRegionsAdded = 0;
-
-                    Corridor? sharedCorridor = null;
-                    if (options.BuildMode == CorridorComponentBuildMode.SingleOrExistingCorridor)
+                    Corridor? targetCorridor = ResolveTargetCorridor(tr, cdoc, options, ed);
+                    if (targetCorridor == null)
                     {
-                        sharedCorridor = ResolveSharedCorridor(tr, cdoc, options, ed);
-                        if (sharedCorridor == null)
-                        {
-                            ed.WriteMessage("\n❌ Không thể khởi tạo hoặc mở Corridor đích để gộp.");
-                            tr.Abort();
-                            return;
-                        }
-                        touchedCorridors.Add(sharedCorridor.ObjectId);
+                        ed.WriteMessage("\n❌ Không thể khởi tạo hoặc mở Corridor tổng đích.");
+                        tr.Abort();
+                        return;
                     }
+
+                    TryReadCorridorRecipe(targetCorridor, tr, out SiteCorridorRecipe? previousRecipe);
+                    var runtimeClonedMap = CloneMapFromRecipe(previousRecipe);
+
+                    int removedBaselines = 0;
+                    if (options.RemoveDeletedBaselines)
+                    {
+                        removedBaselines = RemoveStaleManagedBaselines(
+                            tr, db, ed, targetCorridor, options, previousRecipe, runtimeClonedMap);
+                    }
+
+                    var snapshot = CaptureExistingBaselineSnapshot(db, targetCorridor, runtimeClonedMap);
+
+                    int addedBaselines = 0;
+                    int addedRegions = 0;
+                    int keptExistingRegions = 0;
+                    var handledPreExisting = new HashSet<ObjectId>();
 
                     foreach (CorridorComponentRowItem row in options.ComponentRows)
                     {
-                        int compRegions = ProcessComponentRow(
-                            tr,
-                            db,
-                            cdoc,
-                            ed,
-                            options,
-                            row,
-                            sharedCorridor,
-                            touchedCorridors,
-                            ref totalBaselinesAdded,
-                            ref totalRegionsAdded);
-
-                        if (compRegions > 0)
-                            totalComponentsProcessed++;
+                        ProcessComponentRow(
+                            tr, db, ed, options, row, targetCorridor,
+                            snapshot, handledPreExisting, runtimeClonedMap,
+                            ref addedBaselines, ref addedRegions, ref keptExistingRegions);
                     }
 
-                    DeleteMergedSourceCorridors(tr, ed, options, sharedCorridor, totalComponentsProcessed);
-                    RebuildTouchedCorridors(tr, ed, options, touchedCorridors);
+                    DeleteMergedSourceCorridors(tr, ed, options, targetCorridor, addedRegions + keptExistingRegions);
 
+                    var updatedRecipe = BuildUpdatedRecipe(options, previousRecipe, runtimeClonedMap);
+                    SaveCorridorRecipe(targetCorridor, tr, updatedRecipe);
+
+                    RebuildCorridorIfNeeded(ed, options, targetCorridor);
                     tr.Commit();
 
                     WriteCompletionSummary(
-                        ed,
-                        totalComponentsProcessed,
-                        touchedCorridors.Count,
-                        totalBaselinesAdded,
-                        totalRegionsAdded);
+                        ed, targetCorridor.Name, addedBaselines, addedRegions, keptExistingRegions, removedBaselines);
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception aEx)
                 {
@@ -84,97 +80,13 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             }
         }
 
-        private static Corridor? ResolveSharedCorridor(
-            Transaction tr,
-            CivilDocument cdoc,
-            TaoCorridorTheoCauKienOptions options,
-            Editor ed)
+        private static Corridor? ResolveTargetCorridor(
+            Transaction tr, CivilDocument cdoc, TaoCorridorTheoCauKienOptions options, Editor ed)
         {
-            string prefix = string.IsNullOrWhiteSpace(options.CorridorNamePrefix)
-                ? "COR_"
-                : options.CorridorNamePrefix.Trim();
-            string mergedName = prefix.EndsWith("_") ? $"{prefix}Gop_CauKien" : prefix;
+            if (!options.ExistingCorridorId.IsNull && options.ExistingCorridorId.IsValid && !options.ExistingCorridorId.IsErased)
+                return tr.GetObject(options.ExistingCorridorId, OpenMode.ForWrite) as Corridor;
 
-            return GetOrCreateCorridor(
-                tr,
-                cdoc,
-                options.ExistingCorridorId,
-                mergedName,
-                options.SelectedCodeSetStyleId,
-                ed);
-        }
-
-        private static int ProcessComponentRow(
-            Transaction tr,
-            Database db,
-            CivilDocument cdoc,
-            Editor ed,
-            TaoCorridorTheoCauKienOptions options,
-            CorridorComponentRowItem row,
-            Corridor? sharedCorridor,
-            HashSet<ObjectId> touchedCorridors,
-            ref int totalBaselinesAdded,
-            ref int totalRegionsAdded)
-        {
-            if (!row.IsEnabled || row.BaselineEntityIds.Count == 0 || row.AssemblyId.IsNull)
-                return 0;
-
-            Corridor? targetCorridor = sharedCorridor;
-            if (options.BuildMode == CorridorComponentBuildMode.SeparateCorridorPerComponent)
-            {
-                string compCorrName = BuildSafeCorridorName(options.CorridorNamePrefix, row.ComponentName);
-                targetCorridor = GetOrCreateCorridor(
-                    tr,
-                    cdoc,
-                    ObjectId.Null,
-                    compCorrName,
-                    options.SelectedCodeSetStyleId,
-                    ed);
-
-                if (targetCorridor == null)
-                    return 0;
-
-                touchedCorridors.Add(targetCorridor.ObjectId);
-            }
-
-            if (targetCorridor == null)
-                return 0;
-
-            ed.WriteMessage($"\n▶ Cấu kiện [{row.ComponentCategory}] '{row.ComponentName}' → Corridor '{targetCorridor.Name}' (Assembly: '{row.AssemblyName}'):");
-
-            int compRegions = 0;
-            foreach (ObjectId entityId in row.BaselineEntityIds)
-            {
-                if (ProcessSingleBaselineEntity(
-                    tr,
-                    db,
-                    ed,
-                    options,
-                    row,
-                    targetCorridor,
-                    entityId,
-                    ref totalBaselinesAdded,
-                    ref totalRegionsAdded))
-                {
-                    compRegions++;
-                }
-            }
-
-            return compRegions;
-        }
-
-        private static Corridor? GetOrCreateCorridor(
-            Transaction tr,
-            CivilDocument cdoc,
-            ObjectId existingCorridorId,
-            string desiredName,
-            ObjectId codeSetStyleId,
-            Editor ed)
-        {
-            if (!existingCorridorId.IsNull && existingCorridorId.IsValid && !existingCorridorId.IsErased)
-            {
-                return tr.GetObject(existingCorridorId, OpenMode.ForWrite) as Corridor;
-            }
+            string desiredName = string.IsNullOrWhiteSpace(options.CorridorName) ? "COR_Tong" : options.CorridorName.Trim();
 
             foreach (ObjectId id in cdoc.CorridorCollection)
             {
@@ -188,43 +100,134 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 
             ObjectId newId = cdoc.CorridorCollection.Add(desiredName);
             var newCorridor = tr.GetObject(newId, OpenMode.ForWrite) as Corridor;
-            if (newCorridor != null && !codeSetStyleId.IsNull && codeSetStyleId.IsValid)
+            if (newCorridor != null && !options.SelectedCodeSetStyleId.IsNull && options.SelectedCodeSetStyleId.IsValid)
             {
-                try { newCorridor.CodeSetStyleId = codeSetStyleId; } catch { }
+                try { newCorridor.CodeSetStyleId = options.SelectedCodeSetStyleId; } catch { }
             }
 
-            ed.WriteMessage($"\n[+] Đã khởi tạo Corridor mới: '{desiredName}'");
+            ed.WriteMessage($"\n[+] Đã khởi tạo Corridor tổng mới: '{desiredName}'");
             return newCorridor;
         }
 
-        private static string BuildSafeCorridorName(string prefix, string componentName)
+        private static Dictionary<string, string> CloneMapFromRecipe(SiteCorridorRecipe? recipe)
         {
-            string cleanPrefix = string.IsNullOrWhiteSpace(prefix) ? "COR_" : prefix.Trim();
-            string cleanComp = string.IsNullOrWhiteSpace(componentName) ? "CauKien" : componentName.Trim();
-            if (cleanComp.StartsWith(cleanPrefix, StringComparison.OrdinalIgnoreCase))
-                return cleanComp;
-            return $"{cleanPrefix}{cleanComp}";
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (recipe?.ClonedFeatureLineMap == null) return map;
+            foreach (var kv in recipe.ClonedFeatureLineMap)
+                map[kv.Key] = kv.Value;
+            return map;
+        }
+
+        private static int RemoveStaleManagedBaselines(
+            Transaction tr,
+            Database db,
+            Editor ed,
+            Corridor targetCorridor,
+            TaoCorridorTheoCauKienOptions options,
+            SiteCorridorRecipe? previousRecipe,
+            Dictionary<string, string> clonedMap)
+        {
+            var activeFlIds = CollectActiveFeatureLineIds(db, options, clonedMap);
+            var managedIds = CollectManagedFeatureLineIds(db, previousRecipe, clonedMap);
+
+            int removedCount = 0;
+            for (int i = targetCorridor.Baselines.Count - 1; i >= 0; i--)
+            {
+                Baseline bl = targetCorridor.Baselines[i];
+                if (!bl.IsFeatureLineBased()) continue;
+
+                ObjectId flId = bl.FeatureLineId;
+                bool isErased = flId.IsNull || !flId.IsValid || flId.IsErased;
+                bool shouldRemove = isErased;
+
+                if (!shouldRemove && !activeFlIds.Contains(flId))
+                {
+                    if (managedIds.Contains(flId) || BelongsToSelectedSite(tr, flId, options))
+                        shouldRemove = true;
+                }
+
+                if (!shouldRemove) continue;
+
+                string blName = bl.Name;
+                try
+                {
+                    targetCorridor.Baselines.Remove(bl);
+                    removedCount++;
+                    string reason = isErased ? "FL đã bị xóa khỏi bản vẽ" : "không còn trong danh sách bật của Site";
+                    ed.WriteMessage($"\n  [-] Đã gỡ Baseline '{blName}' ({reason}).");
+                }
+                catch (Exception ex)
+                {
+                    ed.WriteMessage($"\n  ⚠ Không thể gỡ Baseline '{blName}': {ex.Message}");
+                }
+            }
+
+            return removedCount;
+        }
+
+        private static HashSet<ObjectId> CollectActiveFeatureLineIds(
+            Database db, TaoCorridorTheoCauKienOptions options, Dictionary<string, string> clonedMap)
+        {
+            var set = new HashSet<ObjectId>();
+            foreach (var row in options.ComponentRows)
+            {
+                if (!row.IsEnabled || row.SourceType != ComponentBaselineSourceType.FeatureLine) continue;
+                foreach (ObjectId flId in row.BaselineEntityIds)
+                {
+                    if (flId.IsNull || !flId.IsValid || flId.IsErased) continue;
+                    set.Add(flId);
+
+                    string hex = GetHandleHex(flId);
+                    if (!string.IsNullOrEmpty(hex) && clonedMap.TryGetValue(hex, out string? clonedHex) &&
+                        TryResolveHandle(db, clonedHex, out ObjectId clonedId))
+                    {
+                        set.Add(clonedId);
+                    }
+                }
+            }
+            return set;
+        }
+
+        private static HashSet<ObjectId> CollectManagedFeatureLineIds(
+            Database db, SiteCorridorRecipe? recipe, Dictionary<string, string> clonedMap)
+        {
+            var set = new HashSet<ObjectId>();
+            if (recipe?.ManagedFeatureLineHandles == null) return set;
+
+            foreach (string handleHex in recipe.ManagedFeatureLineHandles)
+            {
+                if (TryResolveHandle(db, handleHex, out ObjectId flId))
+                    set.Add(flId);
+
+                if (clonedMap.TryGetValue(handleHex, out string? clonedHex) &&
+                    TryResolveHandle(db, clonedHex, out ObjectId clonedId))
+                {
+                    set.Add(clonedId);
+                }
+            }
+            return set;
+        }
+
+        private static bool BelongsToSelectedSite(Transaction tr, ObjectId flId, TaoCorridorTheoCauKienOptions options)
+        {
+            if (!options.HasSiteSelection) return false;
+            if (tr.GetObject(flId, OpenMode.ForRead) is not FeatureLine fl) return false;
+            return options.IsSiteLessMode ? fl.SiteId.IsNull : fl.SiteId == options.SelectedSiteId;
         }
 
         private static void DeleteMergedSourceCorridors(
             Transaction tr,
             Editor ed,
             TaoCorridorTheoCauKienOptions options,
-            Corridor? sharedCorridor,
-            int totalComponentsProcessed)
+            Corridor targetCorridor,
+            int totalProcessed)
         {
-            if (options.BuildMode != CorridorComponentBuildMode.SingleOrExistingCorridor ||
-                !options.DeleteMergedSourceCorridors ||
-                sharedCorridor == null ||
-                options.SourceCorridorsToMerge.Count == 0 ||
-                totalComponentsProcessed <= 0)
-            {
+            if (!options.DeleteMergedSourceCorridors || options.SourceCorridorsToMerge.Count == 0 || totalProcessed <= 0)
                 return;
-            }
 
             foreach (ObjectId srcCorrId in options.SourceCorridorsToMerge)
             {
-                if (srcCorrId.IsNull || !srcCorrId.IsValid || srcCorrId.IsErased || srcCorrId == sharedCorridor.ObjectId)
+                if (srcCorrId.IsNull || !srcCorrId.IsValid || srcCorrId.IsErased || srcCorrId == targetCorridor.ObjectId)
                     continue;
 
                 try
@@ -233,59 +236,48 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                     {
                         string oldName = srcCorr.Name;
                         srcCorr.Erase();
-                        ed.WriteMessage($"\n  🗑 Đã xóa Corridor nguồn '{oldName}' sau khi gộp vào '{sharedCorridor.Name}'.");
+                        ed.WriteMessage($"\n  🗑 Đã xóa Corridor nguồn '{oldName}' sau khi gộp vào '{targetCorridor.Name}'.");
                     }
                 }
-                catch (Exception exDel)
+                catch (Exception ex)
                 {
-                    ed.WriteMessage($"\n  ⚠ Không thể xóa Corridor nguồn ({srcCorrId.Handle}): {exDel.Message}");
+                    ed.WriteMessage($"\n  ⚠ Không thể xóa Corridor nguồn ({srcCorrId.Handle}): {ex.Message}");
                 }
             }
         }
 
-        private static void RebuildTouchedCorridors(
-            Transaction tr,
-            Editor ed,
-            TaoCorridorTheoCauKienOptions options,
-            HashSet<ObjectId> touchedCorridors)
+        private static void RebuildCorridorIfNeeded(Editor ed, TaoCorridorTheoCauKienOptions options, Corridor corr)
         {
-            if (!options.AutoRebuild || touchedCorridors.Count == 0)
-                return;
-
-            ed.WriteMessage("\n\n🔄 Đang Rebuild các Corridor...");
-            foreach (ObjectId corrId in touchedCorridors)
+            if (!options.AutoRebuild) return;
+            ed.WriteMessage($"\n\n🔄 Đang Rebuild Corridor '{corr.Name}'...");
+            try
             {
-                if (corrId.IsNull || corrId.IsErased) continue;
-                if (tr.GetObject(corrId, OpenMode.ForWrite) is not Corridor corr) continue;
-
-                try
-                {
+                corr.Rebuild();
+                if (corr.IsOutOfDate)
                     corr.Rebuild();
-                    if (corr.IsOutOfDate)
-                        corr.Rebuild();
-                    ed.WriteMessage($"\n  ✓ Đã Rebuild Corridor '{corr.Name}' thành công.");
-                }
-                catch (Exception exReb)
-                {
-                    ed.WriteMessage($"\n  ⚠ Cảnh báo khi Rebuild '{corr.Name}': {exReb.Message}");
-                }
+                ed.WriteMessage($"\n  ✓ Đã Rebuild Corridor '{corr.Name}' thành công.");
+            }
+            catch (Exception ex)
+            {
+                ed.WriteMessage($"\n  ⚠ Cảnh báo khi Rebuild '{corr.Name}': {ex.Message}");
             }
         }
 
         private static void WriteCompletionSummary(
             Editor ed,
-            int totalComponentsProcessed,
-            int touchedCorridorCount,
-            int totalBaselinesAdded,
-            int totalRegionsAdded)
+            string corridorName,
+            int addedBaselines,
+            int addedRegions,
+            int keptExistingRegions,
+            int removedBaselines)
         {
-            ed.WriteMessage("\n==================================================================");
-            ed.WriteMessage($"\n✅ HOÀN TẤT XÂY DỰNG & GỘP CORRIDOR THEO CẤU KIỆN:");
-            ed.WriteMessage($"\n   • Số cấu kiện đã xử lý    : {totalComponentsProcessed}");
-            ed.WriteMessage($"\n   • Số Corridor tạo/cập nhật: {touchedCorridorCount}");
-            ed.WriteMessage($"\n   • Số Baseline mới thêm    : {totalBaselinesAdded}");
-            ed.WriteMessage($"\n   • Số Region mới thêm      : {totalRegionsAdded}");
-            ed.WriteMessage("\n==================================================================\n");
+            ed.WriteMessage("\n=========================================================================");
+            ed.WriteMessage($"\n✅ HOÀN TẤT CẬP NHẬT CORRIDOR TỔNG '{corridorName}':");
+            ed.WriteMessage($"\n   • Baseline mới thêm                : +{addedBaselines}");
+            ed.WriteMessage($"\n   • Region mới thêm                  : +{addedRegions}");
+            ed.WriteMessage($"\n   • Region đã có (Giữ nguyên LT)     : ={keptExistingRegions}");
+            ed.WriteMessage($"\n   • Baseline cũ đã gỡ (FL bị xóa)    : -{removedBaselines}");
+            ed.WriteMessage("\n=========================================================================\n");
         }
     }
 }

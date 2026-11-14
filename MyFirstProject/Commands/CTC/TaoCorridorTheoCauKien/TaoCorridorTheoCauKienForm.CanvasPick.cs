@@ -7,216 +7,334 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.Civil.DatabaseServices;
 
+using MyFirstProject.Shared.Cad;
+
 namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
 {
     public partial class TaoCorridorTheoCauKienForm
     {
+        private void BtnPickSiteFromFl_Click(object? sender, EventArgs e)
+        {
+            using (EditorUserInteraction ui = _ed.StartUserInteraction(this))
+            {
+                var peo = new PromptEntityOptions("\nChọn 1 FeatureLine mẫu trên bản vẽ để lấy Site của nó: ");
+                peo.SetRejectMessage("\nVui lòng chọn đúng đối tượng FeatureLine.");
+                peo.AddAllowedClass(typeof(FeatureLine), true);
+
+                PromptEntityResult per = _ed.GetEntity(peo);
+                if (per.Status != PromptStatus.OK || per.ObjectId.IsNull) return;
+
+                ObjectId targetSiteId = ObjectId.Null;
+                bool isSiteLess = false;
+                bool isAutoCorrFl = false;
+
+                using (Transaction tr = _db.TransactionManager.StartTransaction())
+                {
+                    if (tr.GetObject(per.ObjectId, OpenMode.ForRead) is AutoCorridorFeatureLine)
+                    {
+                        isAutoCorrFl = true;
+                    }
+                    else if (tr.GetObject(per.ObjectId, OpenMode.ForRead) is FeatureLine fl)
+                    {
+                        targetSiteId = fl.SiteId;
+                        isSiteLess = targetSiteId.IsNull;
+                    }
+                    tr.Commit();
+                }
+
+                if (isAutoCorrFl)
+                {
+                    MessageBox.Show(
+                        "Đối tượng vừa chọn là FeatureLine phụ thuộc Corridor (AutoCorridorFeatureLine), không thuộc Site nguồn.",
+                        "Không lấy được Site",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                int matchIdx = isSiteLess
+                    ? _siteList.FindIndex(s => s.IsSiteLess)
+                    : _siteList.FindIndex(s => !s.IsSiteLess && s.SiteId == targetSiteId);
+
+                if (matchIdx >= 0)
+                {
+                    cmbSite.SelectedIndex = matchIdx + 1;
+                }
+            }
+        }
+
+        private void BtnRescanSite_Click(object? sender, EventArgs e)
+        {
+            string? selectedSiteKey = GetSelectedSiteItem()?.Key;
+            ObjectId selectedCorrId = GetSelectedTargetCorridorId();
+
+            _suppressSelectorEvents = true;
+            try
+            {
+                LoadDrawingCatalogs();
+                PopulateSiteComboBox();
+                PopulateCorridorComboBox();
+
+                if (!selectedCorrId.IsNull)
+                {
+                    int cIdx = _corridorList.FindIndex(c => c.Id == selectedCorrId);
+                    if (cIdx >= 0) cmbExistingCorridor.SelectedIndex = cIdx + 1;
+                }
+
+                if (!string.IsNullOrEmpty(selectedSiteKey))
+                {
+                    int sIdx = _siteList.FindIndex(s => s.Key == selectedSiteKey);
+                    if (sIdx >= 0) cmbSite.SelectedIndex = sIdx + 1;
+                }
+            }
+            finally
+            {
+                _suppressSelectorEvents = false;
+            }
+
+            if (GetSelectedSiteItem() != null)
+                ScanSiteAndPopulateGrid();
+            else if (!GetSelectedTargetCorridorId().IsNull)
+                LoadExistingCorridorOnlyToGrid(GetSelectedTargetCorridorId());
+            else
+            {
+                dgvComponents.Rows.Clear();
+                UpdateComponentListVisibility();
+                UpdateSummaryLabel();
+            }
+        }
+
         private void BtnAddAlignmentComponent_Click(object? sender, EventArgs e)
         {
-            var pickedIds = PickEntitiesOnCanvas(
-                "\nChọn một hoặc nhiều Alignment (Tuyến) cho cấu kiện: ",
-                typeof(Alignment));
-
+            var pickedIds = PickEntitiesOnCanvas("\nChọn một hoặc nhiều Alignment (Tuyến): ", typeof(Alignment));
             if (pickedIds.Count == 0) return;
 
-            var defaultAsm = _assemblyList.FirstOrDefault();
+            var existingIds = CollectGridBaselineEntityIds();
+            var defaultAsm = cmbDefaultAssembly.SelectedIndex >= 0 && cmbDefaultAssembly.SelectedIndex < _assemblyList.Count
+                ? _assemblyList[cmbDefaultAssembly.SelectedIndex]
+                : _assemblyList.FirstOrDefault();
 
             using (Transaction tr = _db.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId alId in pickedIds)
+                _suppressGridEvents = true;
+                try
                 {
-                    if (tr.GetObject(alId, OpenMode.ForRead) is not Alignment al)
-                        continue;
-
-                    int nextIdx = dgvComponents.Rows.Count + 1;
-                    string compName = string.IsNullOrWhiteSpace(al.Name)
-                        ? $"CauKien_Tuyen_{nextIdx}"
-                        : al.Name.Trim();
-
-                    var newItem = new CorridorComponentRowItem
+                    foreach (ObjectId alId in pickedIds)
                     {
-                        IsEnabled = true,
-                        ComponentCategory = al.Name.Contains("Connected", StringComparison.OrdinalIgnoreCase)
-                            ? "Nhánh nút giao rẽ phải"
-                            : "Lòng đường chính",
-                        ComponentName = compName,
-                        SourceType = ComponentBaselineSourceType.AlignmentAndProfile,
-                        BaselineEntityIds = new List<ObjectId> { alId },
-                        BaselineDisplayText = $"[Tuyến] {al.Name} ({al.StartingStation:F1}→{al.EndingStation:F1}m)",
-                        AssemblyId = defaultAsm.Id,
-                        AssemblyName = defaultAsm.Name ?? "",
-                        StartStation = 0.0,
-                        EndStation = 0.0,
-                        FrequencyTangent = (double)numFreqTangent.Value,
-                        FrequencyCurve = (double)numFreqCurve.Value
-                    };
+                        if (existingIds.Contains(alId)) continue;
+                        if (tr.GetObject(alId, OpenMode.ForRead) is not Alignment al) continue;
 
-                    AddRowToGrid(newItem);
+                        AddRowToGrid(new CorridorComponentRowItem
+                        {
+                            IsEnabled = true,
+                            SourceType = ComponentBaselineSourceType.AlignmentAndProfile,
+                            BaselineEntityIds = new List<ObjectId> { alId },
+                            BaselineDisplayText = $"[Tuyến] {al.Name} ({al.StartingStation:F1}→{al.EndingStation:F1}m)",
+                            FeatureLineLayer = al.Layer,
+                            AssemblyId = defaultAsm.Id,
+                            AssemblyName = defaultAsm.Name ?? "",
+                            FrequencyTangent = (double)numFreqTangent.Value,
+                            FrequencyCurve = (double)numFreqCurve.Value
+                        });
+                    }
                 }
+                finally { _suppressGridEvents = false; }
                 tr.Commit();
             }
 
+            RefreshStyleLayerFilterComboBox();
             UpdateComponentListVisibility();
             UpdateSummaryLabel();
         }
 
         private void BtnAddFeatureLineComponent_Click(object? sender, EventArgs e)
         {
-            var pickedIds = PickEntitiesOnCanvas(
-                "\nChọn một hoặc nhiều Feature Line cho cấu kiện (VD: Bó lề, Dải phân cách, Vỉa hè, Taluy): ",
-                typeof(FeatureLine));
-
+            var pickedIds = PickEntitiesOnCanvas("\nChọn thêm FeatureLine: ", typeof(FeatureLine));
             if (pickedIds.Count == 0) return;
 
-            var defaultAsm = _assemblyList.FirstOrDefault(a =>
-                a.Name.Contains("bo le", StringComparison.OrdinalIgnoreCase) ||
-                a.Name.Contains("taluy", StringComparison.OrdinalIgnoreCase) ||
-                a.Name.Contains("Phân cách", StringComparison.OrdinalIgnoreCase) ||
-                a.Name.Contains("via he", StringComparison.OrdinalIgnoreCase));
-            if (defaultAsm.Id.IsNull && _assemblyList.Count > 0)
-                defaultAsm = _assemblyList[0];
+            var existingIds = CollectGridBaselineEntityIds();
+            var defaultAsm = cmbDefaultAssembly.SelectedIndex >= 0 && cmbDefaultAssembly.SelectedIndex < _assemblyList.Count
+                ? _assemblyList[cmbDefaultAssembly.SelectedIndex]
+                : _assemblyList.FirstOrDefault();
 
             using (Transaction tr = _db.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId flId in pickedIds)
+                _suppressGridEvents = true;
+                try
                 {
-                    if (tr.GetObject(flId, OpenMode.ForRead) is not FeatureLine fl)
-                        continue;
-
-                    int nextIdx = dgvComponents.Rows.Count + 1;
-                    string flLabel = string.IsNullOrWhiteSpace(fl.Name) ? $"FL#{fl.Handle}" : fl.Name;
-
-                    var newItem = new CorridorComponentRowItem
+                    foreach (ObjectId flId in pickedIds)
                     {
-                        IsEnabled = true,
-                        ComponentCategory = "Vỉa hè & Bó vỉa Phải",
-                        ComponentName = $"CauKien_FL_{nextIdx}",
-                        SourceType = ComponentBaselineSourceType.FeatureLine,
-                        BaselineEntityIds = new List<ObjectId> { flId },
-                        BaselineDisplayText = $"[FeatureLine] {flLabel} (L={fl.Length2D:F2}m)",
-                        AssemblyId = defaultAsm.Id,
-                        AssemblyName = defaultAsm.Name ?? "",
-                        StartStation = 0.0,
-                        EndStation = 0.0,
-                        FrequencyTangent = (double)numFreqTangent.Value,
-                        FrequencyCurve = (double)numFreqCurve.Value
-                    };
+                        if (existingIds.Contains(flId)) continue;
+                        if (tr.GetObject(flId, OpenMode.ForRead) is not FeatureLine fl) continue;
 
-                    AddRowToGrid(newItem);
+                        string flName = string.IsNullOrWhiteSpace(fl.Name) ? $"FL#{fl.Handle}" : fl.Name;
+                        AddRowToGrid(new CorridorComponentRowItem
+                        {
+                            IsEnabled = true,
+                            SourceType = ComponentBaselineSourceType.FeatureLine,
+                            BaselineEntityIds = new List<ObjectId> { flId },
+                            BaselineDisplayText = $"{flName} (L={fl.Length2D:F2}m)",
+                            FeatureLineStyleName = SafeGetStyleName(fl),
+                            FeatureLineLayer = string.IsNullOrWhiteSpace(fl.Layer) ? "0" : fl.Layer,
+                            AssemblyId = defaultAsm.Id,
+                            AssemblyName = defaultAsm.Name ?? "",
+                            FrequencyTangent = (double)numFreqTangent.Value,
+                            FrequencyCurve = (double)numFreqCurve.Value
+                        });
+                    }
                 }
+                finally { _suppressGridEvents = false; }
                 tr.Commit();
             }
 
+            RefreshStyleLayerFilterComboBox();
             UpdateComponentListVisibility();
-            UpdateSummaryLabel();
-        }
-
-        private void BtnPickBaselineForRow_Click(object? sender, EventArgs e)
-        {
-            if (dgvComponents.CurrentRow == null || dgvComponents.CurrentRow.Index < 0)
-            {
-                MessageBox.Show("Vui lòng chọn một dòng cấu kiện trong bảng trước.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            int rowIdx = dgvComponents.CurrentRow.Index;
-            SyncGridRowToModel(rowIdx);
-            if (dgvComponents.Rows[rowIdx].Tag is not CorridorComponentRowItem item) return;
-
-            bool isFl = item.SourceType == ComponentBaselineSourceType.FeatureLine;
-            string prompt = isFl
-                ? "\nChọn Feature Line làm đường dẫn cho cấu kiện: "
-                : "\nChọn Alignment làm đường dẫn cho cấu kiện: ";
-            Type targetType = isFl ? typeof(FeatureLine) : typeof(Alignment);
-
-            var ids = PickEntitiesOnCanvas(prompt, targetType);
-            if (ids.Count > 0)
-            {
-                item.BaselineEntityIds = ids;
-                item.BaselineDisplayText = DescribePickedEntities(ids, isFl ? "FeatureLine" : "Tuyến");
-                dgvComponents.Rows[rowIdx].Cells["colBaseline"].Value = item.BaselineDisplayText;
-            }
-
             UpdateSummaryLabel();
         }
 
         private void BtnPickAssemblyForRow_Click(object? sender, EventArgs e)
         {
-            if (dgvComponents.CurrentRow == null || dgvComponents.CurrentRow.Index < 0)
+            var targetRows = GetTargetRowIndices();
+            if (targetRows.Count == 0)
             {
-                MessageBox.Show("Vui lòng chọn một dòng cấu kiện trong bảng trước.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Hãy chọn ít nhất 1 dòng trong bảng trước.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            int rowIdx = dgvComponents.CurrentRow.Index;
-            SyncGridRowToModel(rowIdx);
-            if (dgvComponents.Rows[rowIdx].Tag is not CorridorComponentRowItem item) return;
-
             using (EditorUserInteraction ui = _ed.StartUserInteraction(this))
             {
-                var peo = new PromptEntityOptions("\nChọn Assembly trên bản vẽ cho cấu kiện: ");
+                var peo = new PromptEntityOptions("\nChọn Assembly mẫu trên bản vẽ để gán cho các dòng đã chọn: ");
                 peo.SetRejectMessage("\nVui lòng chọn đúng đối tượng Assembly.");
                 peo.AddAllowedClass(typeof(Assembly), true);
 
-                var per = _ed.GetEntity(peo);
-                if (per.Status == PromptStatus.OK && !per.ObjectId.IsNull)
+                PromptEntityResult per = _ed.GetEntity(peo);
+                if (per.Status != PromptStatus.OK || per.ObjectId.IsNull) return;
+
+                int foundIdx = _assemblyList.FindIndex(a => a.Id == per.ObjectId);
+                if (foundIdx < 0) return;
+
+                var asm = _assemblyList[foundIdx];
+                cmbBatchAssembly.SelectedIndex = foundIdx;
+
+                _suppressGridEvents = true;
+                try
                 {
-                    var found = _assemblyList.FirstOrDefault(a => a.Id == per.ObjectId);
-                    if (!found.Id.IsNull)
+                    foreach (int rIdx in targetRows)
                     {
-                        item.AssemblyId = found.Id;
-                        item.AssemblyName = found.Name;
-                        dgvComponents.Rows[rowIdx].Cells["colAssembly"].Value = found.Name;
+                        if (dgvComponents.Rows[rIdx].Tag is not CorridorComponentRowItem item) continue;
+                        item.AssemblyId = asm.Id;
+                        item.AssemblyName = asm.Name;
+                        if (item.HasExistingCorridorRegion) item.AssemblyModifiedByUser = true;
+                        dgvComponents.Rows[rIdx].Cells["colAssembly"].Value = asm.Name;
                     }
                 }
+                finally { _suppressGridEvents = false; }
             }
+            UpdateSummaryLabel();
         }
 
         private void BtnPickOffsetTargetsForRow_Click(object? sender, EventArgs e)
         {
-            if (dgvComponents.CurrentRow == null || dgvComponents.CurrentRow.Index < 0)
+            var targetRows = GetTargetRowIndices();
+            if (targetRows.Count == 0)
             {
-                MessageBox.Show("Vui lòng chọn một dòng cấu kiện trong bảng trước.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Hãy chọn ít nhất 1 dòng trong bảng trước.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            int rowIdx = dgvComponents.CurrentRow.Index;
-            SyncGridRowToModel(rowIdx);
-            if (dgvComponents.Rows[rowIdx].Tag is not CorridorComponentRowItem item) return;
-
             using (EditorUserInteraction ui = _ed.StartUserInteraction(this))
             {
-                _ed.WriteMessage("\nChọn các đối tượng Target Mở rộng / Cao độ (Alignment, FeatureLine, Polyline): ");
                 var pso = new PromptSelectionOptions
                 {
-                    MessageForAdding = "\nChọn Alignment, FeatureLine hoặc Polyline làm Target: "
+                    MessageForAdding = "\nChọn các Alignment, FeatureLine hoặc Polyline làm Target Mở rộng / Cao độ: "
                 };
 
-                var psr = _ed.GetSelection(pso);
-                if (psr.Status == PromptStatus.OK && psr.Value != null)
-                {
-                    var validTargetIds = new List<ObjectId>();
-                    using (Transaction tr = _db.TransactionManager.StartTransaction())
-                    {
-                        foreach (SelectedObject so in psr.Value)
-                        {
-                            if (so == null || so.ObjectId.IsNull) continue;
-                            var ent = tr.GetObject(so.ObjectId, OpenMode.ForRead);
-                            if (ent is Alignment || ent is FeatureLine || ent is Polyline || ent is Polyline2d || ent is Polyline3d)
-                            {
-                                validTargetIds.Add(so.ObjectId);
-                            }
-                        }
-                        tr.Commit();
-                    }
+                PromptSelectionResult psr = _ed.GetSelection(pso);
+                if (psr.Status != PromptStatus.OK || psr.Value == null) return;
 
-                    item.OffsetElevationTargetIds = validTargetIds;
-                    item.OffsetTargetsDisplay = validTargetIds.Count > 0
-                        ? $"[{validTargetIds.Count} đối tượng]"
-                        : "(Không)";
-                    dgvComponents.Rows[rowIdx].Cells["colTargets"].Value = item.OffsetTargetsDisplay;
+                var validTargetIds = new List<ObjectId>();
+                using (Transaction tr = _db.TransactionManager.StartTransaction())
+                {
+                    foreach (SelectedObject so in psr.Value)
+                    {
+                        if (so == null || so.ObjectId.IsNull) continue;
+                        var ent = tr.GetObject(so.ObjectId, OpenMode.ForRead);
+                        if ((ent is Alignment || ent is FeatureLine || ent is Polyline || ent is Polyline2d || ent is Polyline3d) &&
+                            !validTargetIds.Contains(so.ObjectId))
+                        {
+                            validTargetIds.Add(so.ObjectId);
+                        }
+                    }
+                    tr.Commit();
+                }
+
+                string display = validTargetIds.Count > 0 ? $"[{validTargetIds.Count} đối tượng]" : "(Không)";
+                _suppressGridEvents = true;
+                try
+                {
+                    foreach (int rIdx in targetRows)
+                    {
+                        if (dgvComponents.Rows[rIdx].Tag is not CorridorComponentRowItem item) continue;
+                        item.OffsetElevationTargetIds = new List<ObjectId>(validTargetIds);
+                        item.OffsetTargetsDisplay = display;
+                        if (item.HasExistingCorridorRegion) item.OffsetTargetsModifiedByUser = true;
+                        dgvComponents.Rows[rIdx].Cells["colTargets"].Value = display;
+                    }
+                }
+                finally { _suppressGridEvents = false; }
+            }
+        }
+
+        private void BtnClearOffsetTargetsForRow_Click(object? sender, EventArgs e)
+        {
+            var targetRows = GetTargetRowIndices();
+            if (targetRows.Count == 0) return;
+
+            _suppressGridEvents = true;
+            try
+            {
+                foreach (int rIdx in targetRows)
+                {
+                    if (dgvComponents.Rows[rIdx].Tag is not CorridorComponentRowItem item) continue;
+                    item.OffsetElevationTargetIds.Clear();
+                    item.OffsetTargetsDisplay = "(Không)";
+                    if (item.HasExistingCorridorRegion) item.OffsetTargetsModifiedByUser = true;
+                    dgvComponents.Rows[rIdx].Cells["colTargets"].Value = "(Không)";
                 }
             }
+            finally { _suppressGridEvents = false; }
+        }
+
+        private void BtnZoomToRow_Click(object? sender, EventArgs e)
+        {
+            var ids = new List<ObjectId>();
+            foreach (int rIdx in GetTargetRowIndices())
+            {
+                if (dgvComponents.Rows[rIdx].Tag is CorridorComponentRowItem item)
+                    ids.AddRange(item.BaselineEntityIds);
+            }
+            if (ids.Count == 0) return;
+
+            try
+            {
+                if (ZoomHelper.ZoomToEntities(_ed, ids, 1.4))
+                    _ed.UpdateScreen();
+            }
+            catch { }
+        }
+
+        private HashSet<ObjectId> CollectGridBaselineEntityIds()
+        {
+            var set = new HashSet<ObjectId>();
+            for (int i = 0; i < dgvComponents.Rows.Count; i++)
+            {
+                if (dgvComponents.Rows[i].Tag is CorridorComponentRowItem item)
+                {
+                    foreach (ObjectId id in item.BaselineEntityIds)
+                        set.Add(id);
+                }
+            }
+            return set;
         }
 
         private List<ObjectId> PickEntitiesOnCanvas(string promptMessage, Type allowedClass)
@@ -227,7 +345,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                 _ed.WriteMessage(promptMessage);
                 var pso = new PromptSelectionOptions { MessageForAdding = promptMessage };
 
-                var psr = _ed.GetSelection(pso);
+                PromptSelectionResult psr = _ed.GetSelection(pso);
                 if (psr.Status == PromptStatus.OK && psr.Value != null)
                 {
                     using (Transaction tr = _db.TransactionManager.StartTransaction())
@@ -237,9 +355,7 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
                             if (so == null || so.ObjectId.IsNull) continue;
                             var obj = tr.GetObject(so.ObjectId, OpenMode.ForRead);
                             if (obj != null && allowedClass.IsInstanceOfType(obj) && !result.Contains(so.ObjectId))
-                            {
                                 result.Add(so.ObjectId);
-                            }
                         }
                         tr.Commit();
                     }
@@ -248,37 +364,24 @@ namespace MyFirstProject.Commands.CTC.TaoCorridorTheoCauKien
             return result;
         }
 
-        private string DescribeSingleBaselineEntity(Transaction tr, ObjectId id)
+        private static string DescribeSingleBaselineEntity(Transaction tr, ObjectId id, out string styleName, out string layerName)
         {
+            styleName = "";
+            layerName = "";
             var obj = tr.GetObject(id, OpenMode.ForRead);
             if (obj is Alignment al)
+            {
+                layerName = al.Layer;
                 return $"[Tuyến] {al.Name} ({al.StartingStation:F1}→{al.EndingStation:F1}m)";
+            }
             if (obj is FeatureLine fl)
             {
+                styleName = SafeGetStyleName(fl);
+                layerName = string.IsNullOrWhiteSpace(fl.Layer) ? "0" : fl.Layer;
                 string flName = string.IsNullOrWhiteSpace(fl.Name) ? $"FL#{fl.Handle}" : fl.Name;
-                return $"[FeatureLine] {flName} (L={fl.Length2D:F2}m)";
+                return $"{flName} (L={fl.Length2D:F2}m)";
             }
             return "(Đã chọn)";
-        }
-
-        private string DescribePickedEntities(List<ObjectId> ids, string typeLabel)
-        {
-            if (ids == null || ids.Count == 0) return "(Chưa chọn)";
-            using (Transaction tr = _db.TransactionManager.StartTransaction())
-            {
-                var names = new List<string>();
-                foreach (ObjectId id in ids.Take(2))
-                {
-                    var obj = tr.GetObject(id, OpenMode.ForRead);
-                    if (obj is Alignment al) names.Add(al.Name);
-                    else if (obj is FeatureLine fl) names.Add(string.IsNullOrWhiteSpace(fl.Name) ? $"FL#{fl.Handle}" : fl.Name);
-                }
-                tr.Commit();
-                string joined = string.Join(", ", names);
-                return ids.Count > 2
-                    ? $"[{ids.Count} {typeLabel}] {joined}..."
-                    : $"[{ids.Count} {typeLabel}] {joined}";
-            }
         }
     }
 }
