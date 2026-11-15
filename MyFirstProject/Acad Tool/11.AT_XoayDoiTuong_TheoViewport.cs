@@ -2,6 +2,10 @@
 // Lệnh xoay đối tượng theo viewport hiện hành
 //
 using System;
+using System.Windows.Forms;
+using Autodesk.AutoCAD.ApplicationServices;
+using MyFirstProject.Shared.UI;
+using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -33,24 +37,14 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Xoay_Doi_Tuong_Theo_Viewport")]
         public static void XoayDoiTuong_TheoViewport()
         {
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            // Lấy góc xoay viewport hiện hành
+            // Chọn các đối tượng cần xoay
+            if (!TryReadRotationInput(
+                (doc, angle) => new XoayDoiTuongTheoViewportForm(doc, angle),
+                out Database db, out ObjectIdCollection objectIdColl, out double angleViewport, out _)) return;
+            using Transaction tr = db.TransactionManager.StartTransaction();
             try
             {
-                // Lấy góc xoay viewport hiện hành
-                ViewTableRecord acView = A.Ed.GetCurrentView();
-                double angleViewport = acView.ViewTwist;
-                double angleDegrees = angleViewport * 180.0 / Math.PI;
-                A.Ed.WriteMessage($"\n Góc xoay viewport hiện hành: {angleDegrees:F2}°");
-
-                // Chọn các đối tượng cần xoay
-                ObjectIdCollection objectIdColl = UserInput.GSelectionSet("\n Chọn các đối tượng cần xoay theo viewport:");
-
-                if (objectIdColl == null || objectIdColl.Count == 0)
-                {
-                    A.Ed.WriteMessage("\n Không có đối tượng nào được chọn.");
-                    return;
-                }
-
                 int countRotated = 0;
                 int countSkipped = 0;
 
@@ -149,23 +143,12 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Xoay_Doi_Tuong_Theo_Viewport_V2")]
         public static void XoayDoiTuong_TheoViewport_V2()
         {
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            if (!TryReadRotationInput(
+                (doc, angle) => new XoayDoiTuongTheoViewportV2Form(doc, angle),
+                out Database db, out ObjectIdCollection objectIdColl, out double angleViewport, out Point3d basePoint)) return;
+            using Transaction tr = db.TransactionManager.StartTransaction();
             try
             {
-                ViewTableRecord acView = A.Ed.GetCurrentView();
-                double angleViewport = acView.ViewTwist;
-                double angleDegrees = angleViewport * 180.0 / Math.PI;
-                A.Ed.WriteMessage($"\n Góc xoay viewport hiện hành: {angleDegrees:F2}°");
-
-                ObjectIdCollection objectIdColl = UserInput.GSelectionSet("\n Chọn các đối tượng cần xoay:");
-
-                if (objectIdColl == null || objectIdColl.Count == 0)
-                {
-                    A.Ed.WriteMessage("\n Không có đối tượng nào được chọn.");
-                    return;
-                }
-
-                Point3d basePoint = UserInput.GPoint("\n Chọn điểm cơ sở xoay:");
                 double rotationAngle = -angleViewport;
                 int countRotated = 0;
 
@@ -186,6 +169,38 @@ namespace Civil3DCsharp
             }
         }
 
+        /// <summary>Captures the view once and gathers validated modal input before mutation.</summary>
+        private static bool TryReadRotationInput(
+            Func<Document, double, CadSelectionForm> createForm,
+            out Database database, out ObjectIdCollection objectIds,
+            out double angleViewport, out Point3d basePoint)
+        {
+            database = null!;
+            objectIds = new ObjectIdCollection();
+            angleViewport = 0;
+            basePoint = Point3d.Origin;
+            try
+            {
+                Document doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc == null) return false;
+                database = doc.Database;
+                using (ViewTableRecord view = doc.Editor.GetCurrentView())
+                    angleViewport = view.ViewTwist;
+                double angleDegrees = angleViewport * 180.0 / Math.PI;
+                doc.Editor.WriteMessage($"\n Góc xoay viewport hiện hành: {angleDegrees:F2}°");
+
+                using CadSelectionForm form = createForm(doc, angleViewport);
+                if (Application.ShowModalDialog(form) != DialogResult.OK || !form.ValidateInputs()) return false;
+                objectIds = new ObjectIdCollection(form.SelectedIds);
+                basePoint = form.SelectedPoint;
+                return true;
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception ex)
+            {
+                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage($"\n Lỗi: {ex.Message}");
+                return false;
+            }
+        }
         /// <summary>
         /// Chuẩn hóa góc về khoảng 0 đến 2*PI
         /// </summary>
