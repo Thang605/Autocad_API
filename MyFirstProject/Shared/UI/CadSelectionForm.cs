@@ -16,6 +16,7 @@ namespace MyFirstProject.Shared.UI
     {
         private readonly Document _document;
         private readonly Database _database;
+        private readonly ObjectId _databaseIdentity;
         private readonly CadSelectionState _state;
         private readonly string _sourcePrompt;
         private readonly string? _sourceDxfFilter;
@@ -37,6 +38,7 @@ namespace MyFirstProject.Shared.UI
         {
             _document = document;
             _database = document.Database;
+            _databaseIdentity = _database.BlockTableId;
             _state = state;
             _sourcePrompt = sourcePrompt;
             _sourceDxfFilter = sourceDxfFilter;
@@ -55,8 +57,7 @@ namespace MyFirstProject.Shared.UI
         public bool ValidateInputs()
         {
             _error.Text = "";
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)
-                || !ReferenceEquals(_document.Database, _database))
+            if (!IsOriginalDrawing())
                 return Reject("Bản vẽ hiện hành đã thay đổi. Hãy mở lại lệnh.");
             if (_sourceIds.Length == 0 || _sourceIds.Any(id => !PersistentState.IsAlive(id, _database)))
                 return Reject("Hãy chọn lại đầy đủ đối tượng nguồn còn hợp lệ.");
@@ -89,6 +90,7 @@ namespace MyFirstProject.Shared.UI
             AcceptButton = _execute;
             CancelButton = cancel;
             _error.ForeColor = Color.DarkRed;
+            _error.AccessibleName = "Thông báo xác thực đầu vào";
             var sections = new System.Collections.Generic.List<Control>
             {
                 BuildSection("Thông tin", FormBuilder.Label(description)),
@@ -127,7 +129,7 @@ namespace MyFirstProject.Shared.UI
         {
             try
             {
-                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                if (!IsOriginalDrawing())
                 {
                     Reject("Bản vẽ hiện hành đã thay đổi. Hãy mở lại lệnh.");
                     return;
@@ -195,7 +197,7 @@ namespace MyFirstProject.Shared.UI
         private void RestoreLastSettings()
         {
             PersistentState.RestoreFormSize(this, _state.FormSize);
-            if (ReferenceEquals(_state.Database, _database))
+            if (MatchesDatabase(_state.Database))
             {
                 using Transaction tr = _database.TransactionManager.StartTransaction();
                 _sourceIds = PersistentState.FilterAlive(_state.SourceIds, _database)
@@ -227,12 +229,71 @@ namespace MyFirstProject.Shared.UI
         /// <summary>Recognizes both supported destination types.</summary>
         private static bool IsText(DBObject value) => value is DBText or MText;
 
+        /// <summary>Compares database-owned identity instead of transient managed wrappers.</summary>
+        private bool MatchesDatabase(Database? database)
+        {
+            try
+            {
+                return database != null && PersistentState.IsAlive(_databaseIdentity)
+                    && database.BlockTableId == _databaseIdentity;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Rejects a changed or closed drawing before picking or accepting inputs.</summary>
+        private bool IsOriginalDrawing()
+        {
+            try
+            {
+                var activeDocument = Application.DocumentManager.MdiActiveDocument;
+                return activeDocument != null && MatchesDatabase(activeDocument.Database)
+                    && MatchesDatabase(_document.Database);
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+                return false;
+            }
+        }
+
         /// <summary>Displays validation failures without nesting another modal dialog.</summary>
         private bool Reject(string message)
         {
             _error.Text = message;
-            if (!Visible) _document.Editor.WriteMessage("\n" + message);
+            for (Control? parent = _error.Parent; parent != null; parent = parent.Parent)
+            {
+                if (parent is ScrollableControl { AutoScroll: true } scroller)
+                    scroller.ScrollControlIntoView(_error);
+            }
+            TryWriteValidationMessage(message);
             return false;
+        }
+
+        /// <summary>Keeps validation visible even if the original editor is no longer available.</summary>
+        private void TryWriteValidationMessage(string message)
+        {
+            try
+            {
+                _document.Editor.WriteMessage("\n" + message);
+            }
+            catch (ObjectDisposedException)
+            {
+                // The on-form message remains available after a document closes.
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+                // Editor feedback must not prevent displaying the validation failure.
+            }
         }
 
         /// <summary>Reflects selected values and disables execution while required inputs are absent.</summary>
