@@ -37,15 +37,17 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Do_Dai_Replace")]
         public static void AT_TongDoDai_Replace()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Do_Dai_ReplaceForm(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection dimColl = UserInput.GSelectionSetWithType("Chọn các đối tượng (Dimension) cần tính tổng chiều dài/giá trị đo: \n", "DIMENSION");
+                ObjectIdCollection dimColl = new(sourceIds);
                 if (dimColl == null || dimColl.Count == 0) return;
                 List<String> listMeasurement = [];
 
@@ -70,7 +72,7 @@ namespace Civil3DCsharp
                 }
                 formatTong = str3 + formatTong + str4;
                 // vẽ text
-                ObjectId textId = UserInput.GTextOrMText("Chọn text/mtext cần nhập nội dung: \n");
+                ObjectId textId = targetId;
                 if (textId == ObjectId.Null) return;
                 var textObj = tr.GetObject(textId, OpenMode.ForWrite);
                 if (textObj is DBText dbText)
@@ -90,15 +92,17 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Do_Dai_Full")]
         public static void AT_TongDoDai_Full()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Do_Dai_FullForm(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng độ dài: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
 
@@ -124,7 +128,7 @@ namespace Civil3DCsharp
                 String formatTong_Lite = formatTong[2..];
                 formatTong = formatTong_Lite + "=" + str3 + formatTong + str4 + "m";
                 // vẽ text
-                Point3d point = UserInput.GPoint("Chọn vị trí đặt text: \n");
+                Point3d point = selectedPoint;
                 LayerTableRecord layer = UtilitiesCAD.CCreateLayer("TinhTong");
                 UtilitiesCAD.CCreateText2(point, 2, formatTong, "TinhTong", "Standard");
                 Clipboard.SetText(formatTong);
@@ -140,15 +144,17 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Do_Dai_Replace_2")]
         public static void AT_TongDoDai_Replace2()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Do_Dai_Replace_2Form(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng độ dài: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
 
@@ -173,7 +179,7 @@ namespace Civil3DCsharp
                 }
                 formatTong = str3 + formatTong + str4;
                 // vẽ text
-                ObjectId textId = UserInput.GTextOrMText("Chọn text/mtext cần nhập nội dung: \n");
+                ObjectId textId = targetId;
                 if (textId == ObjectId.Null) return;
                 var textObj = tr.GetObject(textId, OpenMode.ForWrite);
                 if (textObj is DBText dbText)
@@ -193,20 +199,22 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Do_Dai_Replace_Cong_Them")]
         public static void AT_TongDoDai_Replace_CongThem()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Do_Dai_Replace_Cong_ThemForm(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng độ dài: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
 
                 // vẽ text
-                ObjectId textId = UserInput.GTextOrMText("Chọn text/mtext cần nhập nội dung: \n");
+                ObjectId textId = targetId;
                 if (textId == ObjectId.Null) return;
                 var textObj = tr.GetObject(textId, OpenMode.ForWrite);
 
@@ -254,15 +262,17 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Dien_Tich_Full")]
         public static void ET_TongDienTich_Full()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Dien_Tich_FullForm(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng diện tích: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
 
@@ -289,7 +299,7 @@ namespace Civil3DCsharp
                 formatTong = formatTong_Lite + "=" + str3 + formatTong + str4 + "m2";
                 // vẽ text
                 MText text = new();
-                Point3d point = UserInput.GPoint("Chọn vị trí đặt text: \n");
+                Point3d point = selectedPoint;
                 LayerTableRecord layer = UtilitiesCAD.CCreateLayer("TinhTong");
                 UtilitiesCAD.CCreateText(point, 2, formatTong, "TinhTong", "Standard");
 
@@ -304,15 +314,17 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Dien_Tich_Replace")]
         public static void AT_TongDienTich_Replace()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Dien_Tich_ReplaceForm(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng diện tích: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
 
@@ -337,7 +349,7 @@ namespace Civil3DCsharp
                 }
                 formatTong = str3 + formatTong + str4 + "m2";
                 // vẽ text
-                ObjectId textId = UserInput.GTextOrMText("Chọn text/mtext cần nhập nội dung: \n");
+                ObjectId textId = targetId;
                 if (textId == ObjectId.Null) return;
                 var textObj = tr.GetObject(textId, OpenMode.ForWrite);
                 if (textObj is DBText dbText)
@@ -357,15 +369,17 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Dien_Tich_Replace_2")]
         public static void AT_TongDienTich_Replace2()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Dien_Tich_Replace_2Form(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng diện tích: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
 
@@ -390,7 +404,7 @@ namespace Civil3DCsharp
                 }
                 formatTong = str3 + formatTong + str4;
                 // vẽ text
-                ObjectId textId = UserInput.GTextOrMText("Chọn text/mtext cần nhập nội dung: \n");
+                ObjectId textId = targetId;
                 if (textId == ObjectId.Null) return;
                 var textObj = tr.GetObject(textId, OpenMode.ForWrite);
                 if (textObj is DBText dbText)
@@ -410,19 +424,21 @@ namespace Civil3DCsharp
         [CommandMethod("AT_Tong_Dien_Tich_Replace_Cong_Them")]
         public static void AT_TongDienTich_Replace_CongThem()
         {
+            if (!TryReadTotalsInput(doc => new AT_Tong_Dien_Tich_Replace_Cong_ThemForm(doc),
+                out var document, out var sourceIds, out var targetId, out var selectedPoint)) return;
             // start transantion
-            using Transaction tr = A.Db.TransactionManager.StartTransaction();
+            using Transaction tr = document.Database.TransactionManager.StartTransaction();
             try
             {
                 UserInput UI = new();
                 UtilitiesCAD CAD = new();
                 UtilitiesC3D C3D = new();
                 //start here
-                ObjectIdCollection polyLineColl = UserInput.GSelectionSet("Chọn các đối tượng (Polyline/Hatch) cần tính tổng diện tích: \n");
+                ObjectIdCollection polyLineColl = new(sourceIds);
                 if (polyLineColl == null || polyLineColl.Count == 0) return;
                 List<String> listLengthPolyline = [];
                 // vẽ text
-                ObjectId textId = UserInput.GTextOrMText("Chọn text/mtext cần nhập nội dung: \n");
+                ObjectId textId = targetId;
                 if (textId == ObjectId.Null) return;
                 var textObj = tr.GetObject(textId, OpenMode.ForWrite);
 
@@ -464,6 +480,31 @@ namespace Civil3DCsharp
             catch (Autodesk.AutoCAD.Runtime.Exception e)
             {
                 A.Ed.WriteMessage(e.Message);
+            }
+        }
+        /// <summary>Collects validated modal inputs without extending the calculation catch scope.</summary>
+        private static bool TryReadTotalsInput(
+            Func<Document, MyFirstProject.Shared.UI.CadSelectionForm> createForm,
+            out Document document, out ObjectId[] sourceIds, out ObjectId targetId, out Point3d point)
+        {
+            document = Application.DocumentManager.MdiActiveDocument;
+            sourceIds = [];
+            targetId = ObjectId.Null;
+            point = default;
+            if (document == null) return false;
+            try
+            {
+                using var form = createForm(document);
+                if (Application.ShowModalDialog(form) != DialogResult.OK || !form.ValidateInputs()) return false;
+                sourceIds = form.SelectedIds;
+                targetId = form.TargetId;
+                point = form.SelectedPoint;
+                return true;
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception e)
+            {
+                document.Editor.WriteMessage(e.Message);
+                return false;
             }
         }
     }
