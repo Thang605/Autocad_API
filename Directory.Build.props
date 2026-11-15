@@ -12,7 +12,9 @@
     duy nhất đặt được BaseIntermediateOutputPath (obj) một cách hợp lệ.
   -->
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
-    <CadBuildRoot>C:\CadBuild\Autocad2026_API\</CadBuildRoot>
+    <CheckoutName>$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('$(MSBuildThisFileDirectory)'))))</CheckoutName>
+    <CadBuildRoot Condition="'$(CadBuildRoot)' == '' and $([System.IO.File]::Exists('$(MSBuildThisFileDirectory).git'))">C:\CadBuild\Autocad2026_API\worktrees\$(CheckoutName)\</CadBuildRoot>
+    <CadBuildRoot Condition="'$(CadBuildRoot)' == ''">C:\CadBuild\Autocad2026_API\</CadBuildRoot>
 
     <BaseOutputPath>$(CadBuildRoot)$(MSBuildProjectName)\bin\</BaseOutputPath>
     <BaseIntermediateOutputPath>$(CadBuildRoot)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>

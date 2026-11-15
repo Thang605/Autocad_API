@@ -143,3 +143,14 @@
 - **Quy tắc xử lý `Hatch`, `LTSCALE` và Mặt cắt BTCT**:
   - Giữ `LTSCALE = 1.0` cố định; đặt `CELTSCALE = k`, `HPSCALE = k`, `MLEADERSCALE = k`. Khi đổi tỷ lệ đối tượng đã vẽ, nhân `Hatch.PatternScale` và `Curve.LinetypeScale` theo tỷ số $\text{ratio} = k_{\text{đích}} / k_{\text{nguồn}}$ (các mẫu Hatch trong bảng mẫu như `AR-CONC = 0.02`, `BT-01,_O = 0.05` được định nghĩa ở tỷ lệ `1:100` ứng với $k = 0.10$).
   - Khi vẽ mặt cắt ngang kết cấu BTCT, không tô Hatch đè lên vùng lõi tiết diện chứa cốt đai và chấm cốt thép chủ; chỉ tô Hatch ở phần cánh sàn giao cắt hai bên.
+
+## Antigravity + Codex: concurrent worktree workflow
+
+- Antigravity is lead: primary checkout `C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API`, branch `master`. Codex is assistant: sibling checkout `C:\Dropbox\0.AI AGENT\6.C#\Autocad 2026_API_Codex`, branch `codex/work`.
+- Both may edit and build concurrently, but only in their own checkout. Assign independent files/tasks first; coordinate changes to shared helpers and menu registration. Never edit the other checkout or overwrite unrelated changes.
+- In EACH checkout run `powershell -ExecutionPolicy Bypass -NoProfile -File .\BuildProject.ps1` from its root. This worktree-relative invocation replaces the primary absolute build path above when working in Codex. Primary output remains `C:\CadBuild\Autocad2026_API\`; linked worktree bin AND obj use `C:\CadBuild\Autocad2026_API\worktrees\<checkout-folder-name>\`. Do not run two builds within the same checkout concurrently.
+- Codex implements assigned work, builds, and commits only its changes on `codex/work`; push explicitly with `git push origin codex/work`, never master. Antigravity reviews the diff, integrates reviewed commits into master, rebuilds, and alone handles live AutoCAD testing/reload. Codex must not use BuildAndReload, NETLOAD, or reload commands against live CAD.
+- Existing UI, persistent-state, transaction, build, and commit conventions still apply. No force push, destructive reset, or clean. Before integration/synchronization ensure the target checkout is clean; do not discard another task's changes.
+- Handoff in chat: task, base commit, changed files, commit SHA, build/test results, known risks. Antigravity reviews `git diff master...codex/work` before merging approved work; unresolved conflicts require review, not automatic overwrites.
+- After integration and with a clean Codex checkout, review the updated local master and use `git merge master` from codex/work to synchronize. Fetch remote updates when needed; do not silently merge unrelated remote changes.
+- Git shares local commits, not conversations. The user transfers assignments/results between tools; this setup does not automatically launch agents or dispatch work.

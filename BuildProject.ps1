@@ -24,6 +24,12 @@ if ($dotnetDir) {
 }
 
 $repoRoot = $PSScriptRoot
+# Linked worktrees must not share compiler intermediates or reload output.
+$buildRoot = 'C:/CadBuild/Autocad2026_API/'
+if (Test-Path (Join-Path $repoRoot '.git') -PathType Leaf) {
+    $checkoutName = Split-Path $repoRoot -Leaf
+    $buildRoot += "worktrees/$checkoutName/"
+}
 $projectDir = "$repoRoot\MyFirstProject"
 $csproj = "$projectDir\MyFirstProject.csproj"
 
@@ -31,10 +37,10 @@ $csproj = "$projectDir\MyFirstProject.csproj"
 $randomName = [System.IO.Path]::GetRandomFileName().Replace(".", "")
 $uniqueAssemblyName = "Civil3D_Tools_$randomName"
 
-& $dotnetExe build $csproj -c Debug /p:AssemblyName=$uniqueAssemblyName /p:Clean=false /nowarn:MSB3061,NU1510
+& $dotnetExe build $csproj -c Debug /p:AssemblyName=$uniqueAssemblyName "/p:CadBuildRoot=$buildRoot" /p:Clean=false /nowarn:MSB3061,NU1510
 
 if ($LASTEXITCODE -eq 0) {
-    $binDebugDir = "C:\CadBuild\Autocad2026_API\MyFirstProject\bin\Debug"
+    $binDebugDir = Join-Path $buildRoot "MyFirstProject/bin/Debug"
     $dllPath = "$binDebugDir\$uniqueAssemblyName.dll"
     $forwardSlashPath = $dllPath.Replace("\", "/")
 
