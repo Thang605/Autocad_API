@@ -642,7 +642,7 @@ namespace MyFirstProject.Extensions
                 tr.Commit();
 
 
-                A.Ed.Command("_UPDATEFIELD", acText.Id);
+                A.Ed.Command("_UPDATEFIELD", acText.Id, "");
                 return acText;
             }
         }
